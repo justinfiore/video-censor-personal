@@ -12,7 +12,7 @@ opencv-python>=4.8.0
 pytest>=7.0.0
 pytest-cov>=4.0.0
 
-# Optional: for local model inference
-# torch>=2.0.0
-# transformers>=4.30.0
-# pillow>=9.5.0
+# Local model inference (for LLaVA detector)
+torch>=2.0.0
+transformers>=4.30.0
+pillow>=9.5.0

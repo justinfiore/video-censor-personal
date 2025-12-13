@@ -79,6 +79,48 @@ Extensive research on detection methodologies and model selection has been condu
 - **Accuracy**: Balance detection sensitivity with false positive rates
 - **Explainability**: Provide enough information for user decision-making
 
+## Future Enhancements
+
+### Audio Processing and Detection (Future Feature)
+Audio analysis capabilities for detecting inappropriate content in speech, music, and sound effects. When implemented, will include:
+- Speech profanity detection (automatic speech recognition + keyword matching)
+- Explicit/toxic language classification via audio-only models
+- Music and sound effect categorization (e.g., gunshots, screams, sexual content)
+- Audio feature extraction (amplitude, frequency, silence detection)
+- Multi-language audio processing support
+- Audio segmentation for per-segment analysis
+- Combined audio-visual detectors (e.g., "person speaking profanity" context)
+
+Currently deferred because:
+1. MVP focuses on visual detection via LLaVA
+2. Audio models require separate model infrastructure (Whisper, audio classifiers)
+3. Audio extraction and processing adds complexity (buffering, sample rates, codecs)
+4. Profanity in speech is language-dependent and requires localization
+5. Audio-visual fusion adds orchestration complexity
+
+The analysis pipeline infrastructure is designed to support audio modalities via the `audio_data` parameter in the `Detector.detect()` method. Audio detectors can be added by:
+1. Creating detector subclass that implements audio processing
+2. Registering with detector registry
+3. Configuring in YAML with audio-capable detector type
+
+See: Future feature proposal `add-audio-detection` (TBD)
+
+### GPU Optimization (Future Feature)
+Advanced GPU support for inference acceleration. When implemented, will include:
+- Auto-detection of available GPU (CUDA, Metal/MPS, ROCm)
+- Configurable precision (float32, float16, bfloat16)
+- Batch inference for multiple frames
+- Dynamic memory management and quantization options
+- Per-GPU configuration in YAML
+
+Currently deferred because:
+1. Users can optimize via PyTorch environment variables
+2. Transformers library's `device_map="auto"` provides reasonable defaults
+3. Hardware-specific tuning is user-dependent
+4. Adds complexity that may not be needed for initial use cases
+
+See: Future feature proposal `add-gpu-optimization` (TBD)
+
 ## External Dependencies
 
 - **ffmpeg**: Video frame extraction and metadata

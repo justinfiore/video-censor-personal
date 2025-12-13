@@ -1,7 +1,7 @@
 """Data classes for video frames and audio segments."""
 
-from dataclasses import dataclass
-from typing import Union
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
@@ -58,6 +58,49 @@ class AudioSegment:
 
     def duration(self) -> float:
         """Calculate duration of audio segment.
+
+        Returns:
+            Duration in seconds.
+        """
+        return self.end_time - self.start_time
+
+
+@dataclass
+class DetectionResult:
+    """Represents a single detection result from a detection engine.
+
+    Attributes:
+        start_time: Start timecode in seconds.
+        end_time: End timecode in seconds.
+        label: Detection category (e.g., "Profanity", "Violence").
+        confidence: Confidence score 0.0-1.0.
+        reasoning: Human-readable explanation of detection.
+        description: Optional segment-level description.
+        frame_data: Optional frame metadata (frame_index, timecode, image).
+    """
+
+    start_time: float
+    end_time: float
+    label: str
+    confidence: float
+    reasoning: str
+    description: Optional[str] = None
+    frame_data: Optional[Dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        """Validate DetectionResult fields."""
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError(
+                f"confidence must be in range [0.0, 1.0], got {self.confidence}"
+            )
+        if self.end_time < self.start_time:
+            raise ValueError(
+                f"end_time ({self.end_time}) must be >= start_time "
+                f"({self.start_time})"
+            )
+
+    def duration(self) -> float:
+        """Calculate duration of detection.
 
         Returns:
             Duration in seconds.

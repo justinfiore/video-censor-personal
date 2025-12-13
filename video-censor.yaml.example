@@ -36,6 +36,21 @@ detections:
     sensitivity: 0.6
     model: "local"
 
+# Detector configuration (experimental)
+# These settings configure the detection framework with specific detector implementations.
+# Currently supported: "llava" (LLaVA vision-language model)
+detectors:
+  - type: "llava"                             # Detector implementation type
+    name: "llava-primary"                     # Instance name
+    model_name: "liuhaotian/llava-v1.5-7b"   # Model variant (7b or 13b)
+    model_path: null                          # Optional custom cache path (null = use HF default)
+    prompt_file: "./prompts/llava-detector.txt"  # Path to prompt template
+    categories:                                # Categories this detector analyzes
+      - "Nudity"
+      - "Profanity"
+      - "Violence"
+      - "Sexual Theme"
+
 # Video processing settings
 processing:
   # Frame sampling strategy
