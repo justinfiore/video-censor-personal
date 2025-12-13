@@ -288,6 +288,54 @@ Analysis results are saved as JSON with detected segments:
 }
 ```
 
+## Video Extraction
+
+Video extraction is the foundational step that prepares video content for analysis. The system extracts video frames and audio at configurable intervals to feed into the LLM for content detection.
+
+### Frame Extraction
+
+The system extracts video frames using ffmpeg with configurable sampling rates:
+
+- **Uniform Sampling** (default): Extracts frames at regular time intervals (e.g., every 1 second)
+- **Custom Sample Rates**: Configure `processing.frame_sampling.sample_rate` in YAML (in seconds)
+- **All Frames**: Set `strategy: "all"` to extract every frame (resource-intensive)
+
+Each extracted frame includes:
+- **Index**: Frame number in sequence
+- **Timecode**: Precise timestamp in seconds
+- **Pixel Data**: As numpy array in BGR format (OpenCV standard)
+
+### Audio Extraction
+
+Audio is extracted from the video file for profanity and speech-based detection:
+
+- Extracted using ffmpeg subprocess
+- Converted to 16kHz mono PCM format
+- Cached after first extraction to avoid re-processing
+- Supports standard video codecs (AAC, MP3, etc.)
+
+### Supported Video Formats
+
+The system supports video formats handled by ffmpeg, including:
+- **Common formats**: MP4, MKV, AVI, MOV, WebM, FLV
+- **Video codecs**: H.264, H.265, VP8, VP9, and others supported by ffmpeg
+- **Audio codecs**: AAC, MP3, FLAC, Opus, and others supported by ffmpeg
+
+For a complete list of supported formats, run:
+```bash
+ffmpeg -formats
+```
+
+### Configuration Example
+
+```yaml
+processing:
+  frame_sampling:
+    strategy: "uniform"    # uniform, scene_based, all
+    sample_rate: 1.0       # extract one frame per second
+  max_workers: 4           # parallel processing workers
+```
+
 ## Project Structure
 
 ```
@@ -295,7 +343,9 @@ video-censor-personal/
 ├── video_censor_personal/          # Main Python package
 │   ├── __init__.py                 # Package initialization and metadata
 │   ├── cli.py                      # Command-line interface
-│   └── config.py                   # Configuration file parsing
+│   ├── config.py                   # Configuration file parsing
+│   ├── frame.py                    # Frame and AudioSegment data classes
+│   └── video_extraction.py         # Video extraction engine (frames and audio)
 │
 ├── video_censor_personal.py        # Main entry point script
 ├── requirements.txt                # Python dependencies

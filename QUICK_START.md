@@ -349,6 +349,49 @@ python video_censor_personal.py \
   --config /full/path/to/config.yaml
 ```
 
+## Using Video Extraction
+
+The video extraction system automatically processes your videos, extracting frames and audio for analysis.
+
+### Frame Extraction Examples
+
+Extract frames at different sampling rates by modifying your config:
+
+```yaml
+processing:
+  frame_sampling:
+    strategy: "uniform"      # Extract frames uniformly across video
+    sample_rate: 1.0         # Every 1 second (default)
+    # sample_rate: 0.5       # Every 0.5 seconds (more detailed)
+    # sample_rate: 2.0       # Every 2 seconds (faster processing)
+    # strategy: "all"        # Extract every frame (resource-intensive)
+```
+
+### Using VideoExtractor Directly
+
+For advanced usage, you can use the VideoExtractor API:
+
+```python
+from video_censor_personal.video_extraction import VideoExtractor
+
+# Extract frames from a video
+with VideoExtractor("path/to/video.mp4") as extractor:
+    print(f"Duration: {extractor.get_duration_seconds()} seconds")
+    print(f"FPS: {extractor.get_fps()}")
+    
+    # Extract frames at 1-second intervals
+    for frame in extractor.extract_frames(sample_rate=1.0):
+        print(f"Frame {frame.index} at {frame.timestamp_str()}")
+        # Process frame.data (numpy array in BGR format)
+        
+    # Extract audio
+    audio = extractor.extract_audio()
+    print(f"Audio duration: {audio.duration()} seconds")
+    
+    # Extract specific audio segment
+    segment = extractor.extract_audio_segment(start_sec=10.0, end_sec=15.0)
+```
+
 ## Next Steps
 
 1. **Customize Detection Settings**: Adjust sensitivity levels in `video-censor.yaml`

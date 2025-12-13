@@ -147,3 +147,18 @@ def get_config_value(config: Dict[str, Any], path: str, default: Any = None) -> 
             return default
 
     return value
+
+
+def get_sample_rate_from_config(config: Dict[str, Any]) -> float:
+    """Get frame sample rate from configuration.
+
+    Reads the processing.frame_sampling.sample_rate value from config,
+    defaulting to 1.0 if not specified.
+
+    Args:
+        config: Configuration dictionary.
+
+    Returns:
+        Sample rate in seconds (float). Default is 1.0.
+    """
+    return get_config_value(config, "processing.frame_sampling.sample_rate", 1.0)
