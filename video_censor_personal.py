@@ -100,44 +100,44 @@ def main() -> int:
                 return 1
 
         # Validate audio remediation and output-video argument
-         remediation_enabled = (
-             config_dict.get("audio", {})
-             .get("remediation", {})
-             .get("enabled", False)
-         )
+        remediation_enabled = (
+            config_dict.get("audio", {})
+            .get("remediation", {})
+            .get("enabled", False)
+        )
 
-         if remediation_enabled and not args.output_video:
-             logger.error(
-                 "ERROR: Audio remediation is enabled in config, but "
-                 "--output-video argument is missing.\n\n"
-                 "To use audio remediation, provide output video path:\n"
-                 "  python video_censor_personal.py --input video.mp4 "
-                 "--config config.yaml --output results.json "
-                 "--output-video output.mp4\n\n"
-                 "Or disable audio remediation in config:\n"
-                 "  audio.remediation.enabled: false"
-             )
-             return 1
+        if remediation_enabled and not args.output_video:
+            logger.error(
+                "ERROR: Audio remediation is enabled in config, but "
+                "--output-video argument is missing.\n\n"
+                "To use audio remediation, provide output video path:\n"
+                "  python video_censor_personal.py --input video.mp4 "
+                "--config config.yaml --output results.json "
+                "--output-video output.mp4\n\n"
+                "Or disable audio remediation in config:\n"
+                "  audio.remediation.enabled: false"
+            )
+            return 1
 
-         if args.output_video and not remediation_enabled:
-             logger.error(
-                 "ERROR: --output-video argument provided, but audio remediation "
-                 "is not enabled in config.\n\n"
-                 "--output-video requires audio remediation to be enabled.\n"
-                 "Enable remediation in config:\n"
-                 "  audio.remediation.enabled: true\n\n"
-                 "Or remove the --output-video argument."
-             )
-             return 1
+        if args.output_video and not remediation_enabled:
+            logger.error(
+                "ERROR: --output-video argument provided, but audio remediation "
+                "is not enabled in config.\n\n"
+                "--output-video requires audio remediation to be enabled.\n"
+                "Enable remediation in config:\n"
+                "  audio.remediation.enabled: true\n\n"
+                "Or remove the --output-video argument."
+            )
+            return 1
 
-         # Run analysis pipeline
-         try:
-             runner = AnalysisRunner(
-                 args.input,
-                 config_dict,
-                 args.config,
-                 output_video_path=args.output_video,
-             )
+        # Run analysis pipeline
+        try:
+            runner = AnalysisRunner(
+                args.input,
+                config_dict,
+                args.config,
+                output_video_path=args.output_video,
+            )
             runner.run(args.output)
             logger.info("Processing complete")
             return 0
