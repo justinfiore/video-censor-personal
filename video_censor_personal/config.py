@@ -68,6 +68,17 @@ class ModelsConfig:
         return Path(cache_dir) / "models"
 
 
+@dataclass
+class Config:
+    """Main configuration object.
+    
+    Attributes:
+        models: Model management configuration (optional)
+    """
+
+    models: Optional[ModelsConfig] = None
+
+
 class ConfigError(Exception):
     """Exception raised for configuration errors."""
 

@@ -2,6 +2,7 @@
 PyYAML>=6.0
 numpy>=1.24.0
 platformdirs>=3.0.0
+tqdm>=4.65.0
 
 # CLI and utilities
 click>=8.1.0
