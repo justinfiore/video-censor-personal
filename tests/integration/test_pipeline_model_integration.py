@@ -45,13 +45,15 @@ class TestPipelineModelVerification:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(
-                str(video_path),
-                config,
-            )
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                pipeline = AnalysisPipeline(
+                    str(video_path),
+                    config,
+                )
 
-            requirements = pipeline._extract_model_requirements()
-            assert "llava-7b" in requirements
+                requirements = pipeline._extract_model_requirements()
+                assert "llava-7b" in requirements
 
     def test_verify_models_with_sources(self):
         """Test model verification when sources defined."""
@@ -96,11 +98,13 @@ class TestPipelineModelVerification:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(str(video_path), config)
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                pipeline = AnalysisPipeline(str(video_path), config)
 
-            # Verify models without download (model already exists)
-            result = pipeline.verify_models(download=False)
-            assert result is True
+                # Verify models without download (model already exists)
+                result = pipeline.verify_models(download=False)
+                assert result is True
 
     def test_verify_models_missing_raises_error(self):
         """Test model verification fails when models missing."""
@@ -138,14 +142,16 @@ class TestPipelineModelVerification:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(str(video_path), config)
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                pipeline = AnalysisPipeline(str(video_path), config)
 
-            # Verification without download should fail
-            with pytest.raises(ModelDownloadError, match="Required models missing"):
-                pipeline.verify_models(download=False)
+                # Verification without download should fail
+                with pytest.raises(ModelDownloadError, match="Required models missing"):
+                    pipeline.verify_models(download=False)
 
     def test_lazy_detector_initialization(self):
-        """Test that detection pipeline is lazily initialized."""
+        """Test that detection pipeline is initialized during __init__."""
         config = {
             "detections": {
                 "nudity": {
@@ -166,14 +172,15 @@ class TestPipelineModelVerification:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(str(video_path), config)
-
-            # Detection pipeline should not be initialized yet
-            assert pipeline.detection_pipeline is None
-
-            # After calling _ensure_detection_pipeline, it should be initialized
-            pipeline._ensure_detection_pipeline()
-            assert pipeline.detection_pipeline is not None
+            # Mock the DetectionPipeline initialization to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline") as mock_detector:
+                mock_instance = MagicMock()
+                mock_detector.return_value = mock_instance
+                
+                # Pipeline should initialize DetectionPipeline during __init__
+                pipeline = AnalysisPipeline(str(video_path), config)
+                assert pipeline.detection_pipeline is not None
+                assert pipeline.detection_pipeline == mock_instance
 
 
 class TestPipelineWithAutoDownload:
@@ -201,9 +208,11 @@ class TestPipelineWithAutoDownload:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            # Should initialize without errors
-            pipeline = AnalysisPipeline(str(video_path), config)
-            assert pipeline.config == config
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                # Should initialize without errors
+                pipeline = AnalysisPipeline(str(video_path), config)
+                assert pipeline.config == config
 
     def test_verify_models_idempotent(self):
         """Test that verify_models is idempotent."""
@@ -227,15 +236,17 @@ class TestPipelineWithAutoDownload:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(str(video_path), config)
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                pipeline = AnalysisPipeline(str(video_path), config)
 
-            # First call should return True (no models required)
-            result1 = pipeline.verify_models(download=False)
-            assert result1 is True
+                # First call should return True (no models required)
+                result1 = pipeline.verify_models(download=False)
+                assert result1 is True
 
-            # Second call should also return True (already verified)
-            result2 = pipeline.verify_models(download=False)
-            assert result2 is True
+                # Second call should also return True (already verified)
+                result2 = pipeline.verify_models(download=False)
+                assert result2 is True
 
     def test_error_messages_on_verification_failure(self):
         """Test error messages provide helpful guidance."""
@@ -273,14 +284,16 @@ class TestPipelineWithAutoDownload:
             video_path = Path(tmpdir) / "test.mp4"
             video_path.write_bytes(b"fake video")
 
-            pipeline = AnalysisPipeline(str(video_path), config)
+            # Mock DetectionPipeline to avoid requiring ML dependencies
+            with patch("video_censor_personal.pipeline.DetectionPipeline"):
+                pipeline = AnalysisPipeline(str(video_path), config)
 
-            # Check error message includes helpful guidance
-            with pytest.raises(ModelDownloadError) as exc_info:
-                pipeline.verify_models(download=False)
+                # Check error message includes helpful guidance
+                with pytest.raises(ModelDownloadError) as exc_info:
+                    pipeline.verify_models(download=False)
 
-            error_msg = str(exc_info.value)
-            assert "--download-models" in error_msg
+                error_msg = str(exc_info.value)
+                assert "--download-models" in error_msg
 
 
 if __name__ == "__main__":

@@ -72,13 +72,15 @@ class AnalysisPipeline:
             # Fall back to auto-discovery from detections section
             detector_configs = self._auto_discover_detectors(config)
 
-        # Create pipeline config with detectors (lazy instantiation)
+        # Create pipeline config with detectors
         self._pipeline_config = {"detectors": detector_configs}
-        self.detection_pipeline: Optional[DetectionPipeline] = None
+        
+        # Initialize detection pipeline immediately
+        self._ensure_detection_pipeline()
 
         logger.info(
             f"Initialized AnalysisPipeline for video: {self.video_path} "
-            f"with detector config ready"
+            f"with {len(self.detection_pipeline.detectors)} detector(s)"
         )
 
     def verify_models(self, download: bool = False) -> bool:
