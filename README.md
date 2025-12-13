@@ -1,5 +1,8 @@
 # Video Censor Personal
 
+[![Tests](https://github.com/justinfiore/video-censor-personal/actions/workflows/test.yml/badge.svg)](https://github.com/justinfiore/video-censor-personal/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/justinfiore/video-censor-personal/branch/main/graph/badge.svg)](https://codecov.io/gh/justinfiore/video-censor-personal)
+
 A personalized video censoring system that analyzes video content and identifies segments containing inappropriate or undesired material. The system enables users to make informed decisions about which sections to skip or censor based on their preferences.
 
 ## Features
