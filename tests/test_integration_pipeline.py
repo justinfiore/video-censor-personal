@@ -37,7 +37,8 @@ class TestAnalysisPipelineBasics:
         """Test pipeline initialization with auto-discovered detectors.
         
         Note: Auto-discovery creates a LLaVA detector by default, which requires
-        transformers library. This test is skipped if transformers is not installed.
+        transformers library and downloaded models. This test is skipped if the
+        LLaVA model is not available.
         """
         try:
             pipeline = AnalysisPipeline(sample_video_path, config_without_detectors)
@@ -45,8 +46,12 @@ class TestAnalysisPipelineBasics:
             # Auto-discovery should create a default LLaVA detector from enabled categories
             assert len(pipeline.detection_pipeline.detectors) > 0
         except ValueError as e:
-            if "LLaVA dependencies not installed" in str(e):
-                pytest.skip("LLaVA dependencies not installed (expected in test environment)")
+            error_msg = str(e)
+            if ("LLaVA dependencies not installed" in error_msg or
+                "not found" in error_msg or
+                "Can't load image processor" in error_msg or
+                "Failed to load model" in error_msg):
+                pytest.skip("LLaVA model not available in test environment (expected in CI)")
             raise
 
     def test_pipeline_raises_on_missing_video(self, config_with_mock):
