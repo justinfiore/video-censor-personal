@@ -245,6 +245,45 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     return config
 
 
+def _validate_detectors_section(config: Dict[str, Any]) -> None:
+    """Validate optional detectors section if present.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If detectors section is invalid.
+    """
+    detectors = config.get("detectors")
+    if detectors is None:
+        return  # Optional section
+
+    if not isinstance(detectors, list):
+        raise ConfigError("'detectors' field must be a list")
+
+    for idx, detector_config in enumerate(detectors):
+        if not isinstance(detector_config, dict):
+            raise ConfigError(f"Detector {idx} must be a dictionary")
+
+        if "type" not in detector_config:
+            raise ConfigError(f"Detector {idx} missing required 'type' field")
+
+        if "name" not in detector_config:
+            raise ConfigError(f"Detector {idx} missing required 'name' field")
+
+        if "categories" not in detector_config:
+            raise ConfigError(f"Detector {idx} missing required 'categories' field")
+
+        categories = detector_config["categories"]
+        if not isinstance(categories, list):
+            raise ConfigError(
+                f"Detector {idx} 'categories' must be a list, got {type(categories)}"
+            )
+
+        if not categories:
+            raise ConfigError(f"Detector {idx} must declare at least one category")
+
+
 def validate_config(config: Dict[str, Any]) -> None:
     """Validate configuration structure and required fields.
 
@@ -295,6 +334,9 @@ def validate_config(config: Dict[str, Any]) -> None:
     output = config["output"]
     if "format" not in output:
         raise ConfigError("'output.format' is required but missing")
+
+    # Validate optional detectors section if present
+    _validate_detectors_section(config)
 
     # Semantic validation
     _validate_sensitivity_ranges(config)

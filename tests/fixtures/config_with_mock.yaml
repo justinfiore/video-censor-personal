@@ -1,0 +1,32 @@
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  profanity:
+    enabled: false
+    sensitivity: 0.5
+    model: "local"
+
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 0.5  # 1 frame every 0.5 seconds
+  segment_merge:
+    merge_threshold: 1.0
+  max_workers: 4
+
+output:
+  format: "json"
+  include_confidence: true
+  include_frames: false
+  pretty_print: true
+
+detectors:
+  - type: "mock"
+    name: "mock-detector"
+    categories: ["Nudity", "Violence"]

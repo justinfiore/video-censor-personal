@@ -7,6 +7,7 @@ from pathlib import Path
 
 from video_censor_personal.cli import parse_args, setup_logging
 from video_censor_personal.config import ConfigError, load_config
+from video_censor_personal.pipeline import AnalysisRunner
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +44,16 @@ def main() -> int:
             logger.error(f"Configuration error: {e}")
             return 1
 
-        # TODO: Implement actual analysis pipeline
-        logger.info(
-            f"Analysis pipeline not yet implemented. "
-            f"Would analyze: {args.input}"
-        )
+        # Run analysis pipeline
+        try:
+            runner = AnalysisRunner(args.input, config, args.config)
+            runner.run(args.output)
+            logger.info("Processing complete")
+            return 0
 
-        logger.info("Processing complete")
-        return 0
+        except Exception as e:
+            logger.error(f"Analysis pipeline failed: {e}", exc_info=True)
+            return 1
 
     except KeyboardInterrupt:
         logger.info("Interrupted by user")

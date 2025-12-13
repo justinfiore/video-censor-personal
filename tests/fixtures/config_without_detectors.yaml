@@ -1,0 +1,23 @@
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  segment_merge:
+    merge_threshold: 2.0
+  max_workers: 4
+
+output:
+  format: "json"
+  include_confidence: true
+  include_frames: false
+  pretty_print: true
