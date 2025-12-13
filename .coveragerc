@@ -1,11 +1,4 @@
-[pytest]
-testpaths = tests
-python_files = test_*.py
-python_classes = Test*
-python_functions = test_*
-addopts = --strict-markers
-
-[coverage:run]
+[run]
 omit =
     */site-packages/*
     */distutils/*
@@ -16,7 +9,7 @@ omit =
     */speech_profanity_detector.py
     */audio_classification_detector.py
 
-[coverage:report]
+[report]
 exclude_lines =
     pragma: no cover
     def __repr__
