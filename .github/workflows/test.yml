@@ -43,12 +43,11 @@ jobs:
       
       - name: Publish test results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          name: pytest results
-          path: 'junit.xml'
-          reporter: 'java-junit'
-          fail-on-error: false
+          files: junit.xml
+          check_name: Test Results
+          comment_mode: always
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
