@@ -29,6 +29,8 @@ def main() -> int:
         logger.debug(f"Input file: {args.input}")
         logger.debug(f"Output file: {args.output}")
         logger.debug(f"Config file: {args.config}")
+        if args.output_video:
+            logger.debug(f"Output video file: {args.output_video}")
 
         # Validate input file exists
         input_path = Path(args.input)
@@ -44,9 +46,45 @@ def main() -> int:
             logger.error(f"Configuration error: {e}")
             return 1
 
+        # Validate audio remediation and output-video argument
+        remediation_enabled = (
+            config.get("audio", {})
+            .get("remediation", {})
+            .get("enabled", False)
+        )
+
+        if remediation_enabled and not args.output_video:
+            logger.error(
+                "ERROR: Audio remediation is enabled in config, but "
+                "--output-video argument is missing.\n\n"
+                "To use audio remediation, provide output video path:\n"
+                "  python video_censor_personal.py --input video.mp4 "
+                "--config config.yaml --output results.json "
+                "--output-video output.mp4\n\n"
+                "Or disable audio remediation in config:\n"
+                "  audio.remediation.enabled: false"
+            )
+            return 1
+
+        if args.output_video and not remediation_enabled:
+            logger.error(
+                "ERROR: --output-video argument provided, but audio remediation "
+                "is not enabled in config.\n\n"
+                "--output-video requires audio remediation to be enabled.\n"
+                "Enable remediation in config:\n"
+                "  audio.remediation.enabled: true\n\n"
+                "Or remove the --output-video argument."
+            )
+            return 1
+
         # Run analysis pipeline
         try:
-            runner = AnalysisRunner(args.input, config, args.config)
+            runner = AnalysisRunner(
+                args.input,
+                config,
+                args.config,
+                output_video_path=args.output_video,
+            )
             runner.run(args.output)
             logger.info("Processing complete")
             return 0

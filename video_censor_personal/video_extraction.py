@@ -131,11 +131,49 @@ class VideoExtractor:
 
             frame_index += 1
 
+    def _get_audio_sample_rate(self) -> Optional[int]:
+        """Detect audio sample rate from video using ffprobe.
+
+        Returns:
+            Sample rate in Hz, or None if detection fails.
+        """
+        try:
+            import json
+            import subprocess
+            
+            cmd = [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=sample_rate",
+                "-of", "json",
+                str(self.video_path),
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            
+            if result.returncode != 0:
+                return None
+            
+            data = json.loads(result.stdout)
+            streams = data.get("streams", [])
+            if streams:
+                return int(streams[0].get("sample_rate", 0))
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to detect audio sample rate: {e}")
+            return None
+
     def extract_audio(self) -> AudioSegment:
         """Extract audio stream from video file.
 
-        Returns audio as a cached numpy array. Subsequent calls return
-        the cached result without re-invoking ffmpeg.
+        Returns audio as a cached numpy array at original sample rate.
+        Subsequent calls return the cached result without re-invoking ffmpeg.
 
         Returns:
             AudioSegment object with audio data and metadata.
@@ -161,17 +199,15 @@ class VideoExtractor:
         self._temp_files.append(temp_path)
 
         try:
-            # Extract audio using ffmpeg
+            # Extract audio using ffmpeg at original sample rate and channels
+            # We preserve all channels and sample rate for remediation fidelity.
+            # Detection pipelines can downmix/downsample as needed.
             cmd = [
                 "ffmpeg",
                 "-i",
                 str(self.video_path),
                 "-q:a",
                 "9",
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
                 "-y",
                 str(temp_path),
             ]
@@ -186,11 +222,15 @@ class VideoExtractor:
             with open(temp_path, "rb") as f:
                 audio_data = f.read()
 
+            # Get original sample rate from the video using ffprobe
+            # Default to 48000 if detection fails
+            sample_rate = self._get_audio_sample_rate() or 48000
+
             self._audio_cache = AudioSegment(
                 start_time=0.0,
                 end_time=duration,
                 data=audio_data,
-                sample_rate=16000,
+                sample_rate=sample_rate,
             )
             return self._audio_cache
 

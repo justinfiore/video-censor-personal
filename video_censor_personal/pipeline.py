@@ -37,6 +37,7 @@ class AnalysisPipeline:
         video_path: str,
         config: Dict[str, Any],
         detector_list: Optional[List[Dict[str, Any]]] = None,
+        output_video_path: Optional[str] = None,
     ) -> None:
         """Initialize the analysis pipeline.
 
@@ -44,6 +45,7 @@ class AnalysisPipeline:
             video_path: Path to the input video file.
             config: Configuration dictionary with analysis settings.
             detector_list: Optional list of detector configs. If None, uses config['detectors'].
+            output_video_path: Optional path for output video with remediated audio.
 
         Raises:
             FileNotFoundError: If video file does not exist.
@@ -54,8 +56,10 @@ class AnalysisPipeline:
             raise FileNotFoundError(f"Video file not found: {self.video_path}")
 
         self.config = config
+        self.output_video_path = output_video_path
         self.extractor: Optional[VideoExtractor] = None
         self.detection_pipeline: Optional[DetectionPipeline] = None
+        self.remediated_audio_path: Optional[str] = None
 
         # Prepare detector configuration
         detector_configs = detector_list or config.get("detectors")
@@ -110,7 +114,8 @@ class AnalysisPipeline:
         """Run end-to-end analysis pipeline on video.
 
         Extracts frames at configured sample rate, runs detection pipeline
-        on each frame, and aggregates results.
+        on each frame, applies audio remediation if enabled, and muxes
+        remediated audio back into video if output path specified.
 
         Returns:
             List of DetectionResult objects from all frames.
@@ -136,14 +141,81 @@ class AnalysisPipeline:
             logger.debug(f"Frame sample rate: {sample_rate} seconds")
 
             # Extract audio once for all detectors
-            audio_data = None
+            # Keep original audio for remediation; use downsampled copy for detection
+            audio_data_original = None
+            audio_sample_rate_original = None
+            audio_data_for_detection = None
+            
             if any(hasattr(d, "detect") for d in self.detection_pipeline.detectors):
                 try:
                     audio_segment = self.extractor.extract_audio()
-                    audio_data = audio_segment.data
-                    logger.debug(f"Extracted audio: {audio_segment.duration():.2f} seconds")
+                    audio_data_original = audio_segment.data
+                    audio_sample_rate_original = audio_segment.sample_rate
+                    logger.debug(
+                        f"Extracted audio: {audio_segment.duration():.2f} seconds, "
+                        f"sample rate: {audio_sample_rate_original} Hz"
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to extract audio (continuing without it): {e}")
+
+            # Convert audio to numpy array if needed
+            if audio_data_original is not None:
+                try:
+                    import numpy as np
+                    import soundfile as sf
+                    import io
+                    import librosa
+                    
+                    # If audio_data is bytes (from WAV file), convert to numpy
+                    if isinstance(audio_data_original, bytes):
+                        audio_np, sr = sf.read(
+                            io.BytesIO(audio_data_original),
+                            dtype='float32'
+                        )
+                        audio_sample_rate_original = sr
+                        
+                        # Log channel count
+                        if len(audio_np.shape) > 1:
+                            num_channels = audio_np.shape[1]
+                            logger.debug(f"Audio has {num_channels} channels")
+                        else:
+                            logger.debug("Audio is mono")
+                    else:
+                        audio_np = audio_data_original
+                    
+                    # Keep original multi-channel audio for remediation
+                    audio_data_original = audio_np
+                    
+                    # For detection: downsample to 16kHz and convert to mono
+                    # Whisper and audio classification models expect 16kHz mono
+                    audio_for_detection = audio_np
+                    
+                    # Convert to mono if needed
+                    if len(audio_for_detection.shape) > 1:
+                        logger.debug(
+                            f"Converting {audio_for_detection.shape[1]}-channel audio "
+                            f"to mono for detection"
+                        )
+                        audio_for_detection = audio_for_detection.mean(axis=1)
+                    
+                    # Resample to 16kHz if needed
+                    if audio_sample_rate_original and audio_sample_rate_original != 16000:
+                        logger.debug(
+                            f"Downsampling audio from {audio_sample_rate_original} Hz "
+                            f"to 16000 Hz for detection"
+                        )
+                        audio_data_for_detection = librosa.resample(
+                            audio_for_detection,
+                            orig_sr=audio_sample_rate_original,
+                            target_sr=16000
+                        )
+                    else:
+                        audio_data_for_detection = audio_for_detection
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to convert audio to numpy: {e}")
+                    audio_data_original = None
+                    audio_data_for_detection = None
 
             # Extract and analyze frames
             frame_count = 0
@@ -152,8 +224,11 @@ class AnalysisPipeline:
                     frame_count += 1
                     logger.debug(f"Analyzing frame {frame.index} at {frame.timestamp_str()}")
 
-                    # Run detection pipeline on frame
-                    results = self.detection_pipeline.analyze_frame(frame, audio_data=audio_data)
+                    # Run detection pipeline on frame (using downsampled audio for detection)
+                    results = self.detection_pipeline.analyze_frame(
+                        frame,
+                        audio_data=audio_data_for_detection
+                    )
                     all_results.extend(results)
 
                     if results:
@@ -173,6 +248,54 @@ class AnalysisPipeline:
                 f"Analysis complete: {frame_count} frames analyzed, "
                 f"{len(all_results)} total detections found"
             )
+
+            # Apply audio remediation if enabled
+            # Use original audio (at original sample rate) for remediation
+            remediation_config = self.config.get("audio", {}).get("remediation", {})
+            if remediation_config.get("enabled", False) and audio_data_original is not None:
+                try:
+                    from video_censor_personal.audio_remediator import AudioRemediator
+                    
+                    remediator = AudioRemediator(remediation_config)
+                    remediated_audio = remediator.remediate(
+                        audio_data_original,
+                        audio_sample_rate_original or 48000,
+                        all_results
+                    )
+                    
+                    # Write remediated audio at original sample rate
+                    output_audio_path = remediation_config.get(
+                        "output_path",
+                        "/tmp/remediated_audio.wav"
+                    )
+                    remediator.write_audio(
+                        remediated_audio,
+                        audio_sample_rate_original or 48000,
+                        output_audio_path
+                    )
+                    self.remediated_audio_path = output_audio_path
+                    logger.info(
+                        f"Remediated audio saved to: {output_audio_path} "
+                        f"({audio_sample_rate_original or 48000} Hz)"
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Audio remediation failed: {e}", exc_info=True)
+                    raise
+
+            # Mux remediated audio into video if output path specified
+            if self.remediated_audio_path and self.output_video_path:
+                try:
+                    from video_censor_personal.video_muxer import VideoMuxer
+                    
+                    muxer = VideoMuxer(str(self.video_path), self.remediated_audio_path)
+                    muxer.mux_video(self.output_video_path)
+                    logger.info(f"Output video saved to: {self.output_video_path}")
+                    
+                except Exception as e:
+                    logger.error(f"Video muxing failed: {e}", exc_info=True)
+                    raise
+
             return all_results
 
         finally:
@@ -223,17 +346,25 @@ class AnalysisRunner:
     output generation.
     """
 
-    def __init__(self, video_path: str, config: Dict[str, Any], config_path: str) -> None:
+    def __init__(
+        self,
+        video_path: str,
+        config: Dict[str, Any],
+        config_path: str,
+        output_video_path: Optional[str] = None,
+    ) -> None:
         """Initialize analysis runner.
 
         Args:
             video_path: Path to input video file.
             config: Configuration dictionary.
             config_path: Path to configuration file (for metadata).
+            output_video_path: Optional path for output video with remediated audio.
         """
         self.video_path = video_path
         self.config = config
         self.config_path = config_path
+        self.output_video_path = output_video_path
 
     def run(self, output_path: str) -> Dict[str, Any]:
         """Run analysis and generate JSON output.
@@ -248,8 +379,14 @@ class AnalysisRunner:
             Exception: If analysis or output generation fails.
         """
         logger.info(f"Running analysis: {self.video_path} -> {output_path}")
+        if self.output_video_path:
+            logger.info(f"Output video: {self.output_video_path}")
 
-        with AnalysisPipeline(self.video_path, self.config) as pipeline:
+        with AnalysisPipeline(
+            self.video_path,
+            self.config,
+            output_video_path=self.output_video_path,
+        ) as pipeline:
             # Run analysis
             detections = pipeline.analyze()
 

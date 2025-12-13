@@ -8,11 +8,16 @@ click>=8.1.0
 # Video processing (optional, for frame extraction)
 opencv-python>=4.8.0
 
+# Audio processing (for audio extraction, remediation, and muxing)
+librosa>=0.10.0
+soundfile>=0.12.1
+scipy>=1.10.0
+
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.0.0
 
-# Local model inference (for LLaVA detector)
+# Local model inference (for LLaVA detector and audio detectors)
 torch>=2.0.0
 transformers>=4.30.0
 pillow>=9.5.0

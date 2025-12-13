@@ -49,6 +49,17 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--output-video",
+        type=str,
+        required=False,
+        help=(
+            "Path to output video file with remediated audio "
+            "(required if audio remediation enabled in config)"
+        ),
+        metavar="PATH",
+    )
+
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug-level logging output",
