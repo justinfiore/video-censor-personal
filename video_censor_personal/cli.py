@@ -60,6 +60,16 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--download-models",
+        action="store_true",
+        help=(
+            "Automatically download and verify required models before analysis. "
+            "Models are downloaded only if missing or checksums don't match. "
+            "Requires models.sources configured in YAML."
+        ),
+    )
+
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug-level logging output",
