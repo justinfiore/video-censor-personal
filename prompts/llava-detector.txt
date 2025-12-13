@@ -1,0 +1,23 @@
+Analyze this image for potentially objectionable content. 
+
+For each category below, determine if it's present (Yes/No) and provide a confidence score (0.0-1.0).
+Be objective and thorough. Return ONLY valid JSON with no additional text.
+
+Categories to detect:
+1. Nudity - Nude or partially nude bodies, exposed genitals or buttocks
+2. Profanity - Visible text, signs, or logos containing explicit language or profanity
+3. Violence - Physical violence, weapons, injuries, blood, aggressive acts, fighting
+4. Sexual Theme - Sexual or suggestive content, intimate situations, sexual imagery
+
+Return JSON format (exactly as shown, no markdown, no code blocks):
+{
+  "nudity": {"detected": true, "confidence": 0.0, "reasoning": "..."},
+  "profanity": {"detected": false, "confidence": 0.0, "reasoning": "..."},
+  "violence": {"detected": false, "confidence": 0.0, "reasoning": "..."},
+  "sexual_theme": {"detected": false, "confidence": 0.0, "reasoning": "..."}
+}
+
+For each category:
+- Set detected to true/false
+- Provide confidence as decimal 0.0 to 1.0 (e.g., 0.92, 0.45, 0.0)
+- Include brief reasoning explaining the detection or lack thereof
