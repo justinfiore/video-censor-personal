@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from video_censor_personal.detection import DetectionPipeline, get_detector_registry
 from video_censor_personal.frame import DetectionResult
+from video_censor_personal.model_manager import ModelManager, ModelDownloadError
 from video_censor_personal.output import generate_json_output, merge_segments
 from video_censor_personal.video_extraction import VideoExtractor
 
@@ -38,6 +39,7 @@ class AnalysisPipeline:
         config: Dict[str, Any],
         detector_list: Optional[List[Dict[str, Any]]] = None,
         output_video_path: Optional[str] = None,
+        skip_model_check: bool = False,
     ) -> None:
         """Initialize the analysis pipeline.
 
@@ -46,6 +48,7 @@ class AnalysisPipeline:
             config: Configuration dictionary with analysis settings.
             detector_list: Optional list of detector configs. If None, uses config['detectors'].
             output_video_path: Optional path for output video with remediated audio.
+            skip_model_check: If True, skip model verification (legacy behavior).
 
         Raises:
             FileNotFoundError: If video file does not exist.
@@ -60,6 +63,8 @@ class AnalysisPipeline:
         self.extractor: Optional[VideoExtractor] = None
         self.detection_pipeline: Optional[DetectionPipeline] = None
         self.remediated_audio_path: Optional[str] = None
+        self._model_manager: Optional[ModelManager] = None
+        self._models_verified = False
 
         # Prepare detector configuration
         detector_configs = detector_list or config.get("detectors")
@@ -67,14 +72,146 @@ class AnalysisPipeline:
             # Fall back to auto-discovery from detections section
             detector_configs = self._auto_discover_detectors(config)
 
-        # Create pipeline config with detectors
-        pipeline_config = {"detectors": detector_configs}
-        self.detection_pipeline = DetectionPipeline(pipeline_config)
+        # Create pipeline config with detectors (lazy instantiation)
+        self._pipeline_config = {"detectors": detector_configs}
+        self.detection_pipeline: Optional[DetectionPipeline] = None
 
         logger.info(
             f"Initialized AnalysisPipeline for video: {self.video_path} "
-            f"with {len(self.detection_pipeline.detectors)} detector(s)"
+            f"with detector config ready"
         )
+
+    def verify_models(self, download: bool = False) -> bool:
+        """Verify required models are available.
+
+        Extracts model requirements from configuration and verifies availability.
+        Optionally downloads missing models.
+
+        Args:
+            download: If True, auto-download missing models.
+
+        Returns:
+            True if all required models verified, False if optional models missing.
+
+        Raises:
+            ModelDownloadError: If required model download fails.
+        """
+        if self._models_verified:
+            logger.debug("Models already verified, skipping")
+            return True
+
+        try:
+            # Extract model requirements from config
+            required_models = self._extract_model_requirements()
+            if not required_models:
+                logger.debug("No models required in configuration")
+                self._models_verified = True
+                return True
+
+            logger.info(f"Verifying {len(required_models)} model(s)")
+
+            # Create Config wrapper for ModelManager
+            from video_censor_personal.config import Config, ModelsConfig, ModelSource
+
+            config_obj = Config()
+            sources = []
+            for model_name in required_models:
+                # Find model in config.models.sources
+                if "models" in self.config and "sources" in self.config["models"]:
+                    for source_data in self.config["models"]["sources"]:
+                        if source_data.get("name") == model_name:
+                            sources.append(
+                                ModelSource(
+                                    name=source_data["name"],
+                                    url=source_data["url"],
+                                    checksum=source_data["checksum"],
+                                    size_bytes=source_data["size_bytes"],
+                                    algorithm=source_data.get("algorithm", "sha256"),
+                                    optional=source_data.get("optional", False),
+                                )
+                            )
+                            break
+
+            if sources:
+                config_obj.models = ModelsConfig(
+                    cache_dir=self.config.get("models", {}).get("cache_dir"),
+                    sources=sources,
+                )
+
+                self._model_manager = ModelManager(config_obj)
+
+                if download:
+                    # Auto-download missing models
+                    logger.info("Auto-downloading missing models")
+                    results = self._model_manager.verify_models()
+
+                    # Check if any required models failed
+                    failed = [
+                        name for name, success in results.items() if not success
+                    ]
+                    if failed:
+                        raise ModelDownloadError(
+                            f"Required models failed to verify: {', '.join(failed)}"
+                        )
+                    logger.info("All models verified successfully")
+                else:
+                    # Just check existence
+                    all_valid = all(
+                        self._model_manager.is_model_valid(source.name)
+                        for source in sources
+                    )
+                    if not all_valid:
+                        raise ModelDownloadError(
+                            "Required models missing. Use --download-models to auto-download."
+                        )
+                    logger.info("All models verified successfully")
+
+            self._models_verified = True
+            return True
+
+        except ModelDownloadError:
+            logger.error("Model verification failed")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during model verification: {e}")
+            raise
+
+    def _extract_model_requirements(self) -> List[str]:
+        """Extract model names required by detectors from configuration.
+
+        Returns:
+            List of model names required by detectors.
+        """
+        required_models = []
+
+        # Check detectors section for model references
+        detectors = self.config.get("detectors", [])
+        for detector_config in detectors:
+            model_name = detector_config.get("model_name")
+            if model_name:
+                required_models.append(model_name)
+
+        # Also check models.sources for referenced models
+        if "models" in self.config and "sources" in self.config["models"]:
+            for source in self.config["models"]["sources"]:
+                name = source.get("name")
+                if name and not source.get("optional", False):
+                    required_models.append(name)
+
+        return list(set(required_models))  # Remove duplicates
+
+    def _ensure_detection_pipeline(self) -> None:
+        """Lazily initialize detection pipeline (after model verification).
+
+        Creates DetectionPipeline if not already initialized.
+        """
+        if self.detection_pipeline is None:
+            logger.debug("Initializing detection pipeline")
+            self.detection_pipeline = DetectionPipeline(self._pipeline_config)
+            logger.info(
+                f"Detection pipeline initialized with "
+                f"{len(self.detection_pipeline.detectors)} detector(s)"
+            )
 
     def _auto_discover_detectors(self, config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Auto-discover detector configuration from detections section.
@@ -127,6 +264,9 @@ class AnalysisPipeline:
         all_results: List[DetectionResult] = []
 
         try:
+            # Lazy initialize detection pipeline (after any model verification)
+            self._ensure_detection_pipeline()
+
             # Initialize extractor
             self.extractor = VideoExtractor(str(self.video_path))
             logger.debug(
