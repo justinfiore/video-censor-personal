@@ -11,7 +11,3 @@ Use the `git` command line to:
   - the generated commit message should be in `COMMIT_MESSAGE.txt`
 3. Delete `COMMIT_MESSAGE.txt` if it exists
 4. Push the commit to the remote with `git push origin HEAD`
-5. Create a PR with `git-create-pr` with a meaningful title `-t` and detailed and informative description `-d`
-
-**NOTE**: before running `git-create-pr`, make sure that you have run `source ~/.windsurfrc` first.
-Also, if you can't find `git-create-pr` look for it at `~/bin/git-create-pr`

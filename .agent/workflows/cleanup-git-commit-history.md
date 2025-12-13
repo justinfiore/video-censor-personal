@@ -14,6 +14,3 @@ Then create a new PR using `git-create-pr` with a good title `-t` and descriptio
 Make sure each commit has the JIRA ticket as the start of the commit message title (if you can extract that from the branch name).
 
 Make sure to push the new branch to the remote with `git push origin HEAD`
-
-**NOTE**: before running `git-create-pr`, make sure that you have run `source ~/.windsurfrc` first.
-Also, if you can't find `git-create-pr` look for it at `~/bin/git-create-pr`
