@@ -34,11 +34,21 @@ jobs:
             --cov-config=.coveragerc \
             --cov-report=xml \
             --cov-report=term \
+            --junit-xml=junit.xml \
             --verbose
       
       - name: Check coverage threshold
         run: |
           coverage report --fail-under=80
+      
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: pytest results
+          path: 'junit.xml'
+          reporter: 'java-junit'
+          fail-on-error: false
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
