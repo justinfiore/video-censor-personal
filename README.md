@@ -120,29 +120,76 @@ Video Censor Personal uses local AI models for analysis. Download and configure 
 
 LLaVA is a vision-language model that can analyze images and perform content classification.
 
-**Download LLaVA 1.5 (7B - 4GB)**:
-```bash
-# Create models directory
-mkdir -p models
+### Download LLaVA 1.5 (7B - 4GB)
 
-# Download the model (this will take a few minutes depending on internet speed)
-# Using Hugging Face transformers library (after pip install transformers)
+Choose one of the following methods:
+
+**Method 1: Python (Automatic)**
+```bash
+pip install transformers torch torchvision torchaudio
+
 python -c "
 from transformers import AutoTokenizer, AutoModelForCausalLM
 model_name = 'liuhaotian/llava-v1.5-7b'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto')
+print('✓ Model downloaded successfully')
 "
 ```
 
-**Download LLaVA 1.5 (13B - 26GB - More Accurate)**:
+**Method 2: Browser Download**
+1. Visit: https://huggingface.co/liuhaotian/llava-v1.5-7b
+2. Click "Files and versions" tab
+3. Download model files to `~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/`
+
+**Method 3: Git LFS (Command Line)**
+```bash
+# Install Git LFS: https://git-lfs.com
+git lfs install
+git clone https://huggingface.co/liuhaotian/llava-v1.5-7b
+mkdir -p ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots
+cp -r llava-v1.5-7b/* ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/
+```
+
+**Method 4: wget/curl (Individual Files)**
+```bash
+mkdir -p ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/SNAPSHOT_ID/
+
+# Download specific model files
+wget https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/config.json \
+  -O ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/SNAPSHOT_ID/config.json
+wget https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/pytorch_model.bin \
+  -O ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/SNAPSHOT_ID/pytorch_model.bin
+
+# Replace SNAPSHOT_ID with actual snapshot ID from the HuggingFace page
+```
+
+### Download LLaVA 1.5 (13B - 26GB - More Accurate)
+
+Requires 30+ GB RAM or GPU.
+
+**Method 1: Python (Automatic)**
 ```bash
 python -c "
 from transformers import AutoTokenizer, AutoModelForCausalLM
 model_name = 'liuhaotian/llava-v1.5-13b'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto')
+print('✓ Model downloaded successfully')
 "
+```
+
+**Method 2: Browser Download**
+1. Visit: https://huggingface.co/liuhaotian/llava-v1.5-13b
+2. Click "Files and versions" tab
+3. Download model files
+
+**Method 3: Git LFS (Command Line)**
+```bash
+git lfs install
+git clone https://huggingface.co/liuhaotian/llava-v1.5-13b
+mkdir -p ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-13b/snapshots
+cp -r llava-v1.5-13b/* ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-13b/snapshots/
 ```
 
 ### Model Storage
@@ -228,6 +275,45 @@ Place your configuration file in one of these locations:
 1. `./video-censor.yaml` (current directory)
 2. `./config.yaml` (current directory)
 3. Specify explicitly with `--config /path/to/config.yaml`
+
+## Analysis Pipeline
+
+The video analysis pipeline orchestrates the entire workflow:
+
+1. **Video Extraction**: Extracts frames and audio at configured sample rates
+2. **Detector Initialization**: Loads configured detectors (e.g., LLaVA, mock)
+3. **Frame Analysis**: Processes sampled frames through detector pipeline
+4. **Result Aggregation**: Combines detections from all frames
+5. **Segment Merging**: Merges nearby detections into coherent segments
+6. **Output Generation**: Produces JSON results with metadata
+
+### Detector Configuration
+
+Detectors are specified in the `detectors` section of the YAML configuration:
+
+```yaml
+detectors:
+  - type: "llava"              # Detector type
+    name: "llava-vision"       # Instance name
+    categories:                # Categories to analyze
+      - "Nudity"
+      - "Violence"
+```
+
+If `detectors` section is missing, the pipeline auto-discovers detectors from enabled categories.
+
+### Mock Detector for Testing
+
+For integration testing without downloading models, use the mock detector:
+
+```yaml
+detectors:
+  - type: "mock"
+    name: "mock-detector"
+    categories: ["Nudity", "Violence"]
+```
+
+The mock detector returns deterministic results based on frame content, allowing you to validate the complete pipeline without model dependencies.
 
 ## Basic Usage
 
@@ -394,6 +480,35 @@ PermissionError: [Errno 13] Permission denied
 ```
 - Ensure read access to video files: `chmod +r video.mp4`
 - Ensure write access to output directory: `chmod +w /output/dir`
+
+## Performance Optimization
+
+### GPU Acceleration (Current)
+
+The LLaVA detector uses PyTorch's `device_map="auto"` for intelligent device placement. For GPU optimization:
+
+```bash
+# Explicitly specify GPU
+export CUDA_VISIBLE_DEVICES=0
+
+# Use mixed precision (float16) for faster inference
+export TORCH_DTYPE=float16
+
+python video_censor_personal.py --input video.mp4 --config config.yaml
+```
+
+See [PyTorch documentation](https://pytorch.org/docs/stable/notes/cuda.html) for more environment variables.
+
+### Advanced GPU Optimization (Future)
+
+A future feature will include built-in GPU optimization with:
+- Per-GPU configuration in YAML
+- Automatic precision selection
+- Batch inference for multiple frames
+- Quantization support (8-bit, 4-bit)
+- Dynamic memory management
+
+Tracked in: `add-gpu-optimization` feature proposal (TBD)
 
 ## Development
 

@@ -116,7 +116,9 @@ pip install transformers torch torchvision torchaudio
 
 ### Download LLaVA Model (Recommended)
 
-The 7B model is recommended for most use cases (~4 GB download, ~7 GB unpacked).
+Choose one of the following methods to download the 7B model (~4 GB download, ~7 GB unpacked):
+
+#### Method 1: Python (Automatic, Recommended)
 
 ```bash
 python -c "
@@ -130,9 +132,31 @@ print('Model location: ~/.cache/huggingface/hub/')
 "
 ```
 
-**Alternative: 13B Model (More Accurate but Slower)**
+#### Method 2: Browser Download from HuggingFace
 
-~26 GB total, requires 30+ GB RAM or GPU:
+1. Visit: https://huggingface.co/liuhaotian/llava-v1.5-7b
+2. Click the "Files and versions" tab
+3. Download the model files to `~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/`
+
+#### Method 3: Using Git LFS (Command Line)
+
+```bash
+# Install Git LFS if not already installed
+# macOS: brew install git-lfs
+# Ubuntu: sudo apt-get install git-lfs
+# Or visit: https://git-lfs.com
+
+git lfs install
+git clone https://huggingface.co/liuhaotian/llava-v1.5-7b
+mkdir -p ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots
+cp -r llava-v1.5-7b/* ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/
+```
+
+### Download 13B Model (More Accurate but Slower)
+
+~26 GB total, requires 30+ GB RAM or GPU.
+
+#### Method 1: Python (Automatic)
 
 ```bash
 python -c "
@@ -143,6 +167,26 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto')
 print('✓ Model downloaded and cached successfully')
 "
+```
+
+#### Method 2: Browser Download from HuggingFace
+
+1. Visit: https://huggingface.co/liuhaotian/llava-v1.5-13b
+2. Click the "Files and versions" tab
+3. Download the model files
+
+#### Method 3: Using wget/curl
+
+```bash
+# Create directory structure
+mkdir -p ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/SNAPSHOT_ID/
+
+# Download individual files (replace SNAPSHOT_ID with actual snapshot)
+wget -P ~/.cache/huggingface/hub/models--liuhaotian--llava-v1.5-7b/snapshots/SNAPSHOT_ID/ \
+  https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/config.json \
+  https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/pytorch_model.bin
+
+# Note: For specific snapshot IDs, check the HuggingFace page
 ```
 
 ### Verify Model Installation
@@ -164,6 +208,11 @@ except Exception as e:
 ### Model Location
 
 Models are cached at: `~/.cache/huggingface/hub/`
+
+Custom location:
+```bash
+export HF_HOME=/your/custom/path
+```
 
 Disk usage:
 - LLaVA 7B: ~7 GB
@@ -218,7 +267,55 @@ output:
 
 Save this as `video-censor.yaml` in the project root directory.
 
-## Step 6: Run Your First Analysis (5+ minutes)
+## Step 6: Test Without Downloading Models (Optional - 1 minute)
+
+If you want to quickly test the pipeline without downloading large models:
+
+### Create Mock Configuration
+
+```yaml
+# test-mock.yaml
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  segment_merge:
+    merge_threshold: 2.0
+  max_workers: 4
+
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true
+
+detectors:
+  - type: "mock"
+    name: "mock-detector"
+    categories: ["Nudity", "Violence"]
+```
+
+### Run with Mock Detector
+
+```bash
+python video_censor_personal.py \
+  --input /path/to/video.mp4 \
+  --config test-mock.yaml \
+  --output results.json
+```
+
+The mock detector returns deterministic results without requiring any model downloads, allowing you to test the complete pipeline immediately.
+
+## Step 7: Run Your First Analysis with LLaVA (5+ minutes)
 
 ### Prepare a Test Video
 
