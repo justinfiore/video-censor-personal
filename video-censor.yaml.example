@@ -72,8 +72,37 @@ output:
   include_confidence: true    # include confidence scores in results
   pretty_print: true          # human-readable JSON formatting
 
-# Model configuration
+# Model download and caching configuration (optional)
+# Automatically download and verify models with --download-models CLI flag
 models:
+  # Custom cache directory (optional; defaults to platform-appropriate location)
+  # On Linux/macOS: ~/.cache/video-censor/models
+  # On Windows: %APPDATA%\video-censor\models
+  cache_dir: null
+  
+  # Model sources: downloadable models with checksums
+  sources:
+    # LLaVA 7B vision-language model (Hugging Face)
+    - name: "llava-7b"
+      url: "https://huggingface.co/liuhaotian/llava-v1.5-7b/resolve/main/model-00001-of-00004.safetensors"
+      checksum: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+      size_bytes: 3825156096
+      algorithm: "sha256"
+      optional: false
+    
+    # Speech profanity detector (Hugging Face)
+    - name: "profanity-detector"
+      url: "https://huggingface.co/michellejieli/BERT_distilbert_uncased_L-4_H-256_A-4/resolve/main/pytorch_model.bin"
+      checksum: "2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"
+      size_bytes: 268435456
+      algorithm: "sha256"
+      optional: false
+  
+  # Pre-configured auto-download (future feature; currently use --download-models flag)
+  auto_download: false
+
+# Legacy model configuration (for backward compatibility with local setup)
+model_config:
   local:
     # Local model settings (optional - uses transformers defaults)
     vision_model: "liuhaotian/llava-v1.5-7b"

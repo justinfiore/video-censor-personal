@@ -1,9 +1,11 @@
 """Configuration file parsing and validation."""
 
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+import platformdirs
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,55 @@ REQUIRED_FIELDS = {"detections", "processing", "output"}
 REQUIRED_DETECTION_FIELDS = {"enabled", "sensitivity", "model"}
 REQUIRED_PROCESSING_FIELDS = {"frame_sampling", "segment_merge", "max_workers"}
 REQUIRED_OUTPUT_FIELDS = {"format"}
+
+
+@dataclass
+class ModelSource:
+    """Represents a downloadable model source.
+    
+    Attributes:
+        name: Model identifier (e.g., "llava-7b")
+        url: Full HTTP URL to download model from
+        checksum: Hash value for integrity verification
+        size_bytes: Expected file size in bytes
+        algorithm: Checksum algorithm (default "sha256")
+        optional: If True, analysis proceeds if download fails
+    """
+
+    name: str
+    url: str
+    checksum: str
+    size_bytes: int
+    algorithm: str = "sha256"
+    optional: bool = False
+
+
+@dataclass
+class ModelsConfig:
+    """Model management configuration.
+    
+    Attributes:
+        cache_dir: Custom cache directory (None = platform default)
+        sources: List of available models to download
+        auto_download: Pre-configured auto-download (future feature)
+    """
+
+    cache_dir: Optional[str] = None
+    sources: List[ModelSource] = field(default_factory=list)
+    auto_download: bool = False
+
+    def get_cache_dir(self) -> Path:
+        """Resolve cache directory from config or platform defaults.
+        
+        Returns:
+            Path to cache directory, using platform-appropriate defaults if not configured
+        """
+        if self.cache_dir:
+            return Path(self.cache_dir).expanduser()
+        
+        # Use platformdirs for platform-appropriate defaults
+        cache_dir = platformdirs.user_cache_dir("video-censor", "censor")
+        return Path(cache_dir) / "models"
 
 
 class ConfigError(Exception):
@@ -245,6 +296,108 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     return config
 
 
+def _validate_model_source_structure(
+    source_name: str, source_config: Dict[str, Any]
+) -> None:
+    """Validate structure of a single model source.
+
+    Args:
+        source_name: Name of the model source.
+        source_config: Configuration dictionary for the model source.
+
+    Raises:
+        ConfigError: If required fields are missing or have wrong types.
+    """
+    if not isinstance(source_config, dict):
+        raise ConfigError(
+            f"Model source '{source_name}' must be a dictionary"
+        )
+
+    required = {"name", "url", "checksum", "size_bytes"}
+    missing = required - set(source_config.keys())
+    if missing:
+        raise ConfigError(
+            f"Model source '{source_name}' missing required fields: "
+            f"{', '.join(sorted(missing))}"
+        )
+
+    if not isinstance(source_config["name"], str):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'name' must be a string"
+        )
+
+    if not isinstance(source_config["url"], str):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'url' must be a string"
+        )
+
+    if not isinstance(source_config["checksum"], str):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'checksum' must be a string"
+        )
+
+    if not isinstance(source_config["size_bytes"], int):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'size_bytes' must be an integer"
+        )
+
+    # Optional fields with defaults
+    if "algorithm" in source_config and not isinstance(
+        source_config["algorithm"], str
+    ):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'algorithm' must be a string"
+        )
+
+    if "optional" in source_config and not isinstance(
+        source_config["optional"], bool
+    ):
+        raise ConfigError(
+            f"Model source '{source_name}' field 'optional' must be a boolean"
+        )
+
+
+def _validate_models_section(config: Dict[str, Any]) -> None:
+    """Validate optional models section if present.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If models section is invalid.
+    """
+    models = config.get("models")
+    if models is None:
+        return  # Optional section
+
+    if not isinstance(models, dict):
+        raise ConfigError("'models' field must be a dictionary")
+
+    # Validate cache_dir if present
+    if "cache_dir" in models and models["cache_dir"] is not None:
+        if not isinstance(models["cache_dir"], str):
+            raise ConfigError("'models.cache_dir' must be a string or null")
+
+    # Validate sources list if present
+    if "sources" in models:
+        sources = models["sources"]
+        if sources is not None:
+            if not isinstance(sources, list):
+                raise ConfigError("'models.sources' must be a list")
+
+            for idx, source_config in enumerate(sources):
+                if not isinstance(source_config, dict):
+                    raise ConfigError(f"Model source {idx} must be a dictionary")
+
+                source_name = source_config.get("name", f"[index {idx}]")
+                _validate_model_source_structure(source_name, source_config)
+
+    # Validate auto_download if present
+    if "auto_download" in models:
+        if not isinstance(models["auto_download"], bool):
+            raise ConfigError("'models.auto_download' must be a boolean")
+
+
 def _validate_detectors_section(config: Dict[str, Any]) -> None:
     """Validate optional detectors section if present.
 
@@ -334,6 +487,9 @@ def validate_config(config: Dict[str, Any]) -> None:
     output = config["output"]
     if "format" not in output:
         raise ConfigError("'output.format' is required but missing")
+
+    # Validate optional models section if present
+    _validate_models_section(config)
 
     # Validate optional detectors section if present
     _validate_detectors_section(config)
