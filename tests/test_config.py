@@ -108,6 +108,170 @@ class TestValidateConfig:
             validate_config(valid_config)
 
 
+class TestSemanticValidation:
+    """Test semantic validation of configuration values."""
+
+    def test_sensitivity_at_min_boundary(self, valid_config):
+        """Sensitivity of 0.0 should be valid."""
+        valid_config["detections"]["nudity"]["sensitivity"] = 0.0
+        validate_config(valid_config)  # Should not raise
+
+    def test_sensitivity_at_max_boundary(self, valid_config):
+        """Sensitivity of 1.0 should be valid."""
+        valid_config["detections"]["nudity"]["sensitivity"] = 1.0
+        validate_config(valid_config)  # Should not raise
+
+    def test_sensitivity_below_min(self, valid_config):
+        """Sensitivity below 0.0 should raise error."""
+        valid_config["detections"]["nudity"]["sensitivity"] = -0.1
+        with pytest.raises(ConfigError, match="out of range"):
+            validate_config(valid_config)
+
+    def test_sensitivity_above_max(self, valid_config):
+        """Sensitivity above 1.0 should raise error."""
+        valid_config["detections"]["nudity"]["sensitivity"] = 1.1
+        with pytest.raises(ConfigError, match="out of range"):
+            validate_config(valid_config)
+
+    def test_detection_category_missing_enabled(self, valid_config):
+        """Detection category missing 'enabled' field should raise error."""
+        del valid_config["detections"]["nudity"]["enabled"]
+        with pytest.raises(ConfigError, match="missing required fields"):
+            validate_config(valid_config)
+
+    def test_detection_category_missing_sensitivity(self, valid_config):
+        """Detection category missing 'sensitivity' field should raise error."""
+        del valid_config["detections"]["nudity"]["sensitivity"]
+        with pytest.raises(ConfigError, match="missing required fields"):
+            validate_config(valid_config)
+
+    def test_detection_category_missing_model(self, valid_config):
+        """Detection category missing 'model' field should raise error."""
+        del valid_config["detections"]["nudity"]["model"]
+        with pytest.raises(ConfigError, match="missing required fields"):
+            validate_config(valid_config)
+
+    def test_detection_category_enabled_not_bool(self, valid_config):
+        """Detection category 'enabled' must be boolean."""
+        valid_config["detections"]["nudity"]["enabled"] = "yes"
+        with pytest.raises(ConfigError, match="must be boolean"):
+            validate_config(valid_config)
+
+    def test_detection_category_sensitivity_not_numeric(self, valid_config):
+        """Detection category 'sensitivity' must be numeric."""
+        valid_config["detections"]["nudity"]["sensitivity"] = "high"
+        with pytest.raises(ConfigError, match="must be a number"):
+            validate_config(valid_config)
+
+    def test_detection_category_model_not_string(self, valid_config):
+        """Detection category 'model' must be string."""
+        valid_config["detections"]["nudity"]["model"] = 123
+        with pytest.raises(ConfigError, match="must be a string"):
+            validate_config(valid_config)
+
+    def test_detection_category_not_dict(self, valid_config):
+        """Detection category must be a dictionary."""
+        valid_config["detections"]["nudity"] = "local"
+        with pytest.raises(ConfigError, match="must be a dictionary"):
+            validate_config(valid_config)
+
+    def test_no_detections_enabled(self, valid_config):
+        """At least one detection must be enabled."""
+        valid_config["detections"]["nudity"]["enabled"] = False
+        valid_config["detections"]["profanity"]["enabled"] = False
+        with pytest.raises(ConfigError, match="must have 'enabled: true'"):
+            validate_config(valid_config)
+
+    def test_at_least_one_detection_enabled(self, valid_config):
+        """At least one detection enabled should pass."""
+        valid_config["detections"]["nudity"]["enabled"] = False
+        valid_config["detections"]["profanity"]["enabled"] = True
+        validate_config(valid_config)  # Should not raise
+
+    def test_empty_detections(self, valid_config):
+        """Empty detections dict should raise error."""
+        valid_config["detections"] = {}
+        with pytest.raises(ConfigError, match="must be defined"):
+            validate_config(valid_config)
+
+    def test_output_format_json_allowed(self, valid_config):
+        """Output format 'json' should be allowed."""
+        valid_config["output"]["format"] = "json"
+        validate_config(valid_config)  # Should not raise
+
+    def test_output_format_csv_not_allowed(self, valid_config):
+        """Output format 'csv' should not be allowed."""
+        valid_config["output"]["format"] = "csv"
+        with pytest.raises(ConfigError, match="not supported"):
+            validate_config(valid_config)
+
+    def test_output_format_xml_not_allowed(self, valid_config):
+        """Output format 'xml' should not be allowed."""
+        valid_config["output"]["format"] = "xml"
+        with pytest.raises(ConfigError, match="not supported"):
+            validate_config(valid_config)
+
+    def test_frame_sampling_strategy_uniform(self, valid_config):
+        """Frame sampling strategy 'uniform' should be allowed."""
+        valid_config["processing"]["frame_sampling"]["strategy"] = "uniform"
+        validate_config(valid_config)  # Should not raise
+
+    def test_frame_sampling_strategy_scene_based(self, valid_config):
+        """Frame sampling strategy 'scene_based' should be allowed."""
+        valid_config["processing"]["frame_sampling"]["strategy"] = "scene_based"
+        validate_config(valid_config)  # Should not raise
+
+    def test_frame_sampling_strategy_all(self, valid_config):
+        """Frame sampling strategy 'all' should be allowed."""
+        valid_config["processing"]["frame_sampling"]["strategy"] = "all"
+        validate_config(valid_config)  # Should not raise
+
+    def test_frame_sampling_strategy_invalid(self, valid_config):
+        """Invalid frame sampling strategy should raise error."""
+        valid_config["processing"]["frame_sampling"]["strategy"] = "adaptive"
+        with pytest.raises(ConfigError, match="invalid"):
+            validate_config(valid_config)
+
+    def test_max_workers_positive(self, valid_config):
+        """Positive max_workers should be allowed."""
+        valid_config["processing"]["max_workers"] = 1
+        validate_config(valid_config)  # Should not raise
+
+    def test_max_workers_zero(self, valid_config):
+        """Zero max_workers should raise error."""
+        valid_config["processing"]["max_workers"] = 0
+        with pytest.raises(ConfigError, match="positive integer"):
+            validate_config(valid_config)
+
+    def test_max_workers_negative(self, valid_config):
+        """Negative max_workers should raise error."""
+        valid_config["processing"]["max_workers"] = -1
+        with pytest.raises(ConfigError, match="positive integer"):
+            validate_config(valid_config)
+
+    def test_max_workers_not_int(self, valid_config):
+        """Non-integer max_workers should raise error."""
+        valid_config["processing"]["max_workers"] = 4.5
+        with pytest.raises(ConfigError, match="positive integer"):
+            validate_config(valid_config)
+
+    def test_merge_threshold_zero(self, valid_config):
+        """Merge threshold of 0.0 should be allowed."""
+        valid_config["processing"]["segment_merge"]["merge_threshold"] = 0.0
+        validate_config(valid_config)  # Should not raise
+
+    def test_merge_threshold_positive(self, valid_config):
+        """Positive merge threshold should be allowed."""
+        valid_config["processing"]["segment_merge"]["merge_threshold"] = 2.5
+        validate_config(valid_config)  # Should not raise
+
+    def test_merge_threshold_negative(self, valid_config):
+        """Negative merge threshold should raise error."""
+        valid_config["processing"]["segment_merge"]["merge_threshold"] = -0.5
+        with pytest.raises(ConfigError, match="non-negative"):
+            validate_config(valid_config)
+
+
 class TestLoadConfig:
     """Test configuration file loading."""
 

@@ -14,9 +14,6 @@ detections:
     enabled: true
     sensitivity: 0.8
     model: "local"
-    languages:                # Language codes for profanity detection
-      - en                    # English
-      - es                    # Spanish
   
   violence:
     enabled: true
@@ -28,17 +25,16 @@ detections:
     sensitivity: 0.75
     model: "local"
   
-  # Custom detection categories
-  custom_concepts:
-    - name: "logos"
-      enabled: false
-      sensitivity: 0.5
-      description: "Brand logos and product placement"
-    
-    - name: "spoilers"
-      enabled: false
-      sensitivity: 0.6
-      description: "Movie/show spoiler content"
+  # Custom detection categories (future expansion)
+  logos:
+    enabled: false
+    sensitivity: 0.5
+    model: "local"
+  
+  spoilers:
+    enabled: false
+    sensitivity: 0.6
+    model: "local"
 
 # Video processing settings
 processing:
@@ -57,8 +53,7 @@ processing:
 
 # Output settings
 output:
-  format: "json"              # Options: "json", "csv"
-  include_frames: false       # include base64 encoded frame images
+  format: "json"              # Only "json" is currently supported
   include_confidence: true    # include confidence scores in results
   pretty_print: true          # human-readable JSON formatting
 

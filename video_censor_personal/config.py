@@ -23,6 +23,175 @@ class ConfigError(Exception):
     pass
 
 
+def _validate_detection_structure(
+    category_name: str, category_config: Dict[str, Any]
+) -> None:
+    """Validate structure of a single detection category.
+
+    Args:
+        category_name: Name of the detection category (e.g., "nudity").
+        category_config: Configuration dictionary for the category.
+
+    Raises:
+        ConfigError: If required fields are missing or have wrong types.
+    """
+    if not isinstance(category_config, dict):
+        raise ConfigError(
+            f"Detection category '{category_name}' must be a dictionary"
+        )
+
+    required = {"enabled", "sensitivity", "model"}
+    missing = required - set(category_config.keys())
+    if missing:
+        raise ConfigError(
+            f"Detection category '{category_name}' missing required fields: "
+            f"{', '.join(sorted(missing))}"
+        )
+
+    if not isinstance(category_config["enabled"], bool):
+        raise ConfigError(
+            f"Detection category '{category_name}' field 'enabled' must be boolean"
+        )
+
+    if not isinstance(category_config["sensitivity"], (int, float)):
+        raise ConfigError(
+            f"Detection category '{category_name}' field 'sensitivity' "
+            "must be a number"
+        )
+
+    if not isinstance(category_config["model"], str):
+        raise ConfigError(
+            f"Detection category '{category_name}' field 'model' must be a string"
+        )
+
+
+def _validate_sensitivity_ranges(config: Dict[str, Any]) -> None:
+    """Validate all sensitivity values are in range [0.0, 1.0].
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If any sensitivity value is outside [0.0, 1.0].
+    """
+    detections = config.get("detections", {})
+    for category_name, category_config in detections.items():
+        if isinstance(category_config, dict):
+            sensitivity = category_config.get("sensitivity")
+            if isinstance(sensitivity, (int, float)):
+                if not (0.0 <= sensitivity <= 1.0):
+                    raise ConfigError(
+                        f"Detection category '{category_name}' sensitivity "
+                        f"{sensitivity} is out of range [0.0, 1.0]"
+                    )
+
+
+def _validate_at_least_one_detection_enabled(
+    config: Dict[str, Any],
+) -> None:
+    """Validate that at least one detection category is enabled.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If no detection categories have enabled=true.
+    """
+    detections = config.get("detections", {})
+    if not detections:
+        raise ConfigError("At least one detection category must be defined")
+
+    any_enabled = False
+    for category_config in detections.values():
+        if isinstance(category_config, dict) and category_config.get("enabled"):
+            any_enabled = True
+            break
+
+    if not any_enabled:
+        raise ConfigError(
+            "At least one detection category must have 'enabled: true'"
+        )
+
+
+def _validate_output_format(config: Dict[str, Any]) -> None:
+    """Validate output format is 'json'.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If output format is not 'json'.
+    """
+    output = config.get("output", {})
+    output_format = output.get("format")
+
+    if output_format != "json":
+        raise ConfigError(
+            f"Output format '{output_format}' is not supported. "
+            "Only 'json' is currently supported."
+        )
+
+
+def _validate_frame_sampling_strategy(config: Dict[str, Any]) -> None:
+    """Validate frame sampling strategy is one of allowed values.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If strategy is not in ('uniform', 'scene_based', 'all').
+    """
+    processing = config.get("processing", {})
+    frame_sampling = processing.get("frame_sampling", {})
+    strategy = frame_sampling.get("strategy")
+
+    allowed_strategies = {"uniform", "scene_based", "all"}
+    if strategy not in allowed_strategies:
+        raise ConfigError(
+            f"Frame sampling strategy '{strategy}' is invalid. "
+            f"Allowed values: {', '.join(sorted(allowed_strategies))}"
+        )
+
+
+def _validate_max_workers(config: Dict[str, Any]) -> None:
+    """Validate max_workers is a positive integer.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If max_workers is not > 0.
+    """
+    processing = config.get("processing", {})
+    max_workers = processing.get("max_workers")
+
+    if not isinstance(max_workers, int) or max_workers <= 0:
+        raise ConfigError(
+            f"'processing.max_workers' must be a positive integer, "
+            f"got {max_workers}"
+        )
+
+
+def _validate_merge_threshold(config: Dict[str, Any]) -> None:
+    """Validate merge_threshold is non-negative.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If merge_threshold is negative.
+    """
+    processing = config.get("processing", {})
+    segment_merge = processing.get("segment_merge", {})
+    merge_threshold = segment_merge.get("merge_threshold")
+
+    if isinstance(merge_threshold, (int, float)) and merge_threshold < 0:
+        raise ConfigError(
+            f"'processing.segment_merge.merge_threshold' must be non-negative, "
+            f"got {merge_threshold}"
+        )
+
+
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Load and validate YAML configuration file.
 
@@ -99,6 +268,10 @@ def validate_config(config: Dict[str, Any]) -> None:
     if not isinstance(config["detections"], dict):
         raise ConfigError("'detections' field must be a dictionary")
 
+    # Validate each detection category structure
+    for category_name, category_config in config["detections"].items():
+        _validate_detection_structure(category_name, category_config)
+
     # Validate processing section
     if not isinstance(config["processing"], dict):
         raise ConfigError("'processing' field must be a dictionary")
@@ -122,6 +295,14 @@ def validate_config(config: Dict[str, Any]) -> None:
     output = config["output"]
     if "format" not in output:
         raise ConfigError("'output.format' is required but missing")
+
+    # Semantic validation
+    _validate_sensitivity_ranges(config)
+    _validate_at_least_one_detection_enabled(config)
+    _validate_output_format(config)
+    _validate_frame_sampling_strategy(config)
+    _validate_max_workers(config)
+    _validate_merge_threshold(config)
 
     logger.debug("Configuration validation passed")
 
