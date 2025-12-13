@@ -43,7 +43,7 @@ The system SHALL extract audio from video files and cache the result to enable e
 - **WHEN** a user calls `extract_audio()` on a `VideoExtractor` instance
 - **THEN** the system:
   - Uses ffmpeg to extract the audio stream to a temporary file
-  - Reads and decodes the audio into a numpy array or bytes object
+  - Reads and decodes the audio into a numpy array using librosa at 16kHz sample rate
   - Caches the result internally to avoid re-extraction
   - Returns an `AudioSegment` object with metadata
 
@@ -56,7 +56,7 @@ The system SHALL extract audio from video files and cache the result to enable e
 - **THEN** the system:
   - Returns an `AudioSegment` object covering the specified time range
   - Uses cached full audio if available, or extracts the segment directly
-  - Preserves audio quality (sample rate, bit depth)
+  - Preserves audio quality and ensures 16kHz resampling
 
 #### Scenario: Audio segment includes temporal metadata
 - **WHEN** an audio segment is returned
@@ -64,12 +64,24 @@ The system SHALL extract audio from video files and cache the result to enable e
   - `start_time`: start timecode in seconds
   - `end_time`: end timecode in seconds
   - `duration()`: method returning duration in seconds
-  - `sample_rate`: audio sample rate (default 16 kHz, or detected from source)
-  - `data`: raw audio data as bytes or numpy array
+  - `sample_rate`: audio sample rate (16 kHz standard)
+  - `data`: raw audio data as numpy array (mono, float32)
 
 #### Scenario: Missing audio stream
 - **WHEN** input video has no audio track
-- **THEN** the system returns an empty `AudioSegment` or raises a descriptive error indicating audio unavailable
+- **THEN** the system returns an empty `AudioSegment` with None data; detectors handle gracefully
+
+#### Scenario: Automatic audio resampling to 16kHz
+- **WHEN** audio is extracted from video with different sample rate (44.1kHz, 48kHz, etc.)
+- **THEN** audio is resampled to 16kHz using librosa.resample() for compatibility with Whisper and audio classifiers
+
+#### Scenario: Audio segment slicing for frame-level analysis
+- **WHEN** `extract_audio_segment()` is called for a frame duration (e.g., start=10.0, end=10.033)
+- **THEN** audio slice is returned without re-extraction; uses cached full audio
+
+#### Scenario: Handle corrupted audio gracefully
+- **WHEN** audio extraction fails due to corruption or unsupported codec
+- **THEN** error is logged and empty AudioSegment returned; pipeline continues with visual-only detection
 
 ### Requirement: Video Metadata Access
 
