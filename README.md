@@ -219,6 +219,62 @@ except Exception as e:
 "
 ```
 
+## Audio Detection Setup
+
+Video Censor Personal supports audio-based detection for speech profanity and sound classification.
+
+### Audio Detection Models
+
+#### Whisper (Speech Profanity Detection)
+
+Whisper transcribes speech to text, which is then matched against profanity keyword lists.
+
+```bash
+# Download Whisper base model (~140 MB)
+python -c "
+from transformers import pipeline
+print('Downloading Whisper model...')
+pipe = pipeline('automatic-speech-recognition', model='openai/whisper-base')
+print('✓ Whisper model cached successfully')
+"
+```
+
+Model sizes: `tiny` (40 MB), `base` (140 MB), `small` (500 MB), `medium` (1.5 GB), `large` (3 GB)
+
+#### Audio Classification (Sound Effects)
+
+Detects sound effects like gunshots, screams, and explosions.
+
+```bash
+# Download audio classification model (~300 MB)
+python -c "
+from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
+print('Downloading audio classification model...')
+processor = AutoFeatureExtractor.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
+model = AutoModelForAudioClassification.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
+print('✓ Audio classification model cached successfully')
+"
+```
+
+### Audio Remediation
+
+Detected audio content can be censored using silence or bleep tones:
+
+- **Silence mode**: Replaces detected segments with silence
+- **Bleep mode**: Replaces detected segments with a beep tone
+
+When remediation is enabled, use `--output-video` to specify the output file:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-audio-remediation-silence.yaml \
+  --output results.json \
+  --output-video censored_video.mp4
+```
+
+See [AUDIO.md](AUDIO.md) for detailed audio setup and configuration.
+
 ## Configuration
 
 Video Censor Personal uses YAML configuration files to control detection behavior.

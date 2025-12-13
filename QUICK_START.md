@@ -218,7 +218,38 @@ Disk usage:
 - LLaVA 7B: ~7 GB
 - LLaVA 13B: ~26 GB
 
-## Step 5: Create Configuration File (1 minute)
+## Step 5: Download Audio Models (Optional)
+
+If you plan to use audio detection (speech profanity or sound effects), download these models:
+
+### Whisper Model (Speech Detection)
+
+```bash
+python -c "
+from transformers import pipeline
+print('Downloading Whisper base model (~140 MB)...')
+pipe = pipeline('automatic-speech-recognition', model='openai/whisper-base')
+print('✓ Whisper model cached successfully')
+"
+```
+
+### Audio Classification Model (Sound Effects)
+
+```bash
+python -c "
+from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
+print('Downloading audio classification model (~300 MB)...')
+processor = AutoFeatureExtractor.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
+model = AutoModelForAudioClassification.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
+print('✓ Audio model cached successfully')
+"
+```
+
+**Note**: Audio models download automatically on first use if not pre-cached. Pre-downloading is optional but speeds up your first analysis.
+
+Total audio model storage: ~500 MB
+
+## Step 6: Create Configuration File (1 minute)
 
 Create a `video-censor.yaml` file in the project directory:
 
@@ -267,7 +298,7 @@ output:
 
 Save this as `video-censor.yaml` in the project root directory.
 
-## Step 6: Test Without Downloading Models (Optional - 1 minute)
+## Step 7: Test Without Downloading Models (Optional - 1 minute)
 
 If you want to quickly test the pipeline without downloading large models:
 
@@ -315,7 +346,7 @@ python video_censor_personal.py \
 
 The mock detector returns deterministic results without requiring any model downloads, allowing you to test the complete pipeline immediately.
 
-## Step 7: Run Your First Analysis with LLaVA (5+ minutes)
+## Step 8: Run Your First Analysis with LLaVA (5+ minutes)
 
 ### Prepare a Test Video
 
