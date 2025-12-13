@@ -1,0 +1,98 @@
+# Video Censor Personal - Audio Detection Example Configuration
+# Copy this file to video-censor.yaml and modify as needed
+#
+# This config enables audio-based detection (speech profanity + sound classification)
+# WITHOUT audio remediation. Detections are reported in JSON output only.
+#
+# Usage:
+#   python video_censor_personal.py \
+#     --input video.mp4 \
+#     --config video-censor-audio-detection.yaml \
+#     --output results.json
+
+version: 1.0
+
+# Detection settings (visual-based categories)
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.8
+    model: "local"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+
+# Detector configuration
+detectors:
+  # Visual detector (LLaVA)
+  - type: "llava"
+    name: "llava-primary"
+    model_name: "liuhaotian/llava-v1.5-7b"
+    prompt_file: "./prompts/llava-detector.txt"
+    categories:
+      - "Nudity"
+      - "Violence"
+      - "Sexual Theme"
+  
+  # Speech profanity detector (Whisper-based)
+  # Detects profanity in spoken audio using speech-to-text
+  - type: "speech-profanity"
+    name: "speech-detector"
+    enabled: true
+    model: "base"                    # Whisper model: tiny, base, small, medium, large
+    categories:
+      - "Profanity"
+    languages:                       # Languages to detect profanity in
+      - "en"
+      - "es"
+    confidence_threshold: 0.8
+  
+  # Audio classification detector (HuggingFace model)
+  # Detects sound effects like gunshots, screams, explosions
+  - type: "audio-classification"
+    name: "audio-classifier"
+    enabled: true
+    model: "audioset-vit-base"       # HuggingFace audio classification model
+    categories:
+      - "Violence"                   # Detects: gunshot, explosion, scream, crash
+      # - "Sexual Theme"             # Uncomment to detect: moan, pant, etc.
+    confidence_threshold: 0.6
+
+# Audio processing settings
+audio:
+  detection:
+    enabled: true
+  
+  # Remediation disabled - detection only
+  remediation:
+    enabled: false
+
+# Video processing settings
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0
+  
+  max_workers: 4
+
+# Output settings
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true

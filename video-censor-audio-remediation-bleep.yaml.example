@@ -1,0 +1,110 @@
+# Video Censor Personal - Audio Remediation (Bleep Mode) Example
+# Copy this file to video-censor.yaml and modify as needed
+#
+# This config enables audio detection AND remediation with BLEEP mode.
+# Detected profanity segments are replaced with a beep tone in the output video.
+#
+# IMPORTANT: When remediation is enabled, you MUST provide --output-video
+#
+# Usage:
+#   python video_censor_personal.py \
+#     --input video.mp4 \
+#     --config video-censor-audio-remediation-bleep.yaml \
+#     --output results.json \
+#     --output-video censored_video.mp4
+#
+# Output files:
+#   - results.json: Detection results with timecodes
+#   - censored_video.mp4: Video with profanity bleeped
+
+version: 1.0
+
+# Detection settings
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.8
+    model: "local"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+
+# Detector configuration
+detectors:
+  # Visual detector
+  - type: "llava"
+    name: "llava-primary"
+    model_name: "liuhaotian/llava-v1.5-7b"
+    prompt_file: "./prompts/llava-detector.txt"
+    categories:
+      - "Nudity"
+      - "Violence"
+      - "Sexual Theme"
+  
+  # Speech profanity detector
+  - type: "speech-profanity"
+    name: "speech-detector"
+    enabled: true
+    model: "base"
+    categories:
+      - "Profanity"
+    languages:
+      - "en"
+      - "es"
+    confidence_threshold: 0.8
+  
+  # Audio classification detector
+  - type: "audio-classification"
+    name: "audio-classifier"
+    enabled: true
+    model: "audioset-vit-base"
+    categories:
+      - "Violence"
+    confidence_threshold: 0.6
+
+# Audio processing settings
+audio:
+  detection:
+    enabled: true
+  
+  # Remediation ENABLED - bleep mode
+  # This will censor detected audio segments with a beep tone
+  remediation:
+    enabled: true
+    mode: "bleep"                    # Replace with sine wave tone
+    categories:                      # Which categories to remediate
+      - "Profanity"                  # Bleep profanity
+      # - "Violence"                 # Uncomment to also bleep violence sounds
+    bleep_frequency: 1000            # Hz - frequency of the beep tone
+                                     # Common values: 1000 Hz (standard), 
+                                     # 800 Hz (lower), 1200 Hz (higher)
+
+# Video processing settings
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0
+  
+  max_workers: 4
+
+# Output settings
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true

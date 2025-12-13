@@ -20,7 +20,7 @@
   - Integrate audio cleanup into `close()` and context manager
   - NOTE: extract_audio() already exists in VideoExtractor
 
-- [ ] 1.4 Write unit tests for audio extraction (`tests/test_audio_extractor.py`)
+- [x] 1.4 Write unit tests for audio extraction (`tests/test_audio_extractor.py`)
   - Test extraction from sample video
   - Test caching (no re-extraction)
   - Test resampling to 16kHz
@@ -55,7 +55,7 @@
   - In detector framework initialization, register `SpeechProfanityDetector` under type "speech-profanity"
   - Updated video_censor_personal/detectors/__init__.py
 
-- [ ] 2.4 Write unit tests for speech detector (`tests/test_speech_profanity_detector.py`)
+- [x] 2.4 Write unit tests for speech detector (`tests/test_speech_profanity_detector.py`)
   - Mock Whisper pipeline
   - Test keyword matching (found, not found, case-insensitive)
   - Test multi-language support
@@ -93,7 +93,7 @@
   - Register `AudioClassificationDetector` under type "audio-classification"
   - Updated video_censor_personal/detectors/__init__.py
 
-- [ ] 3.4 Write unit tests for audio classifier (`tests/test_audio_classification_detector.py`)
+- [x] 3.4 Write unit tests for audio classifier (`tests/test_audio_classification_detector.py`)
   - Mock HuggingFace model
   - Test classification → category mapping
   - Test confidence score propagation
@@ -150,7 +150,7 @@
   - Implement `write_audio(audio_data, sample_rate, output_path)` method
   - Use soundfile to write WAV
 
-- [ ] 5.2 Write unit tests for audio remediator (`tests/test_audio_remediator.py`)
+- [x] 5.2 Write unit tests for audio remediator (`tests/test_audio_remediator.py`)
   - Create synthetic audio with known samples
   - Test silence mode (check zeros in output)
   - Test bleep mode (check tone generated)
@@ -201,7 +201,7 @@
   - Parse ffmpeg stderr and raise descriptive error on failure
   - Handle file permissions and missing files gracefully
 
-- [ ] 7.2 Write unit tests for video muxer (`tests/test_video_muxer.py`)
+- [x] 7.2 Write unit tests for video muxer (`tests/test_video_muxer.py`)
   - Mock subprocess to simulate ffmpeg calls
   - Test successful muxing (check command and args)
   - Test ffmpeg failure handling
@@ -248,7 +248,7 @@
   - Pass output_video_path to AnalysisRunner
   - Updated help text
 
-- [ ] 8.3 Create example configs with audio and muxing
+- [x] 8.3 Create example configs with audio and muxing
   - Create `video-censor-audio-detection.yaml.example` (detection only, no muxing)
   - Create `video-censor-audio-remediation-silence.yaml.example` (silence mode, shows muxing)
   - Create `video-censor-audio-remediation-bleep.yaml.example` (bleep mode)
@@ -304,7 +304,7 @@
   - Document environment variable overrides (TRANSFORMERS_CACHE, HF_HOME)
   - Note: Models download automatically on first use if not pre-cached
 
-- [ ] 9.4 Write AUDIO.md setup and reference guide
+- [x] 9.4 Write AUDIO.md setup and reference guide
   - Section: "Model Selection and Setup"
     - Whisper model sizes and performance (tiny 40MB → large 3GB)
     - Recommendation: base model for most use cases
