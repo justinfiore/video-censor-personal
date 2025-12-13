@@ -1,0 +1,78 @@
+# Video Censor Personal - Example Configuration
+# Copy this file to video-censor.yaml and modify settings as needed
+
+version: 1.0
+
+# Detection settings
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7          # 0.0 (permissive) to 1.0 (strict)
+    model: "local"            # "local" or fallback service name
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.8
+    model: "local"
+    languages:                # Language codes for profanity detection
+      - en                    # English
+      - es                    # Spanish
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+  
+  # Custom detection categories
+  custom_concepts:
+    - name: "logos"
+      enabled: false
+      sensitivity: 0.5
+      description: "Brand logos and product placement"
+    
+    - name: "spoilers"
+      enabled: false
+      sensitivity: 0.6
+      description: "Movie/show spoiler content"
+
+# Video processing settings
+processing:
+  # Frame sampling strategy
+  frame_sampling:
+    strategy: "uniform"       # Options: "uniform", "scene_based", "all"
+    sample_rate: 1.0          # seconds between frame analysis (1.0 = every second)
+  
+  # Segment merging and aggregation
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0      # merge segments within N seconds
+  
+  # Parallel processing
+  max_workers: 4              # number of parallel workers
+
+# Output settings
+output:
+  format: "json"              # Options: "json", "csv"
+  include_frames: false       # include base64 encoded frame images
+  include_confidence: true    # include confidence scores in results
+  pretty_print: true          # human-readable JSON formatting
+
+# Model configuration
+models:
+  local:
+    # Local model settings (optional - uses transformers defaults)
+    vision_model: "liuhaotian/llava-v1.5-7b"
+    cache_dir: "./models"
+  
+  third_party:
+    # Third-party service fallback
+    enabled_fallback: false
+    providers:
+      - name: "example_api"
+        enabled: false
+        # API credentials loaded from environment variables

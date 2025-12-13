@@ -1,0 +1,89 @@
+"""Command-line interface for video-censor-personal."""
+
+import argparse
+import logging
+from pathlib import Path
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser for CLI.
+    """
+    parser = argparse.ArgumentParser(
+        prog="video_censor_personal",
+        description=(
+            "Analyze videos to detect nudity, profanity, violence, sexual themes, "
+            "and custom concepts."
+        ),
+        epilog=(
+            "Example: python video_censor_personal.py --input video.mp4 "
+            "--config config.yaml --output results.json"
+        ),
+    )
+
+    parser.add_argument(
+        "--input",
+        type=str,
+        required=True,
+        help="Path to input video file",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=str,
+        required=False,
+        help="Path to output results JSON file (default: results.json)",
+        metavar="PATH",
+        default="results.json",
+    )
+
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=False,
+        help="Path to YAML configuration file (default: ./video-censor.yaml)",
+        metavar="PATH",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug-level logging output",
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s 0.1.0",
+    )
+
+    return parser
+
+
+def parse_args(args=None) -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Args:
+        args: List of arguments to parse (default: sys.argv[1:]).
+
+    Returns:
+        argparse.Namespace: Parsed arguments.
+    """
+    parser = create_parser()
+    return parser.parse_args(args)
+
+
+def setup_logging(verbose: bool = False) -> None:
+    """Configure logging based on verbosity level.
+
+    Args:
+        verbose: If True, enable debug-level logging.
+    """
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )

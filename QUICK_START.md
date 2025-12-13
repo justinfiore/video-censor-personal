@@ -1,0 +1,388 @@
+# Quick Start Guide
+
+Get Video Censor Personal up and running in 15 minutes.
+
+## Prerequisites
+
+- Python 3.13 or later installed (check: `python --version`)
+- pip installed (check: `pip --version`)
+- ~15-20 GB free disk space for models and environment
+
+## Step 1: Setup Python Environment (2 minutes)
+
+### Create Virtual Environment
+
+```bash
+# Navigate to project directory
+cd video-censor-personal
+
+# Create virtual environment
+python3.13 -m venv venv
+
+# Activate it
+# On macOS/Linux:
+source venv/bin/activate
+
+# On Windows (PowerShell):
+venv\Scripts\Activate.ps1
+
+# On Windows (Command Prompt):
+venv\Scripts\activate.bat
+```
+
+You should see `(venv)` appear in your terminal prompt.
+
+### Verify Python Installation
+
+```bash
+python --version        # Should show 3.13.x
+pip --version           # Should show associated version
+which python            # Should show path to venv/bin/python
+```
+
+## Step 2: Install Python Dependencies (3 minutes)
+
+```bash
+# Upgrade pip first (recommended)
+pip install --upgrade pip setuptools wheel
+
+# Install project dependencies
+pip install -r requirements.txt
+```
+
+Expected output should show successful installation of:
+- PyYAML
+- numpy
+- click
+- opencv-python
+
+## Step 3: Install ffmpeg (3-5 minutes)
+
+ffmpeg is required to extract frames from videos.
+
+### macOS
+
+Using Homebrew:
+```bash
+brew install ffmpeg
+```
+
+Or download from https://ffmpeg.org/download.html
+
+### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt-get update
+sudo apt-get install ffmpeg
+```
+
+### Linux (Fedora/RHEL)
+
+```bash
+sudo dnf install ffmpeg
+```
+
+### Windows
+
+1. Go to https://ffmpeg.org/download.html
+2. Download the Windows build
+3. Extract to `C:\ffmpeg` (or similar location)
+4. Add to PATH:
+   - Right-click "This PC" → Properties
+   - Click "Advanced system settings"
+   - Click "Environment Variables"
+   - Add `C:\ffmpeg\bin` to PATH
+5. Restart terminal and verify:
+   ```bash
+   ffmpeg -version
+   ```
+
+### Verify Installation
+
+```bash
+ffmpeg -version
+# Output should show FFmpeg version and built-in components
+```
+
+## Step 4: Download AI Models (5-10 minutes)
+
+Models are used for content analysis. Download them before your first run.
+
+### Install Transformers Library
+
+```bash
+pip install transformers torch torchvision torchaudio
+```
+
+### Download LLaVA Model (Recommended)
+
+The 7B model is recommended for most use cases (~4 GB download, ~7 GB unpacked).
+
+```bash
+python -c "
+from transformers import AutoTokenizer, AutoModelForCausalLM
+print('Downloading model... this may take 3-5 minutes')
+model_name = 'liuhaotian/llava-v1.5-7b'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto')
+print('✓ Model downloaded and cached successfully')
+print('Model location: ~/.cache/huggingface/hub/')
+"
+```
+
+**Alternative: 13B Model (More Accurate but Slower)**
+
+~26 GB total, requires 30+ GB RAM or GPU:
+
+```bash
+python -c "
+from transformers import AutoTokenizer, AutoModelForCausalLM
+print('Downloading 13B model... this may take 10-15 minutes')
+model_name = 'liuhaotian/llava-v1.5-13b'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto')
+print('✓ Model downloaded and cached successfully')
+"
+```
+
+### Verify Model Installation
+
+```bash
+python -c "
+from transformers import AutoTokenizer, AutoModelForCausalLM
+model_name = 'liuhaotian/llava-v1.5-7b'
+try:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    print('✓ LLaVA 7B model loaded successfully')
+except Exception as e:
+    print(f'✗ Error: {e}')
+    print('Check internet connection and disk space')
+"
+```
+
+### Model Location
+
+Models are cached at: `~/.cache/huggingface/hub/`
+
+Disk usage:
+- LLaVA 7B: ~7 GB
+- LLaVA 13B: ~26 GB
+
+## Step 5: Create Configuration File (1 minute)
+
+Create a `video-censor.yaml` file in the project directory:
+
+```yaml
+version: 1.0
+
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.8
+    model: "local"
+    languages:
+      - en
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0          # Analyze every second
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0
+  
+  max_workers: 4
+
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true
+```
+
+Save this as `video-censor.yaml` in the project root directory.
+
+## Step 6: Run Your First Analysis (5+ minutes)
+
+### Prepare a Test Video
+
+Use your own video or download a sample video for testing:
+
+```bash
+# Example: Download a short video (~10 seconds) for testing
+# You can use any MP4 video you have
+```
+
+### Run Analysis
+
+```bash
+python video_censor_personal.py \
+  --input /path/to/video.mp4 \
+  --config video-censor.yaml \
+  --output results.json
+```
+
+### With Verbose Output (Recommended for First Run)
+
+```bash
+python video_censor_personal.py \
+  --input /path/to/video.mp4 \
+  --config video-censor.yaml \
+  --output results.json \
+  --verbose
+```
+
+### View Results
+
+```bash
+# Pretty print the results
+python -m json.tool results.json | less
+
+# Or open in your editor
+# results.json will contain detected segments with timestamps and confidence scores
+```
+
+## Common Commands
+
+```bash
+# Get help
+python video_censor_personal.py --help
+
+# Analyze with custom config
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config my-config.yaml \
+  --output output.json
+
+# Verbose mode for troubleshooting
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor.yaml \
+  --verbose
+
+# Show version
+python video_censor_personal.py --version
+```
+
+## Troubleshooting
+
+### Issue: "Python 3.13 or later is required"
+
+**Solution**: Install Python 3.13+
+```bash
+# Check your version
+python --version
+
+# Install from python.org or:
+# macOS: brew install python@3.13
+# Ubuntu: sudo apt-get install python3.13
+```
+
+### Issue: "ffmpeg command not found"
+
+**Solution**: Install ffmpeg (see Step 3 above)
+
+### Issue: Virtual Environment Not Activating
+
+**Windows users**: If you get execution policy error:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Then try activating again:
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+### Issue: Model Download Fails / Timeout
+
+**Solutions**:
+1. Check internet connection
+2. Increase timeout:
+   ```bash
+   HF_HUB_READ_TIMEOUT=100 python -c "from transformers import ..."
+   ```
+3. Try again - sometimes HuggingFace servers are slow
+
+### Issue: "Out of Memory" or "CUDA out of memory"
+
+**Solutions**:
+1. Use smaller model (7B instead of 13B)
+2. Reduce `max_workers` in config from 4 to 2 or 1
+3. Process videos in smaller chunks
+4. Close other applications to free RAM
+
+### Issue: Permission Denied on Video File
+
+**Solution**:
+```bash
+# Make video readable
+chmod +r /path/to/video.mp4
+
+# Make output directory writable
+chmod +w /path/to/output/dir
+```
+
+### Issue: "Configuration file not found"
+
+**Solution**: Make sure `video-censor.yaml` is in the same directory as `video_censor_personal.py`, or specify full path:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config /full/path/to/config.yaml
+```
+
+## Next Steps
+
+1. **Customize Detection Settings**: Adjust sensitivity levels in `video-censor.yaml`
+2. **Add Custom Detections**: Create custom detection categories
+3. **Batch Processing**: Create a script to analyze multiple videos
+4. **Integrate Results**: Use the JSON output in your own applications
+
+## Getting Help
+
+1. **Check README.md** for detailed documentation
+2. **Run with `--verbose`** to see debug output
+3. **Review configuration** - most issues are config-related
+4. **Check disk space** - required for models and temporary files
+
+## Quick Syntax Reference
+
+```bash
+# All required arguments
+python video_censor_personal.py --input FILE --config FILE [--output FILE]
+
+# All optional arguments
+--output FILE      # Output JSON file (default: results.json)
+--config FILE      # Config file (default: ./video-censor.yaml)
+--verbose          # Debug output
+--help             # Show help
+--version          # Show version
+```
+
+---
+
+**Estimated Total Setup Time**: 15-20 minutes (including model download)
+
+**Ready to analyze?** 🎬
+
+```bash
+python video_censor_personal.py --input video.mp4 --config video-censor.yaml --verbose
+```
