@@ -121,6 +121,49 @@ Currently deferred because:
 
 See: Future feature proposal `add-gpu-optimization` (TBD)
 
+### Model Auto-Download (Future Feature)
+Automated model management with progress tracking and dependency resolution. When implemented, will include:
+- CLI option `--download-models` (disabled by default)
+- Pre-execution verification of all required models based on configuration
+- Automatic download of missing models from configured sources
+- Human-friendly download progress display:
+  - Progress bar with visual completion indicator
+  - Real-time download speed (MB/s, GB/s)
+  - Progress ratio (e.g., "250 MB of 2.5 GB")
+  - ETA calculation
+- Clear messaging of download destination directory
+- Configurable model cache directory in YAML
+- Atomic downloads (prevent partial/corrupted files)
+- Checksum validation of downloaded models
+
+Currently deferred because:
+1. MVP assumes models are pre-downloaded or available in environment
+2. Model sources and download URLs require finalization
+3. Caching strategy and storage organization need specification
+4. May be better served as separate utility script initially
+5. Cross-platform path handling adds complexity
+
+When implemented, the feature will be invoked via:
+```bash
+python -m video_censor \
+  --input /path/to/video.mp4 \
+  --output /path/to/results.json \
+  --config /path/to/video-censor.yaml \
+  --download-models
+```
+
+Output will resemble:
+```
+Verifying required models...
+  ✓ llava-7b (present)
+  ✗ profanity-detector (missing)
+
+Downloading models to: /home/user/.cache/video-censor/models
+[████████████░░░░░░░░░░░░░░░░] 500 MB / 2.5 GB (20%) | 15.3 MB/s | ETA 2m 15s
+```
+
+See: Future feature proposal `add-model-auto-download` (TBD)
+
 ## External Dependencies
 
 - **ffmpeg**: Video frame extraction and metadata
