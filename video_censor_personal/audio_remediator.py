@@ -87,6 +87,13 @@ class AudioRemediator:
         
         remediated = audio_data.copy()
         
+        # Determine number of channels (mono = 1D, stereo/multi = 2D)
+        if remediated.ndim == 1:
+            num_channels = 1
+            num_samples = len(remediated)
+        else:
+            num_samples, num_channels = remediated.shape
+        
         # Filter and apply remediation per detection
         remediated_count = 0
         for detection in detections:
@@ -102,7 +109,7 @@ class AudioRemediator:
             
             # Clamp to valid range
             start_sample = max(0, start_sample)
-            end_sample = min(len(remediated), end_sample)
+            end_sample = min(num_samples, end_sample)
             
             if start_sample >= end_sample:
                 logger.debug(
@@ -123,6 +130,11 @@ class AudioRemediator:
                 duration_samples = end_sample - start_sample
                 t = np.arange(duration_samples, dtype=np.float32) / sample_rate
                 tone = 0.2 * np.sin(2 * np.pi * self.bleep_frequency * t)
+                
+                # Expand tone to match number of channels
+                if num_channels > 1:
+                    tone = np.tile(tone[:, np.newaxis], (1, num_channels))
+                
                 remediated[start_sample:end_sample] = tone
                 logger.debug(
                     f"Beeped {detection.label} at {detection.start_time:.2f}s "

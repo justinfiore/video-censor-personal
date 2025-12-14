@@ -360,6 +360,101 @@ class TestEdgeCases:
         assert np.all(result == 1.0)
 
 
+class TestStereoAudio:
+    """Test multi-channel (stereo) audio handling."""
+
+    def test_silence_stereo_audio(self):
+        """Test silencing stereo audio zeros all channels."""
+        config = {
+            "enabled": True,
+            "mode": "silence",
+            "categories": ["Profanity"],
+        }
+        remediator = AudioRemediator(config)
+        
+        sample_rate = 16000
+        # Stereo audio: shape (samples, 2)
+        audio = np.ones((sample_rate, 2), dtype=np.float32)
+        
+        detections = [
+            DetectionResult(
+                start_time=0.5, end_time=1.0, label="Profanity",
+                confidence=0.95, reasoning="test",
+            )
+        ]
+        
+        result = remediator.remediate(audio, sample_rate, detections)
+        
+        # Check silenced region (both channels)
+        start_sample = int(0.5 * sample_rate)
+        end_sample = int(1.0 * sample_rate)
+        assert np.all(result[start_sample:end_sample] == 0.0)
+        
+        # Check non-silenced regions unchanged
+        assert np.all(result[:start_sample] == 1.0)
+
+    def test_bleep_stereo_audio(self):
+        """Test bleeping stereo audio applies tone to all channels."""
+        config = {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Profanity"],
+            "bleep_frequency": 1000,
+        }
+        remediator = AudioRemediator(config)
+        
+        sample_rate = 16000
+        # Stereo audio: shape (samples, 2)
+        audio = np.zeros((sample_rate, 2), dtype=np.float32)
+        
+        detections = [
+            DetectionResult(
+                start_time=0.0, end_time=0.1, label="Profanity",
+                confidence=0.95, reasoning="test",
+            )
+        ]
+        
+        result = remediator.remediate(audio, sample_rate, detections)
+        
+        # Check bleeped region has tone in both channels
+        end_sample = int(0.1 * sample_rate)
+        assert result.shape == (sample_rate, 2)
+        assert not np.all(result[:end_sample] == 0.0)
+        
+        # Both channels should have the same tone
+        assert np.allclose(result[:end_sample, 0], result[:end_sample, 1])
+
+    def test_bleep_multichannel_audio(self):
+        """Test bleeping audio with more than 2 channels."""
+        config = {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Profanity"],
+        }
+        remediator = AudioRemediator(config)
+        
+        sample_rate = 16000
+        # 5.1 surround: shape (samples, 6)
+        audio = np.zeros((sample_rate, 6), dtype=np.float32)
+        
+        detections = [
+            DetectionResult(
+                start_time=0.0, end_time=0.1, label="Profanity",
+                confidence=0.95, reasoning="test",
+            )
+        ]
+        
+        result = remediator.remediate(audio, sample_rate, detections)
+        
+        # Shape should be preserved
+        assert result.shape == (sample_rate, 6)
+        
+        # All 6 channels should have the same tone
+        end_sample = int(0.1 * sample_rate)
+        for ch in range(1, 6):
+            assert np.allclose(result[:end_sample, 0], result[:end_sample, ch])
+
+
 class TestAudioFileWriting:
     """Test audio file writing functionality."""
 
