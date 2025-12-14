@@ -69,7 +69,7 @@ detectors:
   - type: "audio-classification"
     name: "audio-classifier"
     enabled: true
-    model: "audioset-vit-base"
+    model: "MIT/ast-finetuned-audioset-10-10-0.4593"
     categories:
       - "Violence"
     confidence_threshold: 0.6

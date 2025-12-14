@@ -39,7 +39,7 @@ class AudioClassificationDetector(Detector):
             config: Configuration dict with:
                 - name: Detector name
                 - categories: Content categories to detect (e.g., ["Violence"])
-                - model: HuggingFace model name (default: "audioset-vit-base")
+                - model: HuggingFace model name (default: "MIT/ast-finetuned-audioset-10-10-0.4593")
                 - confidence_threshold: Min confidence (default: 0.6)
         
         Raises:
@@ -48,7 +48,7 @@ class AudioClassificationDetector(Detector):
         """
         super().__init__(config)
         
-        self.model_name = config.get("model", "audioset-vit-base")
+        self.model_name = config.get("model", "MIT/ast-finetuned-audioset-10-10-0.4593")
         self.target_categories = set(self.categories)
         self.confidence_threshold = config.get("confidence_threshold", 0.6)
         

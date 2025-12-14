@@ -40,14 +40,14 @@ class TestAudioDetectorConfig:
             categories:
               - "Violence"
               - "Sexual Theme"
-            model: "audioset-vit-base"
+            model: "MIT/ast-finetuned-audioset-10-10-0.4593"
             confidence_threshold: 0.6
         """
         config = yaml.safe_load(config_yaml)
         
         detector = config["detectors"][0]
         assert detector["type"] == "audio-classification"
-        assert detector["model"] == "audioset-vit-base"
+        assert detector["model"] == "MIT/ast-finetuned-audioset-10-10-0.4593"
         assert "Violence" in detector["categories"]
 
     def test_languages_array_parsed_correctly(self):
@@ -166,7 +166,7 @@ class TestCombinedAudioConfig:
           - type: "audio-classification"
             name: "audio-classifier"
             categories: ["Violence"]
-            model: "audioset-vit-base"
+            model: "MIT/ast-finetuned-audioset-10-10-0.4593"
 
         audio:
           detection:

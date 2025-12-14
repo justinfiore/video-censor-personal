@@ -29,7 +29,7 @@ Whisper is used for speech-to-text transcription. Choose a model size based on y
 
 ### Audio Classification Model
 
-The default audio classification model is `audioset-vit-base` (~300 MB), trained on AudioSet for recognizing 527 sound classes.
+The default audio classification model is `MIT/ast-finetuned-audioset-10-10-0.4593` (~300 MB), trained on AudioSet for recognizing 527 sound classes.
 
 ## Pre-downloading Models
 
@@ -52,8 +52,8 @@ print('✓ Whisper model cached successfully')
 python -c "
 from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 print('Downloading audio classification model...')
-processor = AutoFeatureExtractor.from_pretrained('audioset-vit-base')
-model = AutoModelForAudioClassification.from_pretrained('audioset-vit-base')
+processor = AutoFeatureExtractor.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
+model = AutoModelForAudioClassification.from_pretrained('MIT/ast-finetuned-audioset-10-10-0.4593')
 print('✓ Audio classification model cached successfully')
 "
 ```

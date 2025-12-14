@@ -64,7 +64,7 @@ detectors:
   - type: "audio-classification"
     name: "audio-classifier"
     enabled: true
-    model: "audioset-vit-base"       # HuggingFace audio classification model
+    model: "MIT/ast-finetuned-audioset-10-10-0.4593"       # HuggingFace audio classification model
     categories:
       - "Violence"                   # Detects: gunshot, explosion, scream, crash
       # - "Sexual Theme"             # Uncomment to detect: moan, pant, etc.

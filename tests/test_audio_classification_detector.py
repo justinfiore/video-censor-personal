@@ -30,7 +30,7 @@ class TestAudioClassificationDetectorInitialization:
         
         detector = AudioClassificationDetector(config)
         
-        assert detector.model_name == "audioset-vit-base"
+        assert detector.model_name == "MIT/ast-finetuned-audioset-10-10-0.4593"
         assert detector.confidence_threshold == 0.6
         assert "Violence" in detector.target_categories
 
