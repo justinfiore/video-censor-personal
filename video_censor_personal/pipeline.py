@@ -12,6 +12,7 @@ from video_censor_personal.detection import DetectionPipeline, get_detector_regi
 from video_censor_personal.frame import DetectionResult
 from video_censor_personal.model_manager import ModelManager, ModelDownloadError
 from video_censor_personal.output import generate_json_output, merge_segments
+from video_censor_personal.progress import DebugOutput, VideoProgressBar
 from video_censor_personal.video_extraction import VideoExtractor
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class AnalysisPipeline:
         detector_list: Optional[List[Dict[str, Any]]] = None,
         output_video_path: Optional[str] = None,
         skip_model_check: bool = False,
+        log_level: str = "INFO",
     ) -> None:
         """Initialize the analysis pipeline.
 
@@ -49,6 +51,7 @@ class AnalysisPipeline:
             detector_list: Optional list of detector configs. If None, uses config['detectors'].
             output_video_path: Optional path for output video with remediated audio.
             skip_model_check: If True, skip model verification (legacy behavior).
+            log_level: Logging level (INFO, DEBUG, TRACE).
 
         Raises:
             FileNotFoundError: If video file does not exist.
@@ -60,6 +63,9 @@ class AnalysisPipeline:
 
         self.config = config
         self.output_video_path = output_video_path
+        self.log_level = log_level
+        self.trace_enabled = log_level == "TRACE"
+        self.debug_output = DebugOutput(enabled=self.trace_enabled)
         self.extractor: Optional[VideoExtractor] = None
         self.detection_pipeline: Optional[DetectionPipeline] = None
         self.remediated_audio_path: Optional[str] = None
@@ -271,16 +277,36 @@ class AnalysisPipeline:
 
             # Initialize extractor
             self.extractor = VideoExtractor(str(self.video_path))
+            
+            video_duration = self.extractor.get_duration_seconds()
+            video_fps = self.extractor.get_fps()
+            video_frame_count = self.extractor.get_frame_count()
+            
             logger.debug(
-                f"Video info: {self.extractor.get_frame_count()} frames, "
-                f"{self.extractor.get_fps():.2f} fps, "
-                f"{self.extractor.get_duration_seconds():.2f} seconds"
+                f"Video info: {video_frame_count} frames, "
+                f"{video_fps:.2f} fps, "
+                f"{video_duration:.2f} seconds"
             )
+            
+            # Debug output for video info
+            self.debug_output.section("Video Analysis Started")
+            self.debug_output.detail("Input file", str(self.video_path))
+            self.debug_output.detail("Duration", f"{video_duration:.2f} seconds")
+            self.debug_output.detail("FPS", f"{video_fps:.2f}")
+            self.debug_output.detail("Total frames", video_frame_count)
+            self.debug_output.detail("Detectors", len(self.detection_pipeline.detectors))
+            for detector in self.detection_pipeline.detectors:
+                self.debug_output.detail(f"  - {detector.name}", detector.categories)
 
             # Get sample rate from config
             from video_censor_personal.config import get_sample_rate_from_config
             sample_rate = get_sample_rate_from_config(self.config)
             logger.debug(f"Frame sample rate: {sample_rate} seconds")
+            
+            # Calculate estimated frame count for progress
+            estimated_frames = int(video_duration / sample_rate) if sample_rate > 0 else video_frame_count
+            self.debug_output.detail("Sample rate", f"{sample_rate} seconds")
+            self.debug_output.detail("Estimated frames to analyze", estimated_frames)
 
             # Extract audio once for all detectors
             # Keep original audio for remediation; use downsampled copy for detection
@@ -359,42 +385,85 @@ class AnalysisPipeline:
                     audio_data_original = None
                     audio_data_for_detection = None
 
-            # Extract and analyze frames
+            # Extract and analyze frames with progress bar
+            self.debug_output.subsection("Frame Analysis")
             frame_count = 0
-            for frame in self.extractor.extract_frames(sample_rate=sample_rate):
-                try:
-                    frame_count += 1
-                    logger.debug(f"Analyzing frame {frame.index} at {frame.timestamp_str()}")
+            
+            # Create progress bar (disable in TRACE mode to avoid cluttering output)
+            with VideoProgressBar(
+                total_duration=video_duration,
+                description="Analyzing video",
+                disable=self.trace_enabled,
+            ) as progress:
+                for frame in self.extractor.extract_frames(sample_rate=sample_rate):
+                    try:
+                        frame_count += 1
+                        logger.debug(f"Analyzing frame {frame.index} at {frame.timestamp_str()}")
+                        
+                        # Update progress bar
+                        progress.update(frame.timecode)
 
-                    # Run detection pipeline on frame (using downsampled audio for detection)
-                    results = self.detection_pipeline.analyze_frame(
-                        frame,
-                        audio_data=audio_data_for_detection
-                    )
-                    all_results.extend(results)
-
-                    if results:
-                        logger.debug(
-                            f"Frame {frame.index}: {len(results)} detection(s) found"
+                        # Run detection pipeline on frame (using downsampled audio for detection)
+                        results = self.detection_pipeline.analyze_frame(
+                            frame,
+                            audio_data=audio_data_for_detection
                         )
+                        all_results.extend(results)
 
-                except Exception as e:
-                    logger.error(
-                        f"Error analyzing frame {frame.index}: {e}",
-                        exc_info=True,
-                    )
-                    # Continue with next frame
-                    continue
+                        # Trace output for frame (only in TRACE mode)
+                        if self.trace_enabled:
+                            self.debug_output.frame_info(
+                                frame.index,
+                                frame.timecode,
+                                len(results),
+                            )
+                            for result in results:
+                                self.debug_output.detector_result(
+                                    getattr(result, 'detector_name', None) or "unknown",
+                                    result.label,
+                                    result.confidence,
+                                )
+
+                        if results:
+                            logger.debug(
+                                f"Frame {frame.index}: {len(results)} detection(s) found"
+                            )
+
+                    except Exception as e:
+                        logger.error(
+                            f"Error analyzing frame {frame.index}: {e}",
+                            exc_info=True,
+                        )
+                        self.debug_output.info(f"ERROR on frame {frame.index}: {e}")
+                        # Continue with next frame
+                        continue
 
             logger.info(
                 f"Analysis complete: {frame_count} frames analyzed, "
                 f"{len(all_results)} total detections found"
             )
+            
+            # Debug summary
+            self.debug_output.subsection("Analysis Summary")
+            self.debug_output.detail("Frames analyzed", frame_count)
+            self.debug_output.detail("Total detections", len(all_results))
+            
+            # Count detections by label
+            label_counts: Dict[str, int] = {}
+            for result in all_results:
+                label_counts[result.label] = label_counts.get(result.label, 0) + 1
+            for label, count in sorted(label_counts.items()):
+                self.debug_output.detail(f"  {label}", count)
 
             # Apply audio remediation if enabled
             # Use original audio (at original sample rate) for remediation
             remediation_config = self.config.get("audio", {}).get("remediation", {})
             if remediation_config.get("enabled", False) and audio_data_original is not None:
+                self.debug_output.subsection("Audio Remediation")
+                self.debug_output.step("Applying audio remediation...")
+                self.debug_output.detail("Method", remediation_config.get("method", "silence"))
+                self.debug_output.detail("Sample rate", f"{audio_sample_rate_original or 48000} Hz")
+                
                 try:
                     from video_censor_personal.audio_remediator import AudioRemediator
                     
@@ -420,22 +489,29 @@ class AnalysisPipeline:
                         f"Remediated audio saved to: {output_audio_path} "
                         f"({audio_sample_rate_original or 48000} Hz)"
                     )
+                    self.debug_output.step(f"Audio saved to: {output_audio_path}")
                     
                 except Exception as e:
                     logger.error(f"Audio remediation failed: {e}", exc_info=True)
+                    self.debug_output.info(f"ERROR: Audio remediation failed: {e}")
                     raise
 
             # Mux remediated audio into video if output path specified
             if self.remediated_audio_path and self.output_video_path:
+                self.debug_output.subsection("Video Muxing")
+                self.debug_output.step("Muxing remediated audio into video...")
+                
                 try:
                     from video_censor_personal.video_muxer import VideoMuxer
                     
                     muxer = VideoMuxer(str(self.video_path), self.remediated_audio_path)
                     muxer.mux_video(self.output_video_path)
                     logger.info(f"Output video saved to: {self.output_video_path}")
+                    self.debug_output.step(f"Output video saved to: {self.output_video_path}")
                     
                 except Exception as e:
                     logger.error(f"Video muxing failed: {e}", exc_info=True)
+                    self.debug_output.info(f"ERROR: Video muxing failed: {e}")
                     raise
 
             return all_results
@@ -494,6 +570,7 @@ class AnalysisRunner:
         config: Dict[str, Any],
         config_path: str,
         output_video_path: Optional[str] = None,
+        log_level: str = "INFO",
     ) -> None:
         """Initialize analysis runner.
 
@@ -502,11 +579,15 @@ class AnalysisRunner:
             config: Configuration dictionary.
             config_path: Path to configuration file (for metadata).
             output_video_path: Optional path for output video with remediated audio.
+            log_level: Logging level (INFO, DEBUG, TRACE).
         """
         self.video_path = video_path
         self.config = config
         self.config_path = config_path
         self.output_video_path = output_video_path
+        self.log_level = log_level
+        self.trace_enabled = log_level == "TRACE"
+        self.debug_output = DebugOutput(enabled=self.trace_enabled)
 
     def run(self, output_path: str) -> Dict[str, Any]:
         """Run analysis and generate JSON output.
@@ -523,11 +604,19 @@ class AnalysisRunner:
         logger.info(f"Running analysis: {self.video_path} -> {output_path}")
         if self.output_video_path:
             logger.info(f"Output video: {self.output_video_path}")
+            
+        # Debug output for configuration
+        self.debug_output.section("Configuration")
+        self.debug_output.detail("Input video", self.video_path)
+        self.debug_output.detail("Output JSON", output_path)
+        self.debug_output.detail("Output video", self.output_video_path or "None")
+        self.debug_output.detail("Config file", self.config_path)
 
         with AnalysisPipeline(
             self.video_path,
             self.config,
             output_video_path=self.output_video_path,
+            log_level=self.log_level,
         ) as pipeline:
             # Run analysis
             detections = pipeline.analyze()

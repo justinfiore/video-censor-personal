@@ -40,17 +40,29 @@ class TestCreateParser:
         args = parser.parse_args(["--input", "video.mp4"])
         assert args.config is None
 
-    def test_parser_has_verbose_flag(self):
-        """Parser should have --verbose flag."""
+    def test_parser_has_log_level(self):
+        """Parser should have --log-level argument."""
         parser = create_parser()
-        args = parser.parse_args(["--input", "video.mp4", "--verbose"])
-        assert args.verbose is True
+        args = parser.parse_args(["--input", "video.mp4", "--log-level", "DEBUG"])
+        assert args.log_level == "DEBUG"
 
-    def test_parser_verbose_default_false(self):
-        """Verbose should default to False."""
+    def test_parser_log_level_default_info(self):
+        """Log level should default to INFO."""
         parser = create_parser()
         args = parser.parse_args(["--input", "video.mp4"])
-        assert args.verbose is False
+        assert args.log_level == "INFO"
+
+    def test_parser_log_level_trace(self):
+        """Parser should accept TRACE log level."""
+        parser = create_parser()
+        args = parser.parse_args(["--input", "video.mp4", "--log-level", "TRACE"])
+        assert args.log_level == "TRACE"
+
+    def test_parser_log_level_invalid_rejected(self):
+        """Parser should reject invalid log levels."""
+        parser = create_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--input", "video.mp4", "--log-level", "INVALID"])
 
     def test_parser_has_version(self):
         """Parser should have --version argument."""
@@ -78,13 +90,14 @@ class TestParseArgs:
                 "out.json",
                 "--config",
                 "config.yaml",
-                "--verbose",
+                "--log-level",
+                "DEBUG",
             ]
         )
         assert args.input == "video.mp4"
         assert args.output == "out.json"
         assert args.config == "config.yaml"
-        assert args.verbose is True
+        assert args.log_level == "DEBUG"
 
     def test_parse_missing_required_input(self):
         """Should error on missing required --input argument."""

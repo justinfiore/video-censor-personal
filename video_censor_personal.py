@@ -24,7 +24,7 @@ def main() -> int:
         args = parse_args()
 
         # Setup logging
-        setup_logging(verbose=args.verbose)
+        setup_logging(log_level=args.log_level)
 
         logger.info("Starting video-censor-personal")
         logger.debug(f"Input file: {args.input}")
@@ -137,6 +137,7 @@ def main() -> int:
                 config_dict,
                 args.config,
                 output_video_path=args.output_video,
+                log_level=args.log_level,
             )
             runner.run(args.output)
             logger.info("Processing complete")

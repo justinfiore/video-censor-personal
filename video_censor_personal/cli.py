@@ -70,9 +70,15 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable debug-level logging output",
+        "--log-level",
+        type=str,
+        choices=["INFO", "DEBUG", "TRACE"],
+        default="INFO",
+        help=(
+            "Set logging verbosity: INFO (default, with progress bar), "
+            "DEBUG (debug logging + progress bar), "
+            "TRACE (debug logging + detailed frame-by-frame output)"
+        ),
     )
 
     parser.add_argument(
@@ -97,13 +103,17 @@ def parse_args(args=None) -> argparse.Namespace:
     return parser.parse_args(args)
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """Configure logging based on verbosity level.
+def setup_logging(log_level: str = "INFO") -> None:
+    """Configure logging based on log level.
 
     Args:
-        verbose: If True, enable debug-level logging.
+        log_level: One of "INFO", "DEBUG", or "TRACE".
+            - INFO: Standard info logging
+            - DEBUG: Debug-level logging
+            - TRACE: Debug-level logging (detailed output handled separately)
     """
-    level = logging.DEBUG if verbose else logging.INFO
+    # TRACE uses DEBUG level for Python logging; detailed output is handled separately
+    level = logging.DEBUG if log_level in ("DEBUG", "TRACE") else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
