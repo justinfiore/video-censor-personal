@@ -40,13 +40,13 @@ class TestDownloadModelsFlag:
             "--output", "results.json",
             "--config", "config.yaml",
             "--download-models",
-            "--verbose",
+            "--log-level", "DEBUG",
         ])
         assert args.download_models is True
         assert args.input == "video.mp4"
         assert args.output == "results.json"
         assert args.config == "config.yaml"
-        assert args.verbose is True
+        assert args.log_level == "DEBUG"
 
 
 class TestDownloadModelsIntegration:

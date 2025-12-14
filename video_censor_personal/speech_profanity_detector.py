@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from video_censor_personal.detection import Detector
+from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class SpeechProfanityDetector(Detector):
                 - model: Whisper model size (default: "base")
                 - languages: List of language codes (default: ["en"])
                 - confidence_threshold: Min confidence for detection (default: 0.8)
+                - device: Optional device override ("cuda", "mps", "cpu")
         
         Raises:
             ValueError: If config is invalid.
@@ -46,6 +48,10 @@ class SpeechProfanityDetector(Detector):
         self.languages = config.get("languages", ["en"])
         self.confidence_threshold = config.get("confidence_threshold", 0.8)
         
+        # Detect or override device
+        device_override = config.get("device")
+        self.device = get_device(device_override)
+        
         # Validate
         if "Profanity" not in self.categories:
             raise ValueError("SpeechProfanityDetector must include 'Profanity' in categories")
@@ -55,14 +61,20 @@ class SpeechProfanityDetector(Detector):
         # Load profanity keywords
         self.keywords = self._load_profanity_keywords()
         
-        # Load Whisper pipeline
+        # Load Whisper pipeline with device parameter
         try:
             from transformers import pipeline
+            
+            # Convert device string to pipeline device parameter
+            # pipeline() accepts device index for CUDA, or -1 for CPU, or "mps" for Apple Silicon
+            device_param = self._get_pipeline_device_param()
+            
             self.pipeline = pipeline(
                 "automatic-speech-recognition",
-                model=f"openai/whisper-{self.model_size}"
+                model=f"openai/whisper-{self.model_size}",
+                device=device_param,
             )
-            logger.info(f"Loaded Whisper model: {self.model_size}")
+            logger.info(f"Loaded Whisper model: {self.model_size} on device: {self.device}")
         except ImportError as e:
             raise ImportError(
                 "transformers and torch required for SpeechProfanityDetector. "
@@ -202,11 +214,33 @@ class SpeechProfanityDetector(Detector):
         
         return matches
     
+    def _get_pipeline_device_param(self):
+        """Convert device string to transformers pipeline device parameter.
+        
+        Returns:
+            Device parameter for pipeline(): 0 for CUDA, -1 for CPU, "mps" for Apple Silicon.
+        """
+        if self.device == "cuda":
+            return 0
+        elif self.device == "mps":
+            return "mps"
+        else:
+            return -1
+    
     def cleanup(self) -> None:
         """Release Whisper model and free memory."""
         try:
             if hasattr(self, 'pipeline'):
                 del self.pipeline
+            
+            # Clear CUDA cache if available
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
+            
             logger.debug("Cleaned up speech profanity detector")
         except Exception as e:
             logger.warning(f"Error during speech detector cleanup: {e}")

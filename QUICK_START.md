@@ -455,6 +455,52 @@ venv\Scripts\Activate.ps1
 2. Reduce `max_workers` in config from 4 to 2 or 1
 3. Process videos in smaller chunks
 4. Close other applications to free RAM
+5. Force CPU mode by setting `device: cpu` in detector config (slower but uses less memory)
+
+## GPU Acceleration
+
+Video Censor Personal automatically detects and uses available GPU acceleration:
+
+- **NVIDIA CUDA**: Automatically detected on systems with NVIDIA GPUs
+- **Apple MPS (Metal)**: Automatically detected on Apple Silicon Macs
+- **CPU Fallback**: Used when no GPU is available
+
+### Checking GPU Availability
+
+```bash
+python -c "
+import torch
+print(f'CUDA available: {torch.cuda.is_available()}')
+if hasattr(torch.backends, 'mps'):
+    print(f'MPS available: {torch.backends.mps.is_available()}')
+"
+```
+
+### Manual Device Override
+
+You can force a specific device in your detector config:
+
+```yaml
+detectors:
+  - type: "llava"
+    name: "llava-primary"
+    device: "cuda"    # Force CUDA (will error if unavailable)
+    # device: "mps"   # Force Apple MPS
+    # device: "cpu"   # Force CPU (slow but always available)
+    categories:
+      - "Nudity"
+      - "Violence"
+```
+
+### GPU Troubleshooting
+
+**CUDA not detected?**
+1. Verify NVIDIA drivers: `nvidia-smi`
+2. Reinstall PyTorch with CUDA: `pip install torch --index-url https://download.pytorch.org/whl/cu118`
+
+**MPS not working on Mac?**
+1. Requires macOS 12.3+ and Apple Silicon
+2. Ensure PyTorch 2.0+ is installed: `pip install --upgrade torch`
 
 ### Issue: Permission Denied on Video File
 

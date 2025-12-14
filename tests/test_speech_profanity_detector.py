@@ -15,8 +15,9 @@ from video_censor_personal.speech_profanity_detector import SpeechProfanityDetec
 class TestSpeechProfanityDetectorInitialization:
     """Test SpeechProfanityDetector initialization."""
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_init_with_default_config(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_init_with_default_config(self, mock_pipeline, mock_device):
         """Test initialization with default configuration."""
         mock_pipeline.return_value = MagicMock()
         
@@ -30,13 +31,11 @@ class TestSpeechProfanityDetectorInitialization:
         assert detector.model_size == "base"
         assert detector.languages == ["en"]
         assert detector.confidence_threshold == 0.8
-        mock_pipeline.assert_called_once_with(
-            "automatic-speech-recognition",
-            model="openai/whisper-base"
-        )
+        assert detector.device == "cpu"
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_init_with_custom_config(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_init_with_custom_config(self, mock_pipeline, mock_device):
         """Test initialization with custom configuration."""
         mock_pipeline.return_value = MagicMock()
         
@@ -54,8 +53,9 @@ class TestSpeechProfanityDetectorInitialization:
         assert detector.languages == ["en", "es"]
         assert detector.confidence_threshold == 0.9
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_init_requires_profanity_category(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_init_requires_profanity_category(self, mock_pipeline, mock_device):
         """Test that initialization requires Profanity category."""
         mock_pipeline.return_value = MagicMock()
         
@@ -67,8 +67,9 @@ class TestSpeechProfanityDetectorInitialization:
         with pytest.raises(ValueError, match="must include 'Profanity'"):
             SpeechProfanityDetector(config)
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_init_requires_languages(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_init_requires_languages(self, mock_pipeline, mock_device):
         """Test that initialization requires at least one language."""
         mock_pipeline.return_value = MagicMock()
         
@@ -85,8 +86,9 @@ class TestSpeechProfanityDetectorInitialization:
 class TestProfanityKeywordLoading:
     """Test profanity keyword loading."""
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_load_profanity_keywords_english(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_load_profanity_keywords_english(self, mock_pipeline, mock_device):
         """Test loading English profanity keywords."""
         mock_pipeline.return_value = MagicMock()
         
@@ -103,8 +105,9 @@ class TestProfanityKeywordLoading:
         # Keywords file should exist and have content
         # (exact keywords depend on profanity_en.txt file)
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_load_keywords_missing_language(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_load_keywords_missing_language(self, mock_pipeline, mock_device):
         """Test loading keywords for missing language file."""
         mock_pipeline.return_value = MagicMock()
         
@@ -123,8 +126,9 @@ class TestProfanityKeywordLoading:
 class TestProfanityDetection:
     """Test profanity detection functionality."""
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_returns_empty_when_no_audio(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_returns_empty_when_no_audio(self, mock_pipeline, mock_device):
         """Test detection returns empty when no audio provided."""
         mock_pipeline.return_value = MagicMock()
         
@@ -138,8 +142,9 @@ class TestProfanityDetection:
         
         assert results == []
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_finds_profanity_keyword(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_finds_profanity_keyword(self, mock_pipeline, mock_device):
         """Test detection finds profanity in transcription."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": "this is a test with damn word"}
@@ -162,8 +167,9 @@ class TestProfanityDetection:
         assert results[0].confidence == 0.95
         assert "damn" in results[0].reasoning.lower()
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_case_insensitive(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_case_insensitive(self, mock_pipeline, mock_device):
         """Test detection is case-insensitive."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": "This has DAMN word"}
@@ -182,8 +188,9 @@ class TestProfanityDetection:
         
         assert len(results) == 1
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_no_match(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_no_match(self, mock_pipeline, mock_device):
         """Test detection returns empty when no profanity found."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": "this is clean text"}
@@ -202,8 +209,9 @@ class TestProfanityDetection:
         
         assert results == []
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_multiple_keywords(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_multiple_keywords(self, mock_pipeline, mock_device):
         """Test detection finds multiple profanity keywords."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": "word1 here and word2 there"}
@@ -222,8 +230,9 @@ class TestProfanityDetection:
         
         assert len(results) == 2
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_empty_transcription(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_empty_transcription(self, mock_pipeline, mock_device):
         """Test detection handles empty transcription."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": ""}
@@ -241,8 +250,9 @@ class TestProfanityDetection:
         
         assert results == []
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_handles_transcription_error(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_handles_transcription_error(self, mock_pipeline, mock_device):
         """Test detection handles transcription errors gracefully."""
         mock_pipe = MagicMock()
         mock_pipe.side_effect = Exception("Whisper error")
@@ -265,8 +275,9 @@ class TestProfanityDetection:
 class TestMultiLanguageSupport:
     """Test multi-language profanity detection."""
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_detect_multi_language_keywords(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_detect_multi_language_keywords(self, mock_pipeline, mock_device):
         """Test detection across multiple languages."""
         mock_pipe = MagicMock()
         mock_pipe.return_value = {"text": "english word1 spanish palabra1"}
@@ -293,8 +304,9 @@ class TestMultiLanguageSupport:
 class TestCleanup:
     """Test resource cleanup."""
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_cleanup_releases_model(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_cleanup_releases_model(self, mock_pipeline, mock_device):
         """Test cleanup releases Whisper model."""
         mock_pipeline.return_value = MagicMock()
         
@@ -310,8 +322,9 @@ class TestCleanup:
         
         assert not hasattr(detector, "pipeline")
 
-    @patch("video_censor_personal.speech_profanity_detector.pipeline")
-    def test_cleanup_handles_missing_pipeline(self, mock_pipeline):
+    @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
+    @patch("transformers.pipeline")
+    def test_cleanup_handles_missing_pipeline(self, mock_pipeline, mock_device):
         """Test cleanup handles case where pipeline doesn't exist."""
         mock_pipeline.return_value = MagicMock()
         

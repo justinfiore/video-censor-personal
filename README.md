@@ -540,34 +540,65 @@ PermissionError: [Errno 13] Permission denied
 - Ensure read access to video files: `chmod +r video.mp4`
 - Ensure write access to output directory: `chmod +w /output/dir`
 
-## Performance Optimization
+## GPU Acceleration
 
-### GPU Acceleration (Current)
+Video Censor Personal automatically detects and uses available GPU acceleration for model inference:
 
-The LLaVA detector uses PyTorch's `device_map="auto"` for intelligent device placement. For GPU optimization:
+### Automatic Device Detection
+
+The system detects GPU availability in this order:
+1. **CUDA** (NVIDIA GPUs) - Fastest for most workloads
+2. **MPS** (Apple Silicon) - Native Metal acceleration on Mac
+3. **CPU** - Fallback when no GPU is available
+
+Device selection is logged at INFO level when detectors initialize:
+```
+INFO - Using device: cuda
+INFO - Initialized LLaVA detector 'llava-primary' with model 'liuhaotian/llava-v1.5-7b' on device 'cuda'
+```
+
+### Manual Device Override
+
+Override automatic detection per-detector in your YAML config:
+
+```yaml
+detectors:
+  - type: "llava"
+    name: "llava-primary"
+    device: "cuda"    # Force CUDA (errors if unavailable)
+    # device: "mps"   # Force Apple MPS
+    # device: "cpu"   # Force CPU (slow but always works)
+    categories:
+      - "Nudity"
+      - "Violence"
+```
+
+### GPU Requirements
+
+**NVIDIA CUDA**:
+- NVIDIA GPU with CUDA support
+- CUDA toolkit installed
+- PyTorch with CUDA: `pip install torch --index-url https://download.pytorch.org/whl/cu118`
+
+**Apple MPS**:
+- Apple Silicon Mac (M1/M2/M3)
+- macOS 12.3 or later
+- PyTorch 2.0+: `pip install --upgrade torch`
+
+### Performance Tips
 
 ```bash
-# Explicitly specify GPU
+# Check GPU availability
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
+
+# For NVIDIA multi-GPU systems, select specific GPU
 export CUDA_VISIBLE_DEVICES=0
 
-# Use mixed precision (float16) for faster inference
+# Use mixed precision for faster inference (optional)
 export TORCH_DTYPE=float16
-
-python video_censor_personal.py --input video.mp4 --config config.yaml
 ```
 
 See [PyTorch documentation](https://pytorch.org/docs/stable/notes/cuda.html) for more environment variables.
-
-### Advanced GPU Optimization (Future)
-
-A future feature will include built-in GPU optimization with:
-- Per-GPU configuration in YAML
-- Automatic precision selection
-- Batch inference for multiple frames
-- Quantization support (8-bit, 4-bit)
-- Dynamic memory management
-
-Tracked in: `add-gpu-optimization` feature proposal (TBD)
 
 ## Development
 

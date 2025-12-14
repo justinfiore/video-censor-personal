@@ -68,7 +68,7 @@ class TestAudioExtraction:
         mock_extractor_instance.extract_audio.return_value = mock_audio_segment
         mock_video_extractor.return_value = mock_extractor_instance
 
-        # Setup mock soundfile read
+        # Mock soundfile.read to return fake audio
         fake_audio = np.array([0.1, 0.2, 0.3], dtype=np.float32)
         mock_sf_read.return_value = (fake_audio, 16000)
 
@@ -80,10 +80,9 @@ class TestAudioExtraction:
         mock_extractor_instance.extract_audio.assert_called_once()
 
     @patch("video_censor_personal.audio_extractor.librosa.resample")
-    @patch("soundfile.read")
     @patch("video_censor_personal.audio_extractor.VideoExtractor")
     def test_extract_resamples_to_16khz(
-        self, mock_video_extractor, mock_sf_read, mock_resample
+        self, mock_video_extractor, mock_resample
     ):
         """Test that audio is resampled to 16kHz if different."""
         mock_extractor_instance = MagicMock()
@@ -95,20 +94,19 @@ class TestAudioExtraction:
 
         # Return audio at 44100 Hz (needs resampling)
         fake_audio = np.array([0.1, 0.2, 0.3], dtype=np.float32)
-        mock_sf_read.return_value = (fake_audio, 44100)
         mock_resample.return_value = np.array([0.1, 0.2], dtype=np.float32)
 
-        extractor = AudioExtractor("/fake/video.mp4")
-        extractor.extract()
+        with patch("soundfile.read", return_value=(fake_audio, 44100)):
+            extractor = AudioExtractor("/fake/video.mp4")
+            extractor.extract()
 
-        mock_resample.assert_called_once()
-        call_args = mock_resample.call_args
-        assert call_args.kwargs["orig_sr"] == 44100
-        assert call_args.kwargs["target_sr"] == TARGET_SAMPLE_RATE
+            mock_resample.assert_called_once()
+            call_args = mock_resample.call_args
+            assert call_args.kwargs["orig_sr"] == 44100
+            assert call_args.kwargs["target_sr"] == TARGET_SAMPLE_RATE
 
-    @patch("soundfile.read")
     @patch("video_censor_personal.audio_extractor.VideoExtractor")
-    def test_extract_converts_stereo_to_mono(self, mock_video_extractor, mock_sf_read):
+    def test_extract_converts_stereo_to_mono(self, mock_video_extractor):
         """Test stereo to mono conversion."""
         mock_extractor_instance = MagicMock()
         mock_audio_segment = MagicMock()
@@ -119,13 +117,13 @@ class TestAudioExtraction:
 
         # Return stereo audio (2 channels)
         stereo_audio = np.array([[0.1, 0.3], [0.2, 0.4], [0.3, 0.5]], dtype=np.float32)
-        mock_sf_read.return_value = (stereo_audio, 16000)
 
-        extractor = AudioExtractor("/fake/video.mp4")
-        audio, sr = extractor.extract()
+        with patch("soundfile.read", return_value=(stereo_audio, 16000)):
+            extractor = AudioExtractor("/fake/video.mp4")
+            audio, sr = extractor.extract()
 
-        # Should be mono now
-        assert len(audio.shape) == 1
+            # Should be mono now
+            assert len(audio.shape) == 1
 
     @patch("video_censor_personal.audio_extractor.VideoExtractor")
     def test_extract_raises_on_failure(self, mock_video_extractor):

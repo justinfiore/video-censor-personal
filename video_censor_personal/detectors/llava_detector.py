@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from video_censor_personal.detection import Detector
+from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class LLaVADetector(Detector):
               - model_name: HuggingFace model identifier (default: "liuhaotian/llava-v1.5-7b")
               - model_path: Optional custom model cache path (default: HF cache)
               - prompt_file: Path to prompt template file (default: "./prompts/llava-detector.txt")
+              - device: Optional device override ("cuda", "mps", "cpu")
 
         Raises:
             ValueError: If model not found, dependencies missing, or prompt file invalid.
@@ -41,6 +43,10 @@ class LLaVADetector(Detector):
         self.model_name = config.get("model_name", "liuhaotian/llava-v1.5-7b")
         self.model_path = config.get("model_path")
         self.prompt_file = config.get("prompt_file", "./prompts/llava-detector.txt")
+
+        # Detect or override device
+        device_override = config.get("device")
+        self.device = get_device(device_override)
 
         # Load and validate prompt
         self.prompt_template = self._load_prompt()
@@ -52,7 +58,7 @@ class LLaVADetector(Detector):
 
         logger.info(
             f"Initialized LLaVA detector '{self.name}' with model '{self.model_name}' "
-            f"for categories: {', '.join(self.categories)}"
+            f"on device '{self.device}' for categories: {', '.join(self.categories)}"
         )
 
     def _load_prompt(self) -> str:
@@ -114,7 +120,9 @@ class LLaVADetector(Detector):
                 self.model_name, **load_kwargs
             )
 
-            logger.debug(f"Successfully loaded model: {self.model_name}")
+            # Move model to device
+            model = model.to(self.device)
+            logger.debug(f"Successfully loaded model: {self.model_name} on device: {self.device}")
             return model, processor
 
         except FileNotFoundError as e:
@@ -188,6 +196,9 @@ class LLaVADetector(Detector):
                 images=pil_image,
                 return_tensors="pt",
             )
+
+            # Move inputs to device
+            inputs = {k: v.to(self.device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
             # Run inference
             try:
@@ -326,6 +337,7 @@ class LLaVADetector(Detector):
         """Clean up model and release GPU memory.
 
         Unloads the model from memory to allow garbage collection.
+        Moves model to CPU before dereferencing to release GPU memory.
         """
         try:
             if self.model is not None:
@@ -335,6 +347,14 @@ class LLaVADetector(Detector):
                 self.model = None
 
             self.processor = None
+
+            # Clear CUDA cache if available
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
 
             logger.debug(f"Cleaned up detector '{self.name}'")
         except Exception as e:

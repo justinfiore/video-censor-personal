@@ -69,32 +69,15 @@ class AudioExtractor:
         logger.debug(f"Extracting audio from {self.video_path}")
         
         try:
+            import io
+            import soundfile as sf
+            
             # Extract audio segment (full duration)
             audio_segment = self._extractor.extract_audio()
             self._duration = audio_segment.duration()
             
-            # Load bytes as audio using librosa
-            # Audio is in WAV format from ffmpeg extraction
-            audio_bytes = audio_segment.data
-            
-            # Load audio from bytes
-            audio_data, sr = librosa.load(
-                audio_segment.data if isinstance(audio_segment.data, np.ndarray)
-                else librosa.load(audio_bytes, sr=None)[0],  # Load from bytes
-                sr=None,
-                mono=True
-            )
-            
-            # If we got bytes, we need a different approach
-            # Actually, let me check what audio_segment.data contains
-            # From video_extraction.py, it's bytes from reading the WAV file
-            # So we need to use soundfile or another method
-            
-            # Better approach: use librosa to load the WAV file directly
-            # But we have bytes. Use io.BytesIO
-            import io
-            import soundfile as sf
-            
+            # Load audio bytes using soundfile
+            # audio_segment.data contains WAV bytes from ffmpeg extraction
             audio_data, sr = sf.read(
                 io.BytesIO(audio_segment.data),
                 dtype='float32'

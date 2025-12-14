@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import torch
 
 from video_censor_personal.detection import Detector
+from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class AudioClassificationDetector(Detector):
                 - categories: Content categories to detect (e.g., ["Violence"])
                 - model: HuggingFace model name (default: "MIT/ast-finetuned-audioset-10-10-0.4593")
                 - confidence_threshold: Min confidence (default: 0.6)
+                - device: Optional device override ("cuda", "mps", "cpu")
         
         Raises:
             ValueError: If config is invalid.
@@ -51,6 +54,10 @@ class AudioClassificationDetector(Detector):
         self.model_name = config.get("model", "MIT/ast-finetuned-audioset-10-10-0.4593")
         self.target_categories = set(self.categories)
         self.confidence_threshold = config.get("confidence_threshold", 0.6)
+        
+        # Detect or override device
+        device_override = config.get("device")
+        self.device = get_device(device_override)
         
         # Load category mapping (audio labels → content categories)
         self.category_mapping = self._build_category_mapping()
@@ -64,7 +71,10 @@ class AudioClassificationDetector(Detector):
             
             self.processor = AutoFeatureExtractor.from_pretrained(self.model_name)
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_name)
-            logger.info(f"Loaded audio classification model: {self.model_name}")
+            
+            # Move model to device
+            self.model = self.model.to(self.device)
+            logger.info(f"Loaded audio classification model: {self.model_name} on device: {self.device}")
         except ImportError as e:
             raise ImportError(
                 "transformers and torch required for AudioClassificationDetector. "
@@ -101,8 +111,10 @@ class AudioClassificationDetector(Detector):
                 return_tensors="pt"
             )
             
+            # Move inputs to device
+            inputs = {k: v.to(self.device) if hasattr(v, "to") else v for k, v in inputs.items()}
+            
             # Classify
-            import torch
             with torch.no_grad():
                 outputs = self.model(**inputs)
             
@@ -194,10 +206,22 @@ class AudioClassificationDetector(Detector):
     def cleanup(self) -> None:
         """Release model and free memory."""
         try:
-            if hasattr(self, 'model'):
+            if hasattr(self, 'model') and self.model is not None:
+                # Move model off GPU if applicable
+                if hasattr(self.model, "cpu"):
+                    self.model = self.model.cpu()
                 del self.model
             if hasattr(self, 'processor'):
                 del self.processor
+            
+            # Clear CUDA cache if available
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
+            
             logger.debug("Cleaned up audio classification detector")
         except Exception as e:
             logger.warning(f"Error during audio classifier cleanup: {e}")

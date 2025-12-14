@@ -45,6 +45,12 @@ detectors:
     model_name: "liuhaotian/llava-v1.5-7b"   # Model variant (7b or 13b)
     model_path: null                          # Optional custom cache path (null = use HF default)
     prompt_file: "./prompts/llava-detector.txt"  # Path to prompt template
+    # GPU/Device Configuration:
+    # - null or omit: Auto-detect (CUDA → MPS → CPU)
+    # - "cuda": Force NVIDIA CUDA GPU (errors if unavailable)
+    # - "mps": Force Apple Silicon Metal Performance Shaders
+    # - "cpu": Force CPU (slower but always available)
+    device: null
     categories:                                # Categories this detector analyzes
       - "Nudity"
       - "Profanity"
