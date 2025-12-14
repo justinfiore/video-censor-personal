@@ -1,3 +1,4 @@
+<image>
 Analyze this image for potentially objectionable content. 
 
 For each category below, determine if it's present (Yes/No) and provide a confidence score (0.0-1.0).
