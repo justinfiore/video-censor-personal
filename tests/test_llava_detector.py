@@ -133,6 +133,7 @@ class TestModelLoading:
                     detector.name = "test"
                     detector.model_name = "liuhaotian/llava-v1.5-7b"
                     detector.prompt_file = "./prompts/llava-detector.txt"
+                    detector.device = "cpu"
 
                     with patch(
                         "builtins.__import__",
@@ -153,6 +154,7 @@ class TestModelLoading:
                     detector.model_name = "liuhaotian/llava-v1.5-7b"
                     detector.model_path = None
                     detector.prompt_file = "./prompts/llava-detector.txt"
+                    detector.device = "cpu"
 
                     # Mock the transformers module import to succeed, but from_pretrained to fail
                     def mock_import(*args, **kwargs):

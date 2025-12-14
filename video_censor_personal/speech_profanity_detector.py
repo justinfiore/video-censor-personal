@@ -65,6 +65,8 @@ class SpeechProfanityDetector(Detector):
         try:
             from transformers import pipeline
             
+            logger.info(f"Loading Whisper model '{self.model_size}' to {self.device}...")
+            
             # Convert device string to pipeline device parameter
             # pipeline() accepts device index for CUDA, or -1 for CPU, or "mps" for Apple Silicon
             device_param = self._get_pipeline_device_param()
@@ -74,7 +76,7 @@ class SpeechProfanityDetector(Detector):
                 model=f"openai/whisper-{self.model_size}",
                 device=device_param,
             )
-            logger.info(f"Loaded Whisper model: {self.model_size} on device: {self.device}")
+            logger.info(f"Whisper model loaded successfully on {self.device}")
         except ImportError as e:
             raise ImportError(
                 "transformers and torch required for SpeechProfanityDetector. "

@@ -106,7 +106,7 @@ class LLaVADetector(Detector):
             )
 
         try:
-            logger.debug(f"Loading LLaVA model: {self.model_name}")
+            logger.info(f"Loading LLaVA model '{self.model_name}' to {self.device}...")
 
             # Load processor
             processor = AutoProcessor.from_pretrained(self.model_name)
@@ -122,7 +122,7 @@ class LLaVADetector(Detector):
 
             # Move model to device
             model = model.to(self.device)
-            logger.debug(f"Successfully loaded model: {self.model_name} on device: {self.device}")
+            logger.info(f"LLaVA model loaded successfully on {self.device}")
             return model, processor
 
         except FileNotFoundError as e:

@@ -69,12 +69,13 @@ class AudioClassificationDetector(Detector):
                 AutoModelForAudioClassification,
             )
             
+            logger.info(f"Loading audio classification model '{self.model_name}' to {self.device}...")
             self.processor = AutoFeatureExtractor.from_pretrained(self.model_name)
             self.model = AutoModelForAudioClassification.from_pretrained(self.model_name)
             
             # Move model to device
             self.model = self.model.to(self.device)
-            logger.info(f"Loaded audio classification model: {self.model_name} on device: {self.device}")
+            logger.info(f"Audio classification model loaded successfully on {self.device}")
         except ImportError as e:
             raise ImportError(
                 "transformers and torch required for AudioClassificationDetector. "
