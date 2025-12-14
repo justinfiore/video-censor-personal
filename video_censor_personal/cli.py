@@ -103,6 +103,10 @@ def parse_args(args=None) -> argparse.Namespace:
     return parser.parse_args(args)
 
 
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, "TRACE")
+
+
 def setup_logging(log_level: str = "INFO") -> None:
     """Configure logging based on log level.
 
@@ -110,10 +114,14 @@ def setup_logging(log_level: str = "INFO") -> None:
         log_level: One of "INFO", "DEBUG", or "TRACE".
             - INFO: Standard info logging
             - DEBUG: Debug-level logging
-            - TRACE: Debug-level logging (detailed output handled separately)
+            - TRACE: Detailed frame-by-frame and model inference logging
     """
-    # TRACE uses DEBUG level for Python logging; detailed output is handled separately
-    level = logging.DEBUG if log_level in ("DEBUG", "TRACE") else logging.INFO
+    if log_level == "TRACE":
+        level = TRACE_LEVEL
+    elif log_level == "DEBUG":
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

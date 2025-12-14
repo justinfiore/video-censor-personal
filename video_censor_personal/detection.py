@@ -66,6 +66,41 @@ class Detector(ABC):
         """
         pass
 
+    def supports_full_audio_analysis(self) -> bool:
+        """Check if detector supports full audio analysis mode.
+
+        Override to return True if detector implements analyze_full_audio().
+
+        Returns:
+            True if analyze_full_audio() is implemented, False otherwise.
+        """
+        return False
+
+    def analyze_full_audio(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+    ) -> List[DetectionResult]:
+        """Analyze complete audio track and return timestamped detections.
+
+        This method processes the entire audio once and returns results with
+        accurate start_time/end_time values. More efficient than per-frame
+        processing for audio-only detectors.
+
+        Args:
+            audio_data: Complete audio as numpy array (mono, float32).
+            sample_rate: Audio sample rate in Hz (default: 16000).
+
+        Returns:
+            List of DetectionResult objects with accurate timestamps.
+
+        Raises:
+            NotImplementedError: If detector doesn't support full audio analysis.
+        """
+        raise NotImplementedError(
+            f"Detector '{self.name}' does not support full audio analysis"
+        )
+
     def cleanup(self) -> None:
         """Clean up detector resources (models, temp files, etc.).
 
@@ -170,13 +205,15 @@ class DetectionPipeline:
     """Orchestrates detector execution across multiple detectors.
 
     Runs detectors sequentially on frames/audio and aggregates results.
+    Supports lazy initialization to avoid loading all models at once.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: Dict[str, Any], lazy_init: bool = False) -> None:
         """Initialize detection pipeline with detector configurations.
 
         Args:
             config: Configuration dictionary with 'detectors' key containing list of detector configs.
+            lazy_init: If True, defer detector initialization until needed.
 
         Raises:
             ValueError: If detector configuration is invalid.
@@ -184,14 +221,18 @@ class DetectionPipeline:
         self.config = config
         self.detectors: List[Detector] = []
         self._registry = get_detector_registry()
-        self._initialize_detectors()
+        self._detector_configs: List[Dict[str, Any]] = []
+        self._audio_detectors_initialized = False
+        self._frame_detectors_initialized = False
 
-    def _initialize_detectors(self) -> None:
-        """Create detector instances from configuration.
+        # Parse and validate configs
+        self._parse_detector_configs()
 
-        Raises:
-            ValueError: If detector config is invalid.
-        """
+        if not lazy_init:
+            self._initialize_all_detectors()
+
+    def _parse_detector_configs(self) -> None:
+        """Parse and validate detector configurations without initializing."""
         detector_configs = self.config.get("detectors", [])
 
         if not isinstance(detector_configs, list):
@@ -209,24 +250,142 @@ class DetectionPipeline:
             if not detector_type:
                 raise ValueError("Detector config missing required 'type' field")
 
+            # Validate detector type exists
+            if not self._registry.get(detector_type):
+                available = ", ".join(sorted(self._registry.registered_types()))
+                raise ValueError(
+                    f"Unknown detector type: {detector_type}. "
+                    f"Available types: {available}"
+                )
+
+            self._detector_configs.append(detector_config)
+
+    def _initialize_all_detectors(self) -> None:
+        """Initialize all detectors at once."""
+        for detector_config in self._detector_configs:
+            self._create_detector(detector_config)
+
+    def _create_detector(self, detector_config: Dict[str, Any]) -> Detector:
+        """Create a single detector instance."""
+        detector_type = detector_config.get("type")
+        try:
+            detector = self._registry.create(detector_type, detector_config)
+            self.detectors.append(detector)
+            logger.info(
+                f"Initialized detector '{detector.name}' of type '{detector_type}'"
+            )
+            return detector
+        except Exception as e:
+            raise ValueError(
+                f"Failed to initialize detector '{detector_config.get('name', 'unknown')}' "
+                f"of type '{detector_type}': {e}"
+            )
+
+    def initialize_audio_detectors(self) -> None:
+        """Initialize only audio-based detectors (those supporting full audio analysis).
+
+        Call this before analyze_full_audio() when using lazy initialization.
+        """
+        if self._audio_detectors_initialized:
+            return
+
+        # Audio detector types
+        audio_types = {"speech-profanity", "audio-classification"}
+
+        for detector_config in self._detector_configs:
+            detector_type = detector_config.get("type")
+            if detector_type in audio_types:
+                self._create_detector(detector_config)
+
+        self._audio_detectors_initialized = True
+
+    def initialize_frame_detectors(self) -> None:
+        """Initialize only frame-based detectors (visual/video).
+
+        Call this before frame analysis when using lazy initialization.
+        """
+        if self._frame_detectors_initialized:
+            return
+
+        # Audio detector types to exclude
+        audio_types = {"speech-profanity", "audio-classification"}
+
+        for detector_config in self._detector_configs:
+            detector_type = detector_config.get("type")
+            if detector_type not in audio_types:
+                self._create_detector(detector_config)
+
+        self._frame_detectors_initialized = True
+
+    def cleanup_audio_detectors(self) -> None:
+        """Clean up and release audio detectors to free GPU memory."""
+        audio_detectors = [d for d in self.detectors if d.supports_full_audio_analysis()]
+        for detector in audio_detectors:
             try:
-                detector = self._registry.create(detector_type, detector_config)
-                self.detectors.append(detector)
+                detector.cleanup()
+                logger.debug(f"Cleaned up audio detector '{detector.name}'")
+            except Exception as e:
+                logger.error(f"Error cleaning up detector '{detector.name}': {e}")
+
+        # Remove from list
+        self.detectors = [d for d in self.detectors if not d.supports_full_audio_analysis()]
+
+    def analyze_full_audio(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+    ) -> List[DetectionResult]:
+        """Run full-audio analysis on detectors that support it.
+
+        This should be called once before frame processing to efficiently
+        analyze audio-only detectors like speech-profanity.
+
+        Args:
+            audio_data: Complete audio as numpy array (mono, float32).
+            sample_rate: Audio sample rate in Hz (default: 16000).
+
+        Returns:
+            List of DetectionResult objects with accurate timestamps.
+        """
+        all_results: List[DetectionResult] = []
+
+        for detector in self.detectors:
+            if not detector.supports_full_audio_analysis():
+                continue
+
+            try:
+                logger.info(f"Running full audio analysis with '{detector.name}'...")
+                results = detector.analyze_full_audio(audio_data, sample_rate)
+                all_results.extend(results)
                 logger.info(
-                    f"Initialized detector '{detector.name}' of type '{detector_type}'"
+                    f"Detector '{detector.name}' found {len(results)} audio detections"
                 )
             except Exception as e:
-                raise ValueError(
-                    f"Failed to initialize detector '{detector_config.get('name', 'unknown')}' "
-                    f"of type '{detector_type}': {e}"
+                logger.error(
+                    f"Detector '{detector.name}' failed during full audio analysis: {e}",
+                    exc_info=True,
                 )
+                continue
+
+        return all_results
+
+    def get_frame_detectors(self) -> List[Detector]:
+        """Get detectors that process frames (not full-audio-only).
+
+        Returns:
+            List of detectors that should run per-frame.
+        """
+        return [d for d in self.detectors if not d.supports_full_audio_analysis()]
 
     def analyze_frame(
         self,
         frame: Frame,
         audio_data: Optional[Any] = None,
     ) -> List[DetectionResult]:
-        """Run all detectors on frame and aggregate results.
+        """Run frame-based detectors on frame and aggregate results.
+
+        Only runs detectors that don't support full_audio_analysis.
+        Audio-only detectors should be run via analyze_full_audio() instead.
 
         Args:
             frame: Frame object with pixel data and timecode.
@@ -238,13 +397,14 @@ class DetectionPipeline:
         all_results: List[DetectionResult] = []
 
         for detector in self.detectors:
+            if detector.supports_full_audio_analysis():
+                continue
+
             try:
                 results = detector.detect(frame_data=frame.data, audio_data=audio_data)
 
-                # Assign frame timecode to all results
                 for result in results:
                     result.start_time = frame.timecode
-                    # Use a minimal duration (one frame at ~30fps ≈ 0.033 seconds)
                     result.end_time = frame.timecode + 0.033
 
                 all_results.extend(results)
@@ -257,7 +417,6 @@ class DetectionPipeline:
                     f"Detector '{detector.name}' failed during analysis: {e}",
                     exc_info=True,
                 )
-                # Continue with other detectors
                 continue
 
         return all_results

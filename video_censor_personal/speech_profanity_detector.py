@@ -9,6 +9,8 @@ import numpy as np
 from video_censor_personal.detection import Detector
 from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
+from video_censor_personal.loading_spinner import loading_spinner, task_spinner
+from video_censor_personal.model_size import get_whisper_model_size
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +73,19 @@ class SpeechProfanityDetector(Detector):
             # pipeline() accepts device index for CUDA, or -1 for CPU, or "mps" for Apple Silicon
             device_param = self._get_pipeline_device_param()
             
-            self.pipeline = pipeline(
-                "automatic-speech-recognition",
-                model=f"openai/whisper-{self.model_size}",
-                device=device_param,
-            )
+            # Get actual model size from cache (or estimate if not cached)
+            model_size_bytes = get_whisper_model_size(self.model_size)
+            
+            with loading_spinner(
+                f"openai/whisper-{self.model_size}",
+                model_size_bytes,
+                self.device,
+            ):
+                self.pipeline = pipeline(
+                    "automatic-speech-recognition",
+                    model=f"openai/whisper-{self.model_size}",
+                    device=device_param,
+                )
             logger.info(f"Whisper model loaded successfully on {self.device}")
         except ImportError as e:
             raise ImportError(
@@ -83,70 +93,138 @@ class SpeechProfanityDetector(Detector):
                 "Install with: pip install transformers torch"
             ) from e
     
+    def supports_full_audio_analysis(self) -> bool:
+        """Return True - this detector supports efficient full-audio analysis."""
+        return True
+
     def detect(
         self,
         frame_data: Optional[np.ndarray] = None,
         audio_data: Optional[np.ndarray] = None,
     ) -> List[DetectionResult]:
-        """Detect profanity in audio using speech recognition.
+        """Per-frame detection - returns empty since full audio analysis is preferred.
         
-        Transcribes audio and matches keywords case-insensitively.
-        Returns one DetectionResult per profanity keyword found.
+        This detector uses analyze_full_audio() for efficient processing.
+        Per-frame calls are skipped to avoid redundant transcription.
         
         Args:
             frame_data: Ignored (audio-only detector).
-            audio_data: Audio as numpy array (mono, float32, 16kHz).
+            audio_data: Ignored (use analyze_full_audio instead).
         
         Returns:
-            List of DetectionResult with label="Profanity".
+            Empty list - use analyze_full_audio() for results.
         """
-        if audio_data is None:
+        return []
+
+    def analyze_full_audio(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+    ) -> List[DetectionResult]:
+        """Transcribe full audio with word timestamps and detect profanity.
+        
+        Processes the entire audio track once, extracting word-level timestamps
+        from Whisper, then matches profanity keywords to return accurately
+        timestamped detection results.
+        
+        Args:
+            audio_data: Complete audio as numpy array (mono, float32).
+            sample_rate: Audio sample rate in Hz (default: 16000).
+        
+        Returns:
+            List of DetectionResult with accurate start_time/end_time.
+        """
+        if audio_data is None or len(audio_data) == 0:
             logger.debug("No audio data provided; skipping speech detection")
             return []
         
         try:
-            # Transcribe audio
-            logger.debug("Transcribing audio with Whisper")
-            result = self.pipeline(
-                audio_data,
-                chunk_length_s=30,  # Process in 30s chunks
-                stride_length_s=(4, 2),  # Overlapping windows
+            audio_duration = len(audio_data) / sample_rate
+            logger.info(
+                f"Transcribing {audio_duration:.1f}s of audio with Whisper "
+                f"(word-level timestamps)..."
             )
-            transcription = result.get("text", "").lower()
             
-            if not transcription:
-                logger.debug("Empty transcription; no profanity detected")
-                return []
-            
-            logger.debug(f"Transcription: {transcription[:100]}...")
-            
-            # Find profanity keywords
-            matches = self._find_profanity(transcription)
-            
-            if not matches:
-                logger.debug("No profanity keywords found in transcription")
-                return []
-            
-            logger.debug(f"Found {len(matches)} profanity keyword(s): {matches}")
-            
-            # Return one DetectionResult per keyword found
-            results = []
-            for keyword in matches:
-                results.append(
-                    DetectionResult(
-                        start_time=0.0,  # Will be set by pipeline
-                        end_time=0.033,  # Will be set by pipeline
-                        label="Profanity",
-                        confidence=0.95,
-                        reasoning=f"Speech contains profanity: '{keyword}'",
-                    )
+            with task_spinner(
+                "Transcribing audio with Whisper",
+                f"{audio_duration:.1f}s"
+            ):
+                result = self.pipeline(
+                    audio_data,
+                    chunk_length_s=30,
+                    stride_length_s=(4, 2),
+                    return_timestamps="word",
                 )
+            
+            chunks = result.get("chunks", [])
+            full_text = result.get("text", "").lower()
+            
+            if not chunks:
+                logger.debug("No word chunks returned from Whisper")
+                if full_text:
+                    logger.debug(f"Full transcription: {full_text[:200]}...")
+                return []
+            
+            logger.info(f"Transcribed {len(chunks)} words")
+            logger.debug(f"Full transcription: {full_text[:200]}...")
+            
+            all_keywords = set()
+            for lang in self.languages:
+                all_keywords.update(self.keywords.get(lang, set()))
+            
+            results = []
+            for chunk in chunks:
+                word = chunk.get("text", "").strip().lower()
+                word_clean = self._clean_word(word)
+                
+                if word_clean in all_keywords:
+                    timestamp = chunk.get("timestamp", (0.0, 0.0))
+                    if isinstance(timestamp, tuple) and len(timestamp) == 2:
+                        start_time, end_time = timestamp
+                    else:
+                        start_time = 0.0
+                        end_time = 0.0
+                    
+                    if start_time is None:
+                        start_time = 0.0
+                    if end_time is None:
+                        end_time = start_time + 0.5
+                    
+                    results.append(
+                        DetectionResult(
+                            start_time=float(start_time),
+                            end_time=float(end_time),
+                            label="Profanity",
+                            confidence=0.95,
+                            reasoning=f"Speech contains profanity: '{word_clean}'",
+                        )
+                    )
+                    logger.debug(
+                        f"Found profanity '{word_clean}' at {start_time:.2f}s - {end_time:.2f}s"
+                    )
+            
+            if results:
+                logger.info(f"Detected {len(results)} profanity instance(s)")
+            else:
+                logger.debug("No profanity keywords found in transcription")
             
             return results
         
         except Exception as e:
             logger.error(f"Speech profanity detection failed: {e}", exc_info=True)
             return []
+
+    def _clean_word(self, word: str) -> str:
+        """Remove punctuation from word for keyword matching.
+        
+        Args:
+            word: Raw word from transcription.
+        
+        Returns:
+            Cleaned lowercase word.
+        """
+        import re
+        return re.sub(r'[^\w\s]', '', word).strip().lower()
     
     def _load_profanity_keywords(self) -> Dict[str, set]:
         """Load language-specific profanity keyword lists.

@@ -29,7 +29,8 @@ class TestAnalysisPipelineBasics:
         assert pipeline.video_path == Path(sample_video_path)
         assert pipeline.config == config_with_mock
         assert pipeline.detection_pipeline is not None
-        assert len(pipeline.detection_pipeline.detectors) > 0
+        # With lazy loading, check detector configs instead of detectors list
+        assert len(pipeline.detection_pipeline._detector_configs) > 0
 
     def test_pipeline_initializes_with_auto_discovered_detectors(
         self, sample_video_path, config_without_detectors
@@ -43,8 +44,8 @@ class TestAnalysisPipelineBasics:
         try:
             pipeline = AnalysisPipeline(sample_video_path, config_without_detectors)
             assert pipeline.detection_pipeline is not None
-            # Auto-discovery should create a default LLaVA detector from enabled categories
-            assert len(pipeline.detection_pipeline.detectors) > 0
+            # Auto-discovery should create detector configs (lazy loading)
+            assert len(pipeline.detection_pipeline._detector_configs) > 0
         except ValueError as e:
             error_msg = str(e)
             if ("LLaVA dependencies not installed" in error_msg or

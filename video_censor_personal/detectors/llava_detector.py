@@ -11,8 +11,12 @@ import numpy as np
 from video_censor_personal.detection import Detector
 from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
+from video_censor_personal.loading_spinner import loading_spinner
+from video_censor_personal.model_size import get_llava_model_size
 
 logger = logging.getLogger(__name__)
+
+TRACE_LEVEL = 5
 
 
 class LLaVADetector(Detector):
@@ -116,12 +120,16 @@ class LLaVADetector(Detector):
             if self.model_path:
                 load_kwargs["cache_dir"] = self.model_path
 
-            model = LlavaForConditionalGeneration.from_pretrained(
-                self.model_name, **load_kwargs
-            )
+            # Get actual model size from cache (or estimate if not cached)
+            model_size_bytes = get_llava_model_size(self.model_name)
 
-            # Move model to device
-            model = model.to(self.device)
+            with loading_spinner(self.model_name, model_size_bytes, self.device):
+                model = LlavaForConditionalGeneration.from_pretrained(
+                    self.model_name, **load_kwargs
+                )
+                # Move model to device
+                model = model.to(self.device)
+
             logger.info(f"LLaVA model loaded successfully on {self.device}")
             return model, processor
 
@@ -183,24 +191,46 @@ class LLaVADetector(Detector):
 
         try:
             # Convert BGR to RGB
+            height, width = frame_data.shape[:2]
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Converting frame BGR→RGB ({width}x{height}, "
+                f"{frame_data.nbytes / 1024:.1f}KB)"
+            )
             rgb_frame = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB)
 
             # Convert to PIL Image
             from PIL import Image
 
             pil_image = Image.fromarray(rgb_frame)
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Converted to PIL Image mode={pil_image.mode} "
+                f"size={pil_image.size}"
+            )
 
             # Prepare inputs for LLaVA
+            logger.log(TRACE_LEVEL, f"[{self.name}] Tokenizing input with processor...")
             inputs = self.processor(
                 text=self.prompt_template,
                 images=pil_image,
                 return_tensors="pt",
             )
+            input_tokens = inputs.get("input_ids", [[]])[0]
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Tokenized: {len(input_tokens)} tokens"
+            )
 
             # Move inputs to device
+            logger.log(TRACE_LEVEL, f"[{self.name}] Moving inputs to {self.device}...")
             inputs = {k: v.to(self.device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
             # Run inference
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Running inference on {self.model_name} ({self.device})..."
+            )
             try:
                 outputs = self.model.generate(
                     **inputs,
@@ -216,8 +246,18 @@ class LLaVADetector(Detector):
                     return []
                 raise
 
+            output_tokens = len(outputs[0])
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Inference complete: generated {output_tokens} tokens"
+            )
+
             # Decode response
             response = self.processor.decode(outputs[0], skip_special_tokens=True)
+            logger.log(
+                TRACE_LEVEL,
+                f"[{self.name}] Decoded response ({len(response)} chars)"
+            )
 
             # Parse JSON response
             try:

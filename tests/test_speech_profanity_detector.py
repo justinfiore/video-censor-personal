@@ -145,9 +145,20 @@ class TestProfanityDetection:
     @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
     @patch("transformers.pipeline")
     def test_detect_finds_profanity_keyword(self, mock_pipeline, mock_device):
-        """Test detection finds profanity in transcription."""
+        """Test detection finds profanity in transcription with timestamps."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": "this is a test with damn word"}
+        mock_pipe.return_value = {
+            "text": "this is a test with damn word",
+            "chunks": [
+                {"text": "this", "timestamp": (0.0, 0.5)},
+                {"text": "is", "timestamp": (0.5, 0.8)},
+                {"text": "a", "timestamp": (0.8, 1.0)},
+                {"text": "test", "timestamp": (1.0, 1.5)},
+                {"text": "with", "timestamp": (1.5, 1.8)},
+                {"text": "damn", "timestamp": (1.8, 2.2)},
+                {"text": "word", "timestamp": (2.2, 2.5)},
+            ]
+        }
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -156,23 +167,32 @@ class TestProfanityDetection:
         }
         
         detector = SpeechProfanityDetector(config)
-        # Manually set a known keyword
         detector.keywords = {"en": {"damn"}}
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert len(results) == 1
         assert results[0].label == "Profanity"
         assert results[0].confidence == 0.95
         assert "damn" in results[0].reasoning.lower()
+        assert results[0].start_time == 1.8
+        assert results[0].end_time == 2.2
 
     @patch("video_censor_personal.speech_profanity_detector.get_device", return_value="cpu")
     @patch("transformers.pipeline")
     def test_detect_case_insensitive(self, mock_pipeline, mock_device):
         """Test detection is case-insensitive."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": "This has DAMN word"}
+        mock_pipe.return_value = {
+            "text": "This has DAMN word",
+            "chunks": [
+                {"text": "This", "timestamp": (0.0, 0.5)},
+                {"text": "has", "timestamp": (0.5, 0.8)},
+                {"text": "DAMN", "timestamp": (0.8, 1.2)},
+                {"text": "word", "timestamp": (1.2, 1.5)},
+            ]
+        }
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -184,7 +204,7 @@ class TestProfanityDetection:
         detector.keywords = {"en": {"damn"}}
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert len(results) == 1
 
@@ -193,7 +213,15 @@ class TestProfanityDetection:
     def test_detect_no_match(self, mock_pipeline, mock_device):
         """Test detection returns empty when no profanity found."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": "this is clean text"}
+        mock_pipe.return_value = {
+            "text": "this is clean text",
+            "chunks": [
+                {"text": "this", "timestamp": (0.0, 0.5)},
+                {"text": "is", "timestamp": (0.5, 0.8)},
+                {"text": "clean", "timestamp": (0.8, 1.2)},
+                {"text": "text", "timestamp": (1.2, 1.5)},
+            ]
+        }
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -205,7 +233,7 @@ class TestProfanityDetection:
         detector.keywords = {"en": {"badword"}}
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert results == []
 
@@ -214,7 +242,16 @@ class TestProfanityDetection:
     def test_detect_multiple_keywords(self, mock_pipeline, mock_device):
         """Test detection finds multiple profanity keywords."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": "word1 here and word2 there"}
+        mock_pipe.return_value = {
+            "text": "word1 here and word2 there",
+            "chunks": [
+                {"text": "word1", "timestamp": (0.0, 0.5)},
+                {"text": "here", "timestamp": (0.5, 0.8)},
+                {"text": "and", "timestamp": (0.8, 1.0)},
+                {"text": "word2", "timestamp": (1.0, 1.5)},
+                {"text": "there", "timestamp": (1.5, 1.8)},
+            ]
+        }
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -226,7 +263,7 @@ class TestProfanityDetection:
         detector.keywords = {"en": {"word1", "word2"}}
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert len(results) == 2
 
@@ -235,7 +272,7 @@ class TestProfanityDetection:
     def test_detect_empty_transcription(self, mock_pipeline, mock_device):
         """Test detection handles empty transcription."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": ""}
+        mock_pipe.return_value = {"text": "", "chunks": []}
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -246,7 +283,7 @@ class TestProfanityDetection:
         detector = SpeechProfanityDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert results == []
 
@@ -266,7 +303,7 @@ class TestProfanityDetection:
         detector = SpeechProfanityDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         # Should return empty list on error, not raise
         assert results == []
@@ -280,7 +317,15 @@ class TestMultiLanguageSupport:
     def test_detect_multi_language_keywords(self, mock_pipeline, mock_device):
         """Test detection across multiple languages."""
         mock_pipe = MagicMock()
-        mock_pipe.return_value = {"text": "english word1 spanish palabra1"}
+        mock_pipe.return_value = {
+            "text": "english word1 spanish palabra1",
+            "chunks": [
+                {"text": "english", "timestamp": (0.0, 0.5)},
+                {"text": "word1", "timestamp": (0.5, 1.0)},
+                {"text": "spanish", "timestamp": (1.0, 1.5)},
+                {"text": "palabra1", "timestamp": (1.5, 2.0)},
+            ]
+        }
         mock_pipeline.return_value = mock_pipe
         
         config = {
@@ -296,7 +341,7 @@ class TestMultiLanguageSupport:
         }
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert len(results) == 2
 

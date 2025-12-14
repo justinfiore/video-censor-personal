@@ -186,9 +186,9 @@ class TestAudioClassification:
         detector = AudioClassificationDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
-        assert len(results) == 1
+        assert len(results) >= 1
         assert results[0].label == "Violence"
         assert "gunshot" in results[0].reasoning
 
@@ -224,7 +224,7 @@ class TestAudioClassification:
         detector = AudioClassificationDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert results == []
 
@@ -259,7 +259,7 @@ class TestAudioClassification:
         detector = AudioClassificationDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert results == []
 
@@ -294,7 +294,7 @@ class TestAudioClassification:
         detector = AudioClassificationDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         assert results == []
 
@@ -319,7 +319,7 @@ class TestAudioClassification:
         detector = AudioClassificationDetector(config)
         
         audio_data = np.random.randn(16000).astype(np.float32)
-        results = detector.detect(audio_data=audio_data)
+        results = detector.analyze_full_audio(audio_data=audio_data, sample_rate=16000)
         
         # Should return empty list on error, not raise
         assert results == []

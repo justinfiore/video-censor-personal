@@ -15,6 +15,8 @@ import torch
 from video_censor_personal.detection import Detector
 from video_censor_personal.device_utils import get_device
 from video_censor_personal.frame import DetectionResult
+from video_censor_personal.loading_spinner import loading_spinner, task_spinner
+from video_censor_personal.model_size import get_audio_classification_model_size
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +72,16 @@ class AudioClassificationDetector(Detector):
             )
             
             logger.info(f"Loading audio classification model '{self.model_name}' to {self.device}...")
-            self.processor = AutoFeatureExtractor.from_pretrained(self.model_name)
-            self.model = AutoModelForAudioClassification.from_pretrained(self.model_name)
             
-            # Move model to device
-            self.model = self.model.to(self.device)
+            # Get actual model size from cache (or estimate if not cached)
+            model_size_bytes = get_audio_classification_model_size(self.model_name)
+            
+            with loading_spinner(self.model_name, model_size_bytes, self.device):
+                self.processor = AutoFeatureExtractor.from_pretrained(self.model_name)
+                self.model = AutoModelForAudioClassification.from_pretrained(self.model_name)
+                # Move model to device
+                self.model = self.model.to(self.device)
+            
             logger.info(f"Audio classification model loaded successfully on {self.device}")
         except ImportError as e:
             raise ImportError(
@@ -86,36 +93,117 @@ class AudioClassificationDetector(Detector):
                 f"Failed to load model '{self.model_name}': {e}"
             ) from e
     
+    def supports_full_audio_analysis(self) -> bool:
+        """Return True - this detector supports efficient full-audio analysis."""
+        return True
+
     def detect(
         self,
         frame_data: Optional[np.ndarray] = None,
         audio_data: Optional[np.ndarray] = None,
     ) -> List[DetectionResult]:
-        """Classify audio and detect mapped content categories.
+        """Per-frame detection - returns empty since full audio analysis is preferred.
+        
+        This detector uses analyze_full_audio() for efficient processing.
         
         Args:
             frame_data: Ignored (audio-only detector).
-            audio_data: Audio as numpy array (mono, float32, 16kHz).
+            audio_data: Ignored (use analyze_full_audio instead).
         
         Returns:
-            List of DetectionResult for detected categories.
+            Empty list - use analyze_full_audio() for results.
         """
-        if audio_data is None:
+        return []
+
+    def analyze_full_audio(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+    ) -> List[DetectionResult]:
+        """Classify full audio in chunks and return timestamped detections.
+        
+        Processes audio in overlapping windows, classifying each segment
+        and returning detections with accurate timestamps.
+        
+        Args:
+            audio_data: Complete audio as numpy array (mono, float32).
+            sample_rate: Audio sample rate in Hz (default: 16000).
+        
+        Returns:
+            List of DetectionResult with accurate start_time/end_time.
+        """
+        if audio_data is None or len(audio_data) == 0:
             logger.debug("No audio data provided; skipping audio classification")
             return []
         
+        chunk_duration = 1.0  # 1 second chunks
+        hop_duration = 0.5    # 50% overlap
+        chunk_samples = int(chunk_duration * sample_rate)
+        hop_samples = int(hop_duration * sample_rate)
+        
+        audio_duration = len(audio_data) / sample_rate
+        logger.info(
+            f"Classifying {audio_duration:.1f}s of audio in {chunk_duration}s chunks..."
+        )
+        
+        results = []
+        position = 0
+        chunk_count = 0
+        
         try:
-            # Preprocess audio
+            while position < len(audio_data):
+                chunk_end = min(position + chunk_samples, len(audio_data))
+                chunk = audio_data[position:chunk_end]
+                
+                if len(chunk) < chunk_samples // 2:
+                    break
+                
+                start_time = position / sample_rate
+                end_time = chunk_end / sample_rate
+                
+                detection = self._classify_chunk(chunk, start_time, end_time)
+                if detection:
+                    results.append(detection)
+                
+                position += hop_samples
+                chunk_count += 1
+            
+            if results:
+                logger.info(f"Audio classification found {len(results)} detections")
+            else:
+                logger.debug("No target sounds detected in audio")
+            
+            return results
+        
+        except Exception as e:
+            logger.error(f"Audio classification failed: {e}", exc_info=True)
+            return []
+
+    def _classify_chunk(
+        self,
+        chunk: np.ndarray,
+        start_time: float,
+        end_time: float,
+    ) -> Optional[DetectionResult]:
+        """Classify a single audio chunk.
+        
+        Args:
+            chunk: Audio chunk as numpy array.
+            start_time: Start time in seconds.
+            end_time: End time in seconds.
+        
+        Returns:
+            DetectionResult if target category detected, None otherwise.
+        """
+        try:
             inputs = self.processor(
-                audio_data,
+                chunk,
                 sampling_rate=16000,
                 return_tensors="pt"
             )
             
-            # Move inputs to device
             inputs = {k: v.to(self.device) if hasattr(v, "to") else v for k, v in inputs.items()}
             
-            # Classify
             with torch.no_grad():
                 outputs = self.model(**inputs)
             
@@ -124,41 +212,30 @@ class AudioClassificationDetector(Detector):
             predicted_label = self.model.config.id2label[predicted_class_idx]
             confidence = logits.softmax(-1).max().item()
             
-            logger.debug(
-                f"Audio classification: {predicted_label} (confidence: {confidence:.3f})"
-            )
-            
-            # Skip if below confidence threshold
             if confidence < self.confidence_threshold:
-                logger.debug(
-                    f"Confidence {confidence:.3f} below threshold {self.confidence_threshold}"
-                )
-                return []
+                return None
             
-            # Map audio label to content category
             content_category = self.category_mapping.get(predicted_label)
             
             if not content_category or content_category not in self.target_categories:
-                logger.debug(
-                    f"Audio label '{predicted_label}' maps to '{content_category}' "
-                    f"which is not in target categories {self.target_categories}"
-                )
-                return []
+                return None
             
-            # Return detection result
-            return [
-                DetectionResult(
-                    start_time=0.0,  # Will be set by pipeline
-                    end_time=0.033,  # Will be set by pipeline
-                    label=content_category,
-                    confidence=confidence,
-                    reasoning=f"Audio contains: {predicted_label}",
-                )
-            ]
+            logger.debug(
+                f"Detected '{predicted_label}' ({content_category}) at "
+                f"{start_time:.2f}s-{end_time:.2f}s (confidence: {confidence:.3f})"
+            )
+            
+            return DetectionResult(
+                start_time=start_time,
+                end_time=end_time,
+                label=content_category,
+                confidence=confidence,
+                reasoning=f"Audio contains: {predicted_label}",
+            )
         
         except Exception as e:
-            logger.error(f"Audio classification failed: {e}", exc_info=True)
-            return []
+            logger.debug(f"Chunk classification failed: {e}")
+            return None
     
     def _build_category_mapping(self) -> Dict[str, str]:
         """Build mapping from audio classification labels to content categories.

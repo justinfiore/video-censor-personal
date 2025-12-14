@@ -39,13 +39,29 @@ class TestPipelineAudioExtraction:
 
     @pytest.fixture
     def config_with_mock_detector(self):
-        """Config with a mock detector."""
+        """Config with a mock detector (frame-based, no audio)."""
         return {
             "detectors": [
                 {
                     "type": "mock",
                     "name": "test-mock",
                     "categories": ["Nudity", "Violence"],
+                }
+            ],
+            "processing": {
+                "frame_sampling": {"sample_rate": 1.0},
+            },
+        }
+
+    @pytest.fixture
+    def config_with_audio_detector(self):
+        """Config with an audio detector to trigger audio extraction."""
+        return {
+            "detectors": [
+                {
+                    "type": "speech-profanity",
+                    "name": "test-audio",
+                    "categories": ["Profanity"],
                 }
             ],
             "processing": {

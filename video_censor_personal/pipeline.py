@@ -211,15 +211,17 @@ class AnalysisPipeline:
     def _ensure_detection_pipeline(self) -> None:
         """Lazily initialize detection pipeline (after model verification).
 
-        Creates DetectionPipeline if not already initialized.
+        Creates DetectionPipeline with lazy_init=True to defer model loading.
+        Models are loaded on-demand to avoid having audio and video models
+        in memory simultaneously.
         """
         if self.detection_pipeline is None:
-            logger.debug("Initializing detection pipeline")
-            self.detection_pipeline = DetectionPipeline(self._pipeline_config)
-            logger.info(
-                f"Detection pipeline initialized with "
-                f"{len(self.detection_pipeline.detectors)} detector(s)"
+            logger.debug("Initializing detection pipeline with lazy loading")
+            self.detection_pipeline = DetectionPipeline(
+                self._pipeline_config,
+                lazy_init=True,
             )
+            logger.info("Detection pipeline initialized (lazy loading enabled)")
 
     def _auto_discover_detectors(self, config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Auto-discover detector configuration from detections section.
@@ -314,7 +316,10 @@ class AnalysisPipeline:
             audio_sample_rate_original = None
             audio_data_for_detection = None
             
-            if any(hasattr(d, "detect") for d in self.detection_pipeline.detectors):
+            # Check if we have any detector configs (lazy loading means detectors list may be empty)
+            has_detectors = len(self.detection_pipeline._detector_configs) > 0
+            
+            if has_detectors:
                 try:
                     audio_segment = self.extractor.extract_audio()
                     audio_data_original = audio_segment.data
@@ -385,58 +390,81 @@ class AnalysisPipeline:
                     audio_data_original = None
                     audio_data_for_detection = None
 
-            # Extract and analyze frames with progress bar
+            # Run full-audio detectors once (e.g., speech-profanity)
+            # Initialize audio detectors first (lazy loading)
+            if audio_data_for_detection is not None:
+                self.debug_output.subsection("Full Audio Analysis")
+                self.detection_pipeline.initialize_audio_detectors()
+                audio_results = self.detection_pipeline.analyze_full_audio(
+                    audio_data_for_detection,
+                    sample_rate=16000,
+                )
+                all_results.extend(audio_results)
+                if audio_results:
+                    logger.info(f"Full audio analysis found {len(audio_results)} detections")
+
+                # Clean up audio detectors to free GPU memory before loading video models
+                logger.debug("Cleaning up audio detectors to free GPU memory")
+                self.detection_pipeline.cleanup_audio_detectors()
+
+            # Initialize frame detectors (lazy loading - after audio cleanup)
+            self.detection_pipeline.initialize_frame_detectors()
+            frame_detectors = self.detection_pipeline.get_frame_detectors()
+
             self.debug_output.subsection("Frame Analysis")
             frame_count = 0
-            
-            # Create progress bar (disable in TRACE mode to avoid cluttering output)
-            with VideoProgressBar(
-                total_duration=video_duration,
-                description="Analyzing video",
-                disable=self.trace_enabled,
-            ) as progress:
-                for frame in self.extractor.extract_frames(sample_rate=sample_rate):
-                    try:
-                        frame_count += 1
-                        logger.debug(f"Analyzing frame {frame.index} at {frame.timestamp_str()}")
-                        
-                        # Update progress bar
-                        progress.update(frame.timecode)
 
-                        # Run detection pipeline on frame (using downsampled audio for detection)
-                        results = self.detection_pipeline.analyze_frame(
-                            frame,
-                            audio_data=audio_data_for_detection
-                        )
-                        all_results.extend(results)
+            if not frame_detectors:
+                logger.info("No frame-based detectors configured; skipping frame analysis")
+            else:
+                # Create progress bar (disable in TRACE mode to avoid cluttering output)
+                with VideoProgressBar(
+                    total_duration=video_duration,
+                    description="Analyzing video",
+                    disable=self.trace_enabled,
+                ) as progress:
+                    for frame in self.extractor.extract_frames(sample_rate=sample_rate):
+                        try:
+                            frame_count += 1
+                            logger.debug(f"Analyzing frame {frame.index} at {frame.timestamp_str()}")
+                            
+                            # Update progress bar
+                            progress.update(frame.timecode)
 
-                        # Trace output for frame (only in TRACE mode)
-                        if self.trace_enabled:
-                            self.debug_output.frame_info(
-                                frame.index,
-                                frame.timecode,
-                                len(results),
+                            # Run detection pipeline on frame (using downsampled audio for detection)
+                            results = self.detection_pipeline.analyze_frame(
+                                frame,
+                                audio_data=audio_data_for_detection
                             )
-                            for result in results:
-                                self.debug_output.detector_result(
-                                    getattr(result, 'detector_name', None) or "unknown",
-                                    result.label,
-                                    result.confidence,
+                            all_results.extend(results)
+
+                            # Trace output for frame (only in TRACE mode)
+                            if self.trace_enabled:
+                                self.debug_output.frame_info(
+                                    frame.index,
+                                    frame.timecode,
+                                    len(results),
+                                )
+                                for result in results:
+                                    self.debug_output.detector_result(
+                                        getattr(result, 'detector_name', None) or "unknown",
+                                        result.label,
+                                        result.confidence,
+                                    )
+
+                            if results:
+                                logger.debug(
+                                    f"Frame {frame.index}: {len(results)} detection(s) found"
                                 )
 
-                        if results:
-                            logger.debug(
-                                f"Frame {frame.index}: {len(results)} detection(s) found"
+                        except Exception as e:
+                            logger.error(
+                                f"Error analyzing frame {frame.index}: {e}",
+                                exc_info=True,
                             )
-
-                    except Exception as e:
-                        logger.error(
-                            f"Error analyzing frame {frame.index}: {e}",
-                            exc_info=True,
-                        )
-                        self.debug_output.info(f"ERROR on frame {frame.index}: {e}")
-                        # Continue with next frame
-                        continue
+                            self.debug_output.info(f"ERROR on frame {frame.index}: {e}")
+                            # Continue with next frame
+                            continue
 
             logger.info(
                 f"Analysis complete: {frame_count} frames analyzed, "
