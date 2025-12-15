@@ -411,6 +411,8 @@ def write_skip_chapters_to_mp4(
             result = subprocess.run(
                 [
                     "ffmpeg",
+                    "-hide_banner",  # Suppress ffmpeg banner
+                    "-loglevel", "error",  # Only show errors, suppress all other output
                     "-i",
                     str(input_file),
                     "-i",
@@ -419,6 +421,7 @@ def write_skip_chapters_to_mp4(
                     "1",
                     "-c",
                     "copy",
+                    "-y",  # Auto-confirm overwrite
                     str(output_file),
                 ],
                 check=True,
