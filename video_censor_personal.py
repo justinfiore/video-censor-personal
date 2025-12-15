@@ -3,6 +3,7 @@
 
 import logging
 import sys
+import time
 from pathlib import Path
 
 from video_censor_personal.cli import parse_args, setup_logging
@@ -26,6 +27,7 @@ def main() -> int:
         # Setup logging
         setup_logging(log_level=args.log_level)
 
+        start_time = time.perf_counter()
         logger.info("Starting video-censor-personal")
         logger.debug(f"Input file: {args.input}")
         logger.debug(f"Output file: {args.output}")
@@ -140,7 +142,12 @@ def main() -> int:
                 log_level=args.log_level,
             )
             runner.run(args.output)
-            logger.info("Processing complete")
+            elapsed_time = time.perf_counter() - start_time
+            minutes, seconds = divmod(elapsed_time, 60)
+            if minutes >= 1:
+                logger.info(f"Processing complete in {int(minutes)}m {seconds:.1f}s")
+            else:
+                logger.info(f"Processing complete in {elapsed_time:.1f}s")
             return 0
 
         except Exception as e:
