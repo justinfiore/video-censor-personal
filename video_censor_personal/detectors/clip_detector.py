@@ -34,6 +34,7 @@ class CLIPDetector(Detector):
               - model_name: HuggingFace model identifier
                 (default: "openai/clip-vit-base-patch32")
               - model_path: Optional custom model cache path (default: HF cache)
+              - confidence_threshold: Minimum confidence to report detection (default: 0.5, range: 0.0-1.0)
               - prompts: List of dicts with 'category' and 'text' (list of strings)
               - device: Optional device override ("cuda", "mps", "cpu")
 
@@ -44,6 +45,13 @@ class CLIPDetector(Detector):
 
         self.model_name = config.get("model_name", "openai/clip-vit-base-patch32")
         self.model_path = config.get("model_path")
+        
+        # Confidence threshold for reporting detections
+        self.confidence_threshold = config.get("confidence_threshold", 0.5)
+        if not (0.0 <= self.confidence_threshold <= 1.0):
+            raise ValueError(
+                f"confidence_threshold must be between 0.0 and 1.0, got {self.confidence_threshold}"
+            )
 
         # Detect or override device
         device_override = config.get("device")
@@ -61,7 +69,8 @@ class CLIPDetector(Detector):
 
         logger.info(
             f"Initialized CLIP detector '{self.name}' with model '{self.model_name}' "
-            f"on device '{self.device}' for categories: {', '.join(self.categories)}"
+            f"on device '{self.device}' (threshold={self.confidence_threshold}) "
+            f"for categories: {', '.join(self.categories)}"
         )
 
     def _validate_prompts(self) -> None:
@@ -336,15 +345,15 @@ class CLIPDetector(Detector):
             category_scores: Dict mapping category name to confidence score [0, 1].
 
         Returns:
-            List of DetectionResult for categories with non-zero confidence.
+            List of DetectionResult for categories meeting confidence_threshold.
         """
         results = []
 
         for category in self.categories:
             confidence = category_scores.get(category, 0.0)
 
-            # Only include if confidence is above zero (avoid noise)
-            if confidence > 0.0:
+            # Only include if confidence meets threshold
+            if confidence >= self.confidence_threshold:
                 results.append(
                     DetectionResult(
                         start_time=0.0,  # Set by pipeline

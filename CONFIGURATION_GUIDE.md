@@ -185,6 +185,7 @@ Lightweight vision-language detector using OpenAI's CLIP model for efficient vis
 - type: "clip"
   name: "clip-detector"
   model_name: "openai/clip-vit-base-patch32"
+  confidence_threshold: 0.5
   device: null
   categories:
     - "Nudity"
@@ -203,6 +204,7 @@ Lightweight vision-language detector using OpenAI's CLIP model for efficient vis
 |-------|------|----------|---------|-------------|
 | `model_name` | string | No | `"openai/clip-vit-base-patch32"` | HuggingFace model identifier |
 | `device` | string | No | `null` | Device override (auto-detect if null) |
+| `confidence_threshold` | float | No | `0.5` | Minimum confidence (0.0-1.0) to report detection |
 | `prompts` | list | Yes | - | List of category prompt definitions |
 
 **Prompts Configuration:**
@@ -219,6 +221,17 @@ Each prompt definition requires:
 - `openai/clip-vit-large-patch14` - Large model (~700 MB, ~2-3 GB VRAM)
 - Other HuggingFace CLIP variants supported
 
+**Confidence Threshold:**
+
+The `confidence_threshold` (default: `0.5`) controls how confident CLIP must be before reporting a detection. Since CLIP outputs softmax probabilities (always between 0.0 and 1.0), a threshold of 0.0 would report everything. Recommended values:
+
+- `0.3-0.4` - Sensitive (catch more potential content, higher false positives)
+- `0.5` - Balanced (default, good for most use cases)
+- `0.6-0.7` - Conservative (fewer false positives, may miss some content)
+- `0.8+` - Very conservative (only report high-confidence detections)
+
+Start with `0.5` and adjust based on your false positive/negative tolerance.
+
 **Prompt Engineering Tips:**
 
 - Use 2-5 candidate phrases per category for better coverage
@@ -226,6 +239,7 @@ Each prompt definition requires:
 - Include common variations to handle edge cases
 - Avoid negations (e.g., don't use "not violent")
 - Test prompts with sample frames to validate detection accuracy
+- Adjust `confidence_threshold` if you're getting too many false positives/negatives
 
 **CLIP vs LLaVA:**
 
@@ -529,6 +543,7 @@ detectors:
   - type: "clip"
     name: "clip-detector"
     model_name: "openai/clip-vit-base-patch32"
+    confidence_threshold: 0.5
     device: null
     categories:
       - "Nudity"

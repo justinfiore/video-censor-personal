@@ -19,6 +19,7 @@ detection:
     - type: "clip"
       name: "clip-detector"
       model_name: "openai/clip-vit-base-patch32"  # Or "openai/clip-vit-large-patch14" for higher quality
+      confidence_threshold: 0.5  # Detection threshold (0.0-1.0); increase for fewer false positives
       categories:
         - "Nudity"
         - "Violence"
