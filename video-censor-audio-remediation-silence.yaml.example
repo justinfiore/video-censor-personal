@@ -73,6 +73,7 @@ detectors:
     categories:
       - "Violence"
     confidence_threshold: 0.6
+    chunk_duration: 2.0              # Audio chunk size in seconds
 
 # Audio processing settings
 audio:

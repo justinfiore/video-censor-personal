@@ -45,6 +45,7 @@ class AudioClassificationDetector(Detector):
                 - categories: Content categories to detect (e.g., ["Violence"])
                 - model: HuggingFace model name (default: "MIT/ast-finetuned-audioset-10-10-0.4593")
                 - confidence_threshold: Min confidence (default: 0.6)
+                - chunk_duration: Audio chunk size in seconds (default: 2.0)
                 - device: Optional device override ("cuda", "mps", "cpu")
         
         Raises:
@@ -56,6 +57,7 @@ class AudioClassificationDetector(Detector):
         self.model_name = config.get("model", "MIT/ast-finetuned-audioset-10-10-0.4593")
         self.target_categories = set(self.categories)
         self.confidence_threshold = config.get("confidence_threshold", 0.6)
+        self.chunk_duration = config.get("chunk_duration", 2.0)  # seconds per chunk
         
         # Detect or override device
         device_override = config.get("device")
@@ -136,8 +138,8 @@ class AudioClassificationDetector(Detector):
             logger.debug("No audio data provided; skipping audio classification")
             return []
         
-        chunk_duration = 1.0  # 1 second chunks
-        hop_duration = 0.5    # 50% overlap
+        chunk_duration = self.chunk_duration
+        hop_duration = chunk_duration / 2  # 50% overlap
         chunk_samples = int(chunk_duration * sample_rate)
         hop_samples = int(hop_duration * sample_rate)
         

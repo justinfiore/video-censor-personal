@@ -69,6 +69,7 @@ detectors:
       - "Violence"                   # Detects: gunshot, explosion, scream, crash
       # - "Sexual Theme"             # Uncomment to detect: moan, pant, etc.
     confidence_threshold: 0.6
+    chunk_duration: 2.0              # Audio chunk size in seconds (default: 2.0)
 
 # Audio processing settings
 audio:

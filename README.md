@@ -243,7 +243,7 @@ Model sizes: `tiny` (40 MB), `base` (140 MB), `small` (500 MB), `medium` (1.5 GB
 
 #### Audio Classification (Sound Effects)
 
-Detects sound effects like gunshots, screams, and explosions.
+Detects sound effects like gunshots, screams, and explosions. Audio is processed in configurable chunks (default: 2 seconds) with 50% overlap for accurate detection.
 
 ```bash
 # Download audio classification model (~300 MB)
@@ -255,6 +255,10 @@ model = AutoModelForAudioClassification.from_pretrained('MIT/ast-finetuned-audio
 print('✓ Audio classification model cached successfully')
 "
 ```
+
+Configuration options:
+- `chunk_duration`: Audio chunk size in seconds (default: 2.0). Larger values provide more context for sustained sounds.
+- `confidence_threshold`: Minimum confidence for detection (default: 0.6)
 
 ### Audio Remediation
 
