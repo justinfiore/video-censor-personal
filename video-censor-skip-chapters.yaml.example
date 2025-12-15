@@ -2,8 +2,12 @@
 # Skip Chapters Output Example
 # 
 # This example demonstrates how to configure the skip chapters feature,
-# which writes detection segments as chapter markers in the output MP4 file.
+# which writes detection segments as chapter markers in the output video file.
 # Users can then navigate between flagged content sections in their media player.
+#
+# IMPORTANT: Only MKV format is supported for chapters!
+# MP4 chapter support is fundamentally broken - many devices reject MP4 files with chapters.
+# Always use --output-video output.mkv for reliable chapter support.
 
 version: 1.0
 
@@ -73,5 +77,18 @@ audio:
 video:
   metadata_output:
     skip_chapters:
-      enabled: true              # Enable chapter markers in output MP4
-      # name_format: "skip: {categories} [{confidence}%]"  # Future: custom format
+      enabled: true              # Enable chapter markers in output video
+      
+# Usage example (MKV only):
+# 
+#   python video_censor_personal.py --input video.mp4 --config this-file.yaml \
+#     --output results.json --output-video output.mkv
+#
+# Why MKV only?
+#   - MP4 chapter support is broken and unreliable
+#   - Many devices (including older Samsung TVs) reject MP4s with chapters
+#   - MKV has native, robust chapter support that works everywhere
+#
+# Chapter format in output:
+#   "skip: [Label1, Label2, ...] [Confidence%]"
+#   Example: "skip: Nudity, Sexual Theme [89%]"

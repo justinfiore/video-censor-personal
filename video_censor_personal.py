@@ -10,7 +10,7 @@ from video_censor_personal.cli import parse_args, setup_logging, validate_cli_ar
 from video_censor_personal.config import ConfigError, load_config, Config, is_skip_chapters_enabled
 from video_censor_personal.model_manager import ModelManager, ModelDownloadError
 from video_censor_personal.pipeline import AnalysisRunner
-from video_censor_personal.video_metadata_writer import write_skip_chapters_to_mp4, VideoMetadataError
+from video_censor_personal.video_metadata_writer import write_skip_chapters, VideoMetadataError
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ def main() -> int:
             )
             output_dict = runner.run(args.output)
             
-            # Write skip chapters to MP4 if enabled
+            # Write skip chapters to video if enabled
             if is_skip_chapters_enabled(config_dict) and args.output_video:
                 try:
                     # Use raw merged segments (with numeric timestamps) instead of JSON formatted ones
@@ -137,7 +137,7 @@ def main() -> int:
                         logger.info(
                             f"Writing skip chapters to output video: {args.output_video}"
                         )
-                        write_skip_chapters_to_mp4(
+                        write_skip_chapters(
                             args.input,
                             args.output_video,
                             merged_segments,
@@ -146,7 +146,7 @@ def main() -> int:
                         logger.info(
                             "No detection segments found. Copying video without new chapters."
                         )
-                        write_skip_chapters_to_mp4(
+                        write_skip_chapters(
                             args.input,
                             args.output_video,
                             [],

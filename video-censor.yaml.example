@@ -78,6 +78,16 @@ output:
   include_confidence: true    # include confidence scores in results
   pretty_print: true          # human-readable JSON formatting
 
+# Video metadata output configuration
+# Skip chapters allow users to jump between flagged segments in media players
+video:
+  metadata_output:
+    skip_chapters:
+      enabled: false          # Set to true to write detection segments as chapter markers
+                              # IMPORTANT: Only MKV format is supported!
+                              # Use --output-video output.mkv for reliable chapter support.
+                              # MP4 chapter support is broken - do NOT use .mp4 extension.
+
 # Model download and caching configuration (optional)
 # Automatically download and verify models with --download-models CLI flag
 models:

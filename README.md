@@ -17,7 +17,7 @@ The system detects:
 Output and Enhancement Options:
 - **JSON Detection Results** - Detailed analysis with confidence scores and timestamps
 - **Audio Remediation** - Automatically bleep or silence profanity
-- **Skip Chapter Markers** - Add chapter markers to MP4 files for easy navigation to flagged segments in media players (VLC, Plex, etc.)
+- **Skip Chapter Markers** - Add chapter markers to video files (MKV recommended) for easy navigation to flagged segments in media players (VLC, Plex, Kodi, etc.)
 
 ## System Requirements
 
@@ -35,6 +35,11 @@ Output and Enhancement Options:
 - **ffmpeg**: Required for video frame extraction and metadata processing
   - Download: https://ffmpeg.org/download.html
   - Used to extract frames from videos for analysis
+
+- **mkvtoolnix**: Optional but strongly recommended for chapter writing to MKV files
+  - Download: https://mkvtoolnix.download/
+  - Used to embed chapter markers reliably in Matroska video files
+  - Without this, chapters can only be written to MP4 with limited player support
 
 ## Installation
 
@@ -116,6 +121,41 @@ sudo dnf install ffmpeg
 4. Verify installation:
    ```bash
    ffmpeg -version
+   ```
+
+### mkvtoolnix Installation (Optional but Recommended)
+
+mkvtoolnix is needed for reliable chapter writing to MKV video files. Skip this if you only plan to use MP4 output or don't need chapter support.
+
+#### macOS
+
+Using Homebrew (recommended):
+```bash
+brew install mkvtoolnix
+```
+
+Or download from https://mkvtoolnix.download/
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt-get update
+sudo apt-get install mkvtoolnix
+```
+
+#### Linux (Fedora/RHEL)
+
+```bash
+sudo dnf install mkvtoolnix
+```
+
+#### Windows
+
+1. Download from https://mkvtoolnix.download/
+2. Run the installer and follow the setup wizard
+3. Verify installation:
+   ```bash
+   mkvmerge --version
    ```
 
 ## Downloading and Setting Up Models
@@ -336,6 +376,41 @@ python video_censor_personal.py \
 ```
 
 See [AUDIO.md](AUDIO.md) for detailed audio setup and configuration.
+
+### Skip Chapter Markers
+
+Add chapter markers to your output video to easily navigate between flagged segments in media players (VLC, Plex, Kodi, etc.):
+
+**MKV output (REQUIRED for chapter support):**
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-skip-chapters.yaml \
+  --output results.json \
+  --output-video output.mkv
+```
+
+**⚠️ MP4 NOT SUPPORTED FOR CHAPTERS**
+
+MP4 chapter support is fundamentally broken and unreliable:
+- Many devices reject MP4 files with chapters as "Unsupported Video Data"
+- Chapter visibility varies unpredictably by player and encoder
+- Some devices (e.g., older Samsung TVs) won't play MP4s with chapters at all
+- Only use MKV format for reliable, cross-platform chapter support
+
+To enable skip chapters in your config file:
+```yaml
+output:
+  video:
+    metadata_output:
+      skip_chapters:
+        enabled: true
+```
+
+**Chapter naming format:** `skip: [Label] [Confidence%]`  
+Example: `skip: Nudity, Sexual Theme [89%]`
+
+See `video-censor-skip-chapters.yaml.example` for a complete skip chapters configuration.
 
 ## Configuration
 

@@ -104,6 +104,51 @@ ffmpeg -version
 # Output should show FFmpeg version and built-in components
 ```
 
+## Step 3b: Install mkvtoolnix (Optional, Required for MKV Chapter Writing)
+
+mkvtoolnix is only required if you want to write skip chapters to MKV files. If you only plan to use JSON output, you can skip this step.
+
+### macOS
+
+Using Homebrew:
+```bash
+brew install mkvtoolnix
+```
+
+Or download from https://mkvtoolnix.download/
+
+### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt-get update
+sudo apt-get install mkvtoolnix
+```
+
+### Linux (Fedora/RHEL)
+
+```bash
+sudo dnf install mkvtoolnix
+```
+
+### Windows
+
+1. Go to https://mkvtoolnix.download/
+2. Download the Windows installer
+3. Run the installer and follow the prompts
+4. Verify installation in new terminal:
+   ```bash
+   mkvmerge --version
+   ```
+
+### Verify Installation
+
+```bash
+mkvmerge --version
+# Output should show MKVtoolnix version
+```
+
+**Why mkvtoolnix?** MKV (Matroska) format has native, robust chapter support that works in all media players (VLC, Plex, Kodi, etc.). MP4 chapter support is fundamentally unreliable. See `video-censor-skip-chapters.yaml.example` for usage.
+
 ## Step 4: Download AI Models (5-10 minutes)
 
 Models are used for content analysis. Download them before your first run.
