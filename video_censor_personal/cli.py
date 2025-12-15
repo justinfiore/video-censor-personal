@@ -2,7 +2,9 @@
 
 import argparse
 import logging
+import sys
 from pathlib import Path
+from typing import Any, Dict
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -126,3 +128,68 @@ def setup_logging(log_level: str = "INFO") -> None:
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+
+def validate_cli_args(
+    args: argparse.Namespace, config: Dict[str, Any]
+) -> None:
+    """Validate CLI arguments against configuration.
+
+    Ensures consistency between CLI arguments and configuration, particularly
+    for output video handling with audio remediation and skip chapters features.
+
+    Args:
+        args: Parsed command-line arguments.
+        config: Configuration dictionary.
+
+    Raises:
+        SystemExit: If validation fails.
+    """
+    from video_censor_personal.config import is_skip_chapters_enabled
+
+    logger = logging.getLogger(__name__)
+    
+    # Check if skip chapters is enabled
+    skip_chapters_enabled = is_skip_chapters_enabled(config)
+    
+    # Check if audio remediation is enabled
+    audio_remediation_enabled = config.get("audio", {}).get("remediation", {}).get("enabled", False)
+    
+    # Require --output-video when skip chapters is enabled
+    if skip_chapters_enabled and not args.output_video:
+        logger.error(
+            "Skip chapters feature is enabled but --output-video is not specified. "
+            "--output-video is required when skip chapters are enabled."
+        )
+        sys.exit(1)
+    
+    # Warn if --output-video is provided but neither feature needs it
+    if args.output_video and not skip_chapters_enabled and not audio_remediation_enabled:
+        logger.warning(
+            "--output-video provided but skip chapters and audio remediation are both disabled. "
+            "The output video file will not be generated."
+        )
+    
+    # Check for input/output-video path match (overwrite protection)
+    if args.output_video:
+        input_path = Path(args.input).resolve()
+        output_path = Path(args.output_video).resolve()
+        
+        if input_path == output_path:
+            logger.warning(
+                "WARNING: Output video file matches input file. "
+                "This will overwrite the original video."
+            )
+            # Prompt for confirmation
+            try:
+                response = input("Continue? (y/n): ").strip().lower()
+                if response != "y":
+                    logger.info("Operation cancelled by user.")
+                    sys.exit(0)
+            except EOFError:
+                # In non-interactive mode (e.g., CI/CD), treat as "no"
+                logger.error(
+                    "Cannot confirm overwrite in non-interactive mode. "
+                    "Please use different input and output paths."
+                )
+                sys.exit(1)

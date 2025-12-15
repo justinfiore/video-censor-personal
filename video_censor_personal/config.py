@@ -448,6 +448,53 @@ def _validate_detectors_section(config: Dict[str, Any]) -> None:
             raise ConfigError(f"Detector {idx} must declare at least one category")
 
 
+def _validate_video_section(config: Dict[str, Any]) -> None:
+    """Validate optional video section if present.
+
+    Args:
+        config: Configuration dictionary.
+
+    Raises:
+        ConfigError: If video section is invalid.
+    """
+    video = config.get("video")
+    if video is None:
+        return  # Optional section
+
+    if not isinstance(video, dict):
+        raise ConfigError("'video' field must be a dictionary")
+
+    # Validate metadata_output section if present
+    metadata_output = video.get("metadata_output")
+    if metadata_output is None:
+        return
+
+    if not isinstance(metadata_output, dict):
+        raise ConfigError("'video.metadata_output' field must be a dictionary")
+
+    # Validate skip_chapters section if present
+    skip_chapters = metadata_output.get("skip_chapters")
+    if skip_chapters is None:
+        return
+
+    if not isinstance(skip_chapters, dict):
+        raise ConfigError("'video.metadata_output.skip_chapters' field must be a dictionary")
+
+    # Validate enabled field if present
+    if "enabled" in skip_chapters:
+        if not isinstance(skip_chapters["enabled"], bool):
+            raise ConfigError(
+                "'video.metadata_output.skip_chapters.enabled' must be a boolean"
+            )
+
+    # Validate name_format field if present
+    if "name_format" in skip_chapters:
+        if not isinstance(skip_chapters["name_format"], str):
+            raise ConfigError(
+                "'video.metadata_output.skip_chapters.name_format' must be a string"
+            )
+
+
 def validate_config(config: Dict[str, Any]) -> None:
     """Validate configuration structure and required fields.
 
@@ -505,6 +552,9 @@ def validate_config(config: Dict[str, Any]) -> None:
     # Validate optional detectors section if present
     _validate_detectors_section(config)
 
+    # Validate optional video section if present
+    _validate_video_section(config)
+
     # Semantic validation
     _validate_sensitivity_ranges(config)
     _validate_at_least_one_detection_enabled(config)
@@ -552,3 +602,17 @@ def get_sample_rate_from_config(config: Dict[str, Any]) -> float:
         Sample rate in seconds (float). Default is 1.0.
     """
     return get_config_value(config, "processing.frame_sampling.sample_rate", 1.0)
+
+
+def is_skip_chapters_enabled(config: Dict[str, Any]) -> bool:
+    """Check if skip chapters feature is enabled in configuration.
+
+    Args:
+        config: Configuration dictionary.
+
+    Returns:
+        True if skip chapters are enabled, False otherwise (default).
+    """
+    return get_config_value(
+        config, "video.metadata_output.skip_chapters.enabled", False
+    )

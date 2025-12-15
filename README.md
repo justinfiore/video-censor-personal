@@ -14,6 +14,11 @@ The system detects:
 - **Sexual Themes** - Sexual content and suggestive material
 - **Custom Concepts** - User-defined content categories
 
+Output and Enhancement Options:
+- **JSON Detection Results** - Detailed analysis with confidence scores and timestamps
+- **Audio Remediation** - Automatically bleep or silence profanity
+- **Skip Chapter Markers** - Add chapter markers to MP4 files for easy navigation to flagged segments in media players (VLC, Plex, etc.)
+
 ## System Requirements
 
 ### Prerequisites

@@ -1,0 +1,77 @@
+# Video Censor Personal Configuration
+# Skip Chapters Output Example
+# 
+# This example demonstrates how to configure the skip chapters feature,
+# which writes detection segments as chapter markers in the output MP4 file.
+# Users can then navigate between flagged content sections in their media player.
+
+version: 1.0
+
+# Detection categories
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.6
+    model: "clip"
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.5
+    model: "speech_profanity"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "clip"
+  
+  sexual_theme:
+    enabled: true
+    sensitivity: 0.5
+    model: "clip"
+
+# Custom detectors (optional)
+detectors:
+  - type: "llava"
+    name: "violence_detector"
+    categories:
+      - "violence"
+      - "gore"
+    config:
+      model: "llava-1.5-7b-hf"
+      prompt: "Analyze this frame for violence, gore, or disturbing content. Respond with a confidence score 0.0-1.0."
+
+# Processing configuration
+processing:
+  frame_sampling:
+    strategy: "uniform"          # uniform, scene_based, all
+    sample_rate: 1.0             # frames per second
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0          # seconds
+
+  max_workers: 4
+
+# Output configuration
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true
+
+# Audio processing (optional)
+audio:
+  enabled: true
+  
+  detection:
+    enabled: true
+  
+  remediation:
+    enabled: false               # Set to true if you also want audio remediation
+
+# Video metadata output configuration
+# Skip chapters allow users to jump between flagged segments in media players
+video:
+  metadata_output:
+    skip_chapters:
+      enabled: true              # Enable chapter markers in output MP4
+      # name_format: "skip: {categories} [{confidence}%]"  # Future: custom format

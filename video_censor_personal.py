@@ -6,10 +6,11 @@ import sys
 import time
 from pathlib import Path
 
-from video_censor_personal.cli import parse_args, setup_logging
-from video_censor_personal.config import ConfigError, load_config, Config
+from video_censor_personal.cli import parse_args, setup_logging, validate_cli_args
+from video_censor_personal.config import ConfigError, load_config, Config, is_skip_chapters_enabled
 from video_censor_personal.model_manager import ModelManager, ModelDownloadError
 from video_censor_personal.pipeline import AnalysisRunner
+from video_censor_personal.video_metadata_writer import write_skip_chapters_to_mp4, VideoMetadataError
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ def main() -> int:
         except ConfigError as e:
             logger.error(f"Configuration error: {e}")
             return 1
+        
+        # Validate CLI arguments against configuration
+        try:
+            validate_cli_args(args, config_dict)
+        except SystemExit as e:
+            return e.code if isinstance(e.code, int) else 1
 
         # Handle model downloading if requested
         if args.download_models:
@@ -108,36 +115,7 @@ def main() -> int:
                 logger.error(f"Unexpected error during model download: {e}", exc_info=True)
                 return 1
 
-        # Validate audio remediation and output-video argument
-        remediation_enabled = (
-            config_dict.get("audio", {})
-            .get("remediation", {})
-            .get("enabled", False)
-        )
 
-        if remediation_enabled and not args.output_video:
-            logger.error(
-                "ERROR: Audio remediation is enabled in config, but "
-                "--output-video argument is missing.\n\n"
-                "To use audio remediation, provide output video path:\n"
-                "  python video_censor_personal.py --input video.mp4 "
-                "--config config.yaml --output results.json "
-                "--output-video output.mp4\n\n"
-                "Or disable audio remediation in config:\n"
-                "  audio.remediation.enabled: false"
-            )
-            return 1
-
-        if args.output_video and not remediation_enabled:
-            logger.error(
-                "ERROR: --output-video argument provided, but audio remediation "
-                "is not enabled in config.\n\n"
-                "--output-video requires audio remediation to be enabled.\n"
-                "Enable remediation in config:\n"
-                "  audio.remediation.enabled: true\n\n"
-                "Or remove the --output-video argument."
-            )
-            return 1
 
         # Run analysis pipeline
         try:
@@ -148,7 +126,37 @@ def main() -> int:
                 output_video_path=args.output_video,
                 log_level=args.log_level,
             )
-            runner.run(args.output)
+            output_dict = runner.run(args.output)
+            
+            # Write skip chapters to MP4 if enabled
+            if is_skip_chapters_enabled(config_dict) and args.output_video:
+                try:
+                    merged_segments = output_dict.get("segments", [])
+                    if merged_segments:
+                        logger.info(
+                            f"Writing skip chapters to output video: {args.output_video}"
+                        )
+                        write_skip_chapters_to_mp4(
+                            args.input,
+                            args.output_video,
+                            merged_segments,
+                        )
+                    else:
+                        logger.info(
+                            "No detection segments found. Copying video without new chapters."
+                        )
+                        write_skip_chapters_to_mp4(
+                            args.input,
+                            args.output_video,
+                            [],
+                        )
+                except VideoMetadataError as e:
+                    logger.error(f"Failed to write skip chapters: {e}")
+                    # Don't fail the entire pipeline, just log the warning
+                    logger.warning(
+                        "Continuing with JSON output despite chapter writing failure"
+                    )
+            
             elapsed_time = time.perf_counter() - start_time
             minutes, seconds = divmod(elapsed_time, 60)
             if minutes >= 1:

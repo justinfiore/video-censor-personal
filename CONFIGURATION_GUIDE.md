@@ -17,6 +17,9 @@ This document provides a comprehensive reference for configuring Video Censor Pe
 - [Audio Section](#audio-section)
 - [Processing Section](#processing-section)
 - [Output Section](#output-section)
+- [Video Section](#video-section)
+  - [Video Metadata Output](#video-metadata-output)
+  - [Skip Chapters](#skip-chapters)
 - [Models Section](#models-section)
 - [Complete Example](#complete-example)
 
@@ -462,6 +465,89 @@ output:
 | `format` | string | Yes | - | Output format (must be `"json"`) |
 | `include_confidence` | boolean | No | `true` | Include detection confidence scores |
 | `pretty_print` | boolean | No | `true` | Format JSON with indentation |
+
+---
+
+## Video Section
+
+**Optional.** Controls video output and metadata writing.
+
+```yaml
+video:
+  metadata_output:
+    skip_chapters:
+      enabled: false              # Write detection segments as chapter markers
+```
+
+### Video Metadata Output
+
+Enables writing detection segments as chapter markers in the output MP4 file, allowing users to jump between flagged content sections directly in their media player.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `skip_chapters.enabled` | boolean | No | `false` | Enable skip chapter marker output |
+| `skip_chapters.name_format` | string | No | See below | Custom chapter name format (future feature) |
+
+### Skip Chapters
+
+When skip chapters are enabled, the system:
+
+1. **Extracts existing chapters** from the input video (if present)
+2. **Generates skip chapters** from detection segments with names like:
+   ```
+   skip: Nudity [92%]
+   skip: Violence, Sexual Theme [85%]
+   ```
+3. **Merges chapters** by timestamp (existing + skip chapters)
+4. **Writes combined metadata** to the output MP4 file using re-muxing
+
+#### Requirements
+
+- **ffmpeg** must be installed and in PATH (used for chapter extraction and re-muxing)
+- `--output-video` CLI argument is required when skip chapters are enabled
+- Output MP4 file must be different from input file (to prevent data loss)
+
+#### Example Usage
+
+Configuration:
+```yaml
+video:
+  metadata_output:
+    skip_chapters:
+      enabled: true
+```
+
+Command line:
+```bash
+python video_censor_personal.py \
+  --input original.mp4 \
+  --config video-censor.yaml \
+  --output results.json \
+  --output-video output_with_chapters.mp4
+```
+
+#### Player Compatibility
+
+Most modern media players support MP4 chapter markers:
+
+- **VLC** - Chapters display as a list in the Playlist panel (View → Playlist)
+- **Plex** - Chapters appear as navigation points in the timeline
+- **QuickTime** - Chapters show in the timeline
+- **Windows Media Player** - Chapters supported in newer versions
+- **mpv** - Full chapter support with keyboard navigation
+
+#### Performance Considerations
+
+- Re-muxing large video files can take several minutes (depends on file size and disk speed)
+- No transcoding occurs; video quality is preserved
+- Original chapters are preserved when merged with skip chapters
+- If no detections found, existing chapters are copied to output file
+
+#### Error Handling
+
+- If chapter writing fails, the JSON output still succeeds (JSON is primary output)
+- Detailed error messages help diagnose ffmpeg issues
+- Non-interactive mode (CI/CD) requires different input/output paths (no overwrite confirmation prompt)
 
 ---
 
