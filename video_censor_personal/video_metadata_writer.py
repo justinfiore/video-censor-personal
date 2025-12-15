@@ -400,8 +400,10 @@ def write_skip_chapters_to_mp4(
             metadata_path = metadata_file.name
         
         logger.debug(f"Written metadata to temporary file: {metadata_path}")
+        logger.debug(f"Input file size: {input_file.stat().st_size / 1024 / 1024:.1f} MB")
         
         # Use ffmpeg to copy video with new metadata
+        logger.debug("Starting ffmpeg metadata write (codec copy mode)...")
         try:
             subprocess.run(
                 [
@@ -418,7 +420,7 @@ def write_skip_chapters_to_mp4(
                 ],
                 check=True,
                 capture_output=True,
-                timeout=300,
+                timeout=600,  # Increased from 300 to 600 seconds (10 minutes) for very large files
             )
             logger.info(f"Video with skip chapters written to {output_path}")
         except subprocess.CalledProcessError as e:
@@ -427,7 +429,7 @@ def write_skip_chapters_to_mp4(
             raise VideoMetadataError(f"Failed to write video metadata: {error_msg}") from e
         except subprocess.TimeoutExpired as e:
             raise VideoMetadataError(
-                f"Video metadata write operation timed out (file too large?)"
+                f"Video metadata write operation timed out after 600 seconds (file may be too large or disk I/O is very slow)"
             ) from e
     finally:
         # Clean up temp metadata file
