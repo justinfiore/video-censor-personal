@@ -407,7 +407,7 @@ def write_skip_chapters_to_mp4(
         logger.debug("Starting ffmpeg metadata write (codec copy mode)...")
         start_time = time.time()
         try:
-            logger.info(f"ffmpeg command: ffmpeg -i {input_file} -i {metadata_path} -map_metadata 1 -c copy {output_file}")
+            logger.info(f"ffmpeg command: ffmpeg -i {input_file} -i {metadata_path} -c copy {output_file}")
             result = subprocess.run(
                 [
                     "ffmpeg",
@@ -417,8 +417,6 @@ def write_skip_chapters_to_mp4(
                     str(input_file),
                     "-i",
                     metadata_path,
-                    "-map_metadata",
-                    "1",
                     "-c",
                     "copy",
                     "-y",  # Auto-confirm overwrite
