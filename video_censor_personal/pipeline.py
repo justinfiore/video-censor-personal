@@ -671,9 +671,14 @@ class AnalysisRunner:
                 self.config,
             )
 
-            # Write output
+            # Store raw merged segments for skip chapter writing
+            # (before they get formatted as strings in JSON output)
+            output_dict["_raw_merged_segments"] = merged_segments
+
+            # Write output (excluding internal fields like _raw_merged_segments)
             from video_censor_personal.output import write_output
-            write_output(output_dict, output_path, self.config)
+            output_to_write = {k: v for k, v in output_dict.items() if not k.startswith("_")}
+            write_output(output_to_write, output_path, self.config)
 
             logger.info(f"Analysis complete. Output written to: {output_path}")
             return output_dict

@@ -131,7 +131,8 @@ def main() -> int:
             # Write skip chapters to MP4 if enabled
             if is_skip_chapters_enabled(config_dict) and args.output_video:
                 try:
-                    merged_segments = output_dict.get("segments", [])
+                    # Use raw merged segments (with numeric timestamps) instead of JSON formatted ones
+                    merged_segments = output_dict.get("_raw_merged_segments", [])
                     if merged_segments:
                         logger.info(
                             f"Writing skip chapters to output video: {args.output_video}"

@@ -196,6 +196,55 @@ def _build_skip_chapters(
     return skip_chapters
 
 
+def _normalize_chapter_timestamps(chapters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize all chapter timestamps to numeric seconds.
+    
+    Ensures all chapters have numeric 'start' and 'end' values (not strings).
+    Skips chapters that can't be normalized.
+    
+    Args:
+        chapters: List of chapter dictionaries.
+    
+    Returns:
+        List of chapters with normalized numeric timestamps.
+    """
+    normalized = []
+    
+    for chapter in chapters:
+        # Skip chapters without start/end
+        if "start" not in chapter or "end" not in chapter:
+            logger.warning(f"Skipping chapter with missing timestamp: {chapter.get('title', 'unknown')}")
+            continue
+        
+        start = chapter["start"]
+        end = chapter["end"]
+        
+        # Convert to float if string
+        if isinstance(start, str):
+            try:
+                start = _parse_timestamp_to_seconds(start)
+            except ValueError as e:
+                logger.warning(f"Skipping chapter with unparseable start time: {e}")
+                continue
+        
+        if isinstance(end, str):
+            try:
+                end = _parse_timestamp_to_seconds(end)
+            except ValueError as e:
+                logger.warning(f"Skipping chapter with unparseable end time: {e}")
+                continue
+        
+        # Create normalized chapter
+        normalized_chapter = {
+            "start": float(start),
+            "end": float(end),
+            "title": chapter.get("title", "Chapter"),
+        }
+        normalized.append(normalized_chapter)
+    
+    return normalized
+
+
 def _merge_chapters(
     existing_chapters: Optional[List[Dict[str, Any]]],
     skip_chapters: List[Dict[str, Any]],
@@ -207,14 +256,18 @@ def _merge_chapters(
         skip_chapters: List of new skip chapters to add.
 
     Returns:
-        Sorted list of merged chapters.
+        Sorted list of merged chapters with normalized numeric timestamps.
     """
     merged = []
     
     if existing_chapters:
-        merged.extend(existing_chapters)
+        # Normalize existing chapters to ensure numeric timestamps
+        normalized_existing = _normalize_chapter_timestamps(existing_chapters)
+        merged.extend(normalized_existing)
     
-    merged.extend(skip_chapters)
+    # Skip chapters should already be numeric, but normalize to be safe
+    normalized_skip = _normalize_chapter_timestamps(skip_chapters)
+    merged.extend(normalized_skip)
     
     # Sort by start time
     merged.sort(key=lambda ch: ch.get("start", 0))
@@ -236,9 +289,28 @@ def _generate_ffmetadata(
     lines = [";FFMETADATA1"]
     
     for idx, chapter in enumerate(chapters, 1):
+        # Ensure timestamps are numeric
+        start = chapter["start"]
+        end = chapter["end"]
+        
+        # Convert to float if needed
+        if isinstance(start, str):
+            try:
+                start = _parse_timestamp_to_seconds(start)
+            except ValueError:
+                logger.warning(f"Skipping chapter {idx} with invalid start timestamp: {start}")
+                continue
+        
+        if isinstance(end, str):
+            try:
+                end = _parse_timestamp_to_seconds(end)
+            except ValueError:
+                logger.warning(f"Skipping chapter {idx} with invalid end timestamp: {end}")
+                continue
+        
         # FFMETADATA uses milliseconds
-        start_ms = int(chapter["start"] * 1000)
-        end_ms = int(chapter["end"] * 1000)
+        start_ms = int(float(start) * 1000)
+        end_ms = int(float(end) * 1000)
         title = chapter.get("title", f"Chapter {idx}")
         
         lines.append(f"[CHAPTER{idx:02d}]")
