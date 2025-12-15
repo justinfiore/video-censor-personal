@@ -1,0 +1,82 @@
+# Video Censor CLIP Detector Configuration Example
+#
+# This example demonstrates using OpenAI's CLIP model for efficient,
+# configurable content detection. CLIP is lightweight and fast compared
+# to vision-language models like LLaVA, making it ideal for resource-
+# constrained environments.
+#
+# Usage:
+#   Download models (one-time setup):
+#     python -m video_censor --download-models --config video-censor-clip.yaml --input dummy.mp4
+#
+#   Run analysis:
+#     python -m video_censor --config video-censor-clip.yaml --input video.mp4 --output results.json
+
+# Detection Configuration
+detection:
+  detectors:
+    # CLIP-based detector with custom prompts per category
+    - type: "clip"
+      name: "clip-detector"
+      model_name: "openai/clip-vit-base-patch32"  # Or "openai/clip-vit-large-patch14" for higher quality
+      categories:
+        - "Nudity"
+        - "Violence"
+        - "Sexual Theme"
+      prompts:
+        - category: "Nudity"
+          text:
+            - "nude person"
+            - "naked body"
+            - "exposed genitals"
+            - "private parts"
+        
+        - category: "Violence"
+          text:
+            - "fight"
+            - "fighting scene"
+            - "blood"
+            - "injury"
+            - "weapon"
+            - "gun"
+            - "knife"
+            - "punch"
+            - "hit"
+        
+        - category: "Sexual Theme"
+          text:
+            - "sexual activity"
+            - "erotic content"
+            - "kissing"
+            - "intimate scene"
+            - "sexual content"
+
+# Video Processing Configuration
+video:
+  extraction:
+    fps: 2  # Frames per second to analyze (lower = faster, less detail)
+    max_width: 1280  # Max width; resizes larger videos
+
+# Audio Processing Configuration (optional)
+audio:
+  # Enable audio extraction and analysis
+  enabled: true
+  extraction:
+    sample_rate: 16000  # Audio sample rate in Hz
+
+  # Optional: Audio detection
+  detection:
+    enabled: false
+    # Audio detectors can be added here
+    detectors: []
+
+  # Optional: Audio remediation
+  remediation:
+    enabled: false
+    # Audio remediation would be configured here
+
+# Output Configuration
+output:
+  format: "json"  # Output format (json, jsonl, etc.)
+  include_frames: false  # Include frame data in output
+  include_metadata: true  # Include video metadata

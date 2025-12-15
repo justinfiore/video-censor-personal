@@ -53,7 +53,14 @@ def main() -> int:
         if args.download_models:
             try:
                 logger.info("Model auto-download enabled")
-                # Wrap dict config in Config object for ModelManager
+                
+                # Download detector models (CLIP, LLaVA, etc.)
+                from video_censor_personal.detection import DetectionPipeline
+                detection_pipeline = DetectionPipeline(config_dict, lazy_init=True)
+                detection_pipeline.download_models()
+                detection_pipeline.cleanup()
+                
+                # Also handle external model sources if configured
                 config_obj = Config()
                 
                 # Parse models section from config_dict
@@ -79,18 +86,18 @@ def main() -> int:
                         auto_download=models_data.get("auto_download", False),
                     )
 
-                manager = ModelManager(config_obj)
-                results = manager.verify_models()
-                
-                # Check if any required models failed
-                failed_required = [
-                    name for name, success in results.items() if not success
-                ]
-                if failed_required:
-                    logger.error(
-                        f"Required models failed to download: {', '.join(failed_required)}"
-                    )
-                    return 1
+                    manager = ModelManager(config_obj)
+                    results = manager.verify_models()
+                    
+                    # Check if any required models failed
+                    failed_required = [
+                        name for name, success in results.items() if not success
+                    ]
+                    if failed_required:
+                        logger.error(
+                            f"Required models failed to download: {', '.join(failed_required)}"
+                        )
+                        return 1
                     
                 logger.info("Model verification complete")
                 

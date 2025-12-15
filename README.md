@@ -121,7 +121,60 @@ Video Censor Personal uses local AI models for analysis. Download and configure 
 
 #### LLaVA (Recommended)
 
-LLaVA is a vision-language model that can analyze images and perform content classification.
+LLaVA is a vision-language model that can analyze images and perform content classification with detailed reasoning.
+
+#### CLIP (Lightweight Alternative)
+
+CLIP is a lightweight, efficient model for content classification via text prompts. Use CLIP for faster inference and lower memory usage.
+
+**CLIP Advantages:**
+- 5-10x faster than LLaVA
+- Uses ~2 GB memory vs 7+ GB for LLaVA
+- Simple configuration with text prompts
+- Ideal for edge devices and real-time processing
+
+**CLIP Disadvantages:**
+- No detailed reasoning about detections
+- Relies on prompt quality for accuracy
+
+**When to use CLIP:**
+- Resource-constrained environments
+- Need real-time or near-real-time processing
+- Have well-defined content categories
+
+**When to use LLaVA:**
+- Need detailed explanation of detections
+- Want automatic discovery of content types
+- Have complex content to classify
+
+### Download CLIP Model (Optional)
+
+Choose one model variant:
+
+**ViT-Base (Fast, Recommended)** - 600 MB, suitable for most cases
+```bash
+python -c "
+from transformers import CLIPModel, CLIPProcessor
+print('Downloading CLIP ViT-Base model...')
+model = CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
+processor = CLIPProcessor.from_pretrained('openai/clip-vit-base-patch32')
+print('✓ CLIP model downloaded successfully')
+"
+```
+
+**ViT-Large (More Accurate)** - 900 MB, better accuracy but slower
+```bash
+python -c "
+from transformers import CLIPModel, CLIPProcessor
+print('Downloading CLIP ViT-Large model...')
+model = CLIPModel.from_pretrained('openai/clip-vit-large-patch14')
+processor = CLIPProcessor.from_pretrained('openai/clip-vit-large-patch14')
+print('✓ CLIP model downloaded successfully')
+"
+```
+
+**Configuration Example:**
+See `video-censor-clip-detector.yaml.example` for a complete CLIP configuration with text prompts.
 
 ### Download LLaVA 1.5 (7B - 4GB)
 

@@ -260,6 +260,50 @@ class DetectionPipeline:
 
             self._detector_configs.append(detector_config)
 
+    def download_models(self) -> None:
+        """Download all required detector models before initialization.
+
+        Calls static download_model() method on each detector class that supports it.
+        Logs progress and handles errors gracefully (skips failed models, continues).
+        """
+        logger.info("Downloading detector models...")
+
+        for detector_config in self._detector_configs:
+            detector_type = detector_config.get("type")
+            detector_class = self._registry.get(detector_type)
+
+            if not detector_class:
+                logger.warning(f"Unknown detector type: {detector_type}")
+                continue
+
+            # Check if detector has static download_model method
+            if not hasattr(detector_class, "download_model"):
+                logger.debug(f"Detector type '{detector_type}' does not support model download")
+                continue
+
+            try:
+                # Call static download_model with detector-specific config
+                model_name = detector_config.get("model_name")
+                model_path = detector_config.get("model_path")
+
+                if model_name:
+                    logger.info(f"  Downloading {detector_type} model '{model_name}'...")
+                    detector_class.download_model(model_name, model_path)
+                    logger.info(f"  ✓ {model_name} ready")
+                else:
+                    logger.debug(
+                        f"Detector '{detector_config.get('name', detector_type)}' "
+                        f"has no model_name, skipping download"
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to download model for detector '{detector_type}': {e}\n"
+                    f"Continuing with remaining models..."
+                )
+
+        logger.info("Model download complete")
+
     def _initialize_all_detectors(self) -> None:
         """Initialize all detectors at once."""
         for detector_config in self._detector_configs:

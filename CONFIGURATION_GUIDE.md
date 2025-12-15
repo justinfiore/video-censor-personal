@@ -10,6 +10,7 @@ This document provides a comprehensive reference for configuring Video Censor Pe
 - [Detections Section](#detections-section)
 - [Detectors Section](#detectors-section)
   - [LLaVA Detector](#llava-detector)
+  - [CLIP Detector](#clip-detector)
   - [Speech Profanity Detector](#speech-profanity-detector)
   - [Audio Classification Detector](#audio-classification-detector)
   - [Mock Detector](#mock-detector)
@@ -138,7 +139,7 @@ All detectors share these fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | string | Yes | Detector type (`llava`, `speech-profanity`, `audio-classification`, `mock`) |
+| `type` | string | Yes | Detector type (`llava`, `clip`, `speech-profanity`, `audio-classification`, `mock`) |
 | `name` | string | Yes | Unique identifier for this detector instance |
 | `categories` | list | Yes | Content categories this detector analyzes |
 | `enabled` | boolean | No | Enable/disable detector (default: `true`) |
@@ -173,6 +174,68 @@ Vision-language detector using LLaVA model for visual content analysis.
 **Model Variants:**
 - `liuhaotian/llava-v1.5-7b` - 7B parameter model (~14 GB VRAM)
 - `liuhaotian/llava-v1.5-13b` - 13B parameter model (~26 GB VRAM)
+
+---
+
+### CLIP Detector
+
+Lightweight vision-language detector using OpenAI's CLIP model for efficient visual content classification via text prompt matching.
+
+```yaml
+- type: "clip"
+  name: "clip-detector"
+  model_name: "openai/clip-vit-base-patch32"
+  device: null
+  categories:
+    - "Nudity"
+    - "Violence"
+    - "Sexual Theme"
+  prompts:
+    - category: "Nudity"
+      text: ["nude person", "naked body", "exposed genitals"]
+    - category: "Violence"
+      text: ["fight", "blood", "injury", "weapon"]
+    - category: "Sexual Theme"
+      text: ["sexual activity", "erotic content"]
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `model_name` | string | No | `"openai/clip-vit-base-patch32"` | HuggingFace model identifier |
+| `device` | string | No | `null` | Device override (auto-detect if null) |
+| `prompts` | list | Yes | - | List of category prompt definitions |
+
+**Prompts Configuration:**
+
+Each prompt definition requires:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | string | Yes | Category name (must match a category in `categories` list) |
+| `text` | list | Yes | List of candidate text phrases for this category (minimum 1) |
+
+**Model Variants:**
+- `openai/clip-vit-base-patch32` - Base model (~350 MB, ~1-2 GB VRAM)
+- `openai/clip-vit-large-patch14` - Large model (~700 MB, ~2-3 GB VRAM)
+- Other HuggingFace CLIP variants supported
+
+**Prompt Engineering Tips:**
+
+- Use 2-5 candidate phrases per category for better coverage
+- Be specific with descriptions (e.g., "nude person" rather than just "nude")
+- Include common variations to handle edge cases
+- Avoid negations (e.g., don't use "not violent")
+- Test prompts with sample frames to validate detection accuracy
+
+**CLIP vs LLaVA:**
+
+| Aspect | CLIP | LLaVA |
+|--------|------|-------|
+| Speed | Fast (per-frame suitable) | Slower (requires reasoning) |
+| Memory | Lower (~2-3 GB) | Higher (~14+ GB) |
+| Accuracy | Prompt-dependent | Comprehensive visual understanding |
+| Config | Text prompts inline | Prompt file reference |
+| Use Case | Quick, efficient classification | Detailed visual analysis |
 
 ---
 
@@ -462,16 +525,22 @@ detections:
 
 # Detector implementations
 detectors:
-  # Visual detection with LLaVA
-  - type: "llava"
-    name: "llava-primary"
-    model_name: "liuhaotian/llava-v1.5-7b"
-    prompt_file: "./prompts/llava-detector.txt"
+  # Visual detection with CLIP
+  - type: "clip"
+    name: "clip-detector"
+    model_name: "openai/clip-vit-base-patch32"
     device: null
     categories:
       - "Nudity"
       - "Violence"
       - "Sexual Theme"
+    prompts:
+      - category: "Nudity"
+        text: ["nude person", "naked body", "exposed genitals"]
+      - category: "Violence"
+        text: ["fight", "blood", "injury", "weapon"]
+      - category: "Sexual Theme"
+        text: ["sexual activity", "erotic content"]
   
   # Speech profanity detection
   - type: "speech-profanity"

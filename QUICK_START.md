@@ -114,7 +114,53 @@ Models are used for content analysis. Download them before your first run.
 pip install transformers torch torchvision torchaudio
 ```
 
-### Download LLaVA Model (Recommended)
+### Download CLIP Model (Optional, Lightweight Alternative)
+
+If you want a faster, more memory-efficient detector, use CLIP instead of LLaVA.
+
+#### Method 1: Automatic Download with --download-models Flag
+
+```bash
+# First, create a config file that uses CLIP (see example-clip-detector.yaml.example)
+# Then run with auto-download:
+python -m video_censor --download-models --config video-censor-clip-detector.yaml --input dummy.mp4
+```
+
+#### Method 2: Manual Python Download
+
+```bash
+python -c "
+from transformers import CLIPModel, CLIPProcessor
+print('Downloading CLIP ViT-Base model... this may take 2-3 minutes (~600 MB)')
+model_name = 'openai/clip-vit-base-patch32'
+processor = CLIPProcessor.from_pretrained(model_name)
+model = CLIPModel.from_pretrained(model_name)
+print('✓ CLIP model downloaded and cached successfully')
+print('Model location: ~/.cache/huggingface/hub/')
+"
+```
+
+**CLIP Model Sizes:**
+- **ViT-Base** (`openai/clip-vit-base-patch32`): ~600 MB, faster, good for real-time use
+- **ViT-Large** (`openai/clip-vit-large-patch14`): ~900 MB, more accurate, slower
+
+**Advantages over LLaVA:**
+- Much faster inference (CLIP is 5-10x faster)
+- Lower memory usage (~2 GB vs 7+ GB for LLaVA)
+- No model generation phase; direct classification
+- Customizable prompts per category
+
+**When to use CLIP:**
+- Resource-constrained environments (edge devices, low-RAM servers)
+- Need fast real-time processing
+- Have simple, well-defined categories with clear text descriptions
+
+**When to use LLaVA:**
+- Need detailed reasoning/explanation of detections
+- Want automatic discovery of content types
+- Have more complex or ambiguous content to detect
+
+### Download LLaVA Model (Recommended for Detailed Analysis)
 
 Choose one of the following methods to download the 7B model (~4 GB download, ~7 GB unpacked):
 
