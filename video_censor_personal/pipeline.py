@@ -483,70 +483,106 @@ class AnalysisPipeline:
             for label, count in sorted(label_counts.items()):
                 self.debug_output.detail(f"  {label}", count)
 
-            # Apply audio remediation if enabled
-            # Use original audio (at original sample rate) for remediation
-            remediation_config = self.config.get("audio", {}).get("remediation", {})
-            if remediation_config.get("enabled", False) and audio_data_original is not None:
-                self.debug_output.subsection("Audio Remediation")
-                self.debug_output.step("Applying audio remediation...")
-                self.debug_output.detail("Method", remediation_config.get("method", "silence"))
-                self.debug_output.detail("Sample rate", f"{audio_sample_rate_original or 48000} Hz")
-                
-                try:
-                    from video_censor_personal.audio_remediator import AudioRemediator
-                    
-                    remediator = AudioRemediator(remediation_config)
-                    remediated_audio = remediator.remediate(
-                        audio_data_original,
-                        audio_sample_rate_original or 48000,
-                        all_results
-                    )
-                    
-                    # Write remediated audio at original sample rate
-                    output_audio_path = remediation_config.get(
-                        "output_path",
-                        "/tmp/remediated_audio.wav"
-                    )
-                    remediator.write_audio(
-                        remediated_audio,
-                        audio_sample_rate_original or 48000,
-                        output_audio_path
-                    )
-                    self.remediated_audio_path = output_audio_path
-                    logger.info(
-                        f"Remediated audio saved to: {output_audio_path} "
-                        f"({audio_sample_rate_original or 48000} Hz)"
-                    )
-                    self.debug_output.step(f"Audio saved to: {output_audio_path}")
-                    
-                except Exception as e:
-                    logger.error(f"Audio remediation failed: {e}", exc_info=True)
-                    self.debug_output.info(f"ERROR: Audio remediation failed: {e}")
-                    raise
-
-            # Mux remediated audio into video if output path specified
-            if self.remediated_audio_path and self.output_video_path:
-                self.debug_output.subsection("Video Muxing")
-                self.debug_output.step("Muxing remediated audio into video...")
-                
-                try:
-                    from video_censor_personal.video_muxer import VideoMuxer
-                    
-                    muxer = VideoMuxer(str(self.video_path), self.remediated_audio_path)
-                    muxer.mux_video(self.output_video_path)
-                    logger.info(f"Output video saved to: {self.output_video_path}")
-                    self.debug_output.step(f"Output video saved to: {self.output_video_path}")
-                    
-                except Exception as e:
-                    logger.error(f"Video muxing failed: {e}", exc_info=True)
-                    self.debug_output.info(f"ERROR: Video muxing failed: {e}")
-                    raise
-
             return all_results
 
         finally:
-            # Cleanup
+            # Cleanup detectors BEFORE post-processing to free model memory
+            # This ensures large models (CLIP, LLaVA) are unloaded before audio remediation
+            # and video muxing, which don't require ML models
+            logger.debug("Cleaning up detection models before post-processing")
             self.cleanup()
+        
+        # Post-processing happens AFTER models are unloaded
+        # This includes audio remediation and video muxing (I/O operations that don't need models)
+        try:
+            self._apply_audio_remediation(
+                audio_data_original,
+                audio_sample_rate_original,
+                all_results
+            )
+            self._mux_remediated_audio()
+        except Exception as e:
+            logger.error(f"Post-processing failed: {e}", exc_info=True)
+            self.debug_output.info(f"ERROR: Post-processing failed: {e}")
+            raise
+
+    def _apply_audio_remediation(
+        self,
+        audio_data_original: Optional[Any],
+        audio_sample_rate_original: Optional[int],
+        detections: List[DetectionResult],
+    ) -> None:
+        """Apply audio remediation if enabled and audio data is available.
+
+        This is called AFTER detection models are unloaded to minimize memory usage.
+
+        Args:
+            audio_data_original: Original audio data at native sample rate.
+            audio_sample_rate_original: Original sample rate of audio.
+            detections: List of detection results to use for remediation.
+        """
+        # Apply audio remediation if enabled
+        remediation_config = self.config.get("audio", {}).get("remediation", {})
+        if remediation_config.get("enabled", False) and audio_data_original is not None:
+            self.debug_output.subsection("Audio Remediation")
+            self.debug_output.step("Applying audio remediation...")
+            self.debug_output.detail("Method", remediation_config.get("method", "silence"))
+            self.debug_output.detail("Sample rate", f"{audio_sample_rate_original or 48000} Hz")
+            
+            try:
+                from video_censor_personal.audio_remediator import AudioRemediator
+                
+                remediator = AudioRemediator(remediation_config)
+                remediated_audio = remediator.remediate(
+                    audio_data_original,
+                    audio_sample_rate_original or 48000,
+                    detections
+                )
+                
+                # Write remediated audio at original sample rate
+                output_audio_path = remediation_config.get(
+                    "output_path",
+                    "/tmp/remediated_audio.wav"
+                )
+                remediator.write_audio(
+                    remediated_audio,
+                    audio_sample_rate_original or 48000,
+                    output_audio_path
+                )
+                self.remediated_audio_path = output_audio_path
+                logger.info(
+                    f"Remediated audio saved to: {output_audio_path} "
+                    f"({audio_sample_rate_original or 48000} Hz)"
+                )
+                self.debug_output.step(f"Audio saved to: {output_audio_path}")
+                
+            except Exception as e:
+                logger.error(f"Audio remediation failed: {e}", exc_info=True)
+                self.debug_output.info(f"ERROR: Audio remediation failed: {e}")
+                raise
+
+    def _mux_remediated_audio(self) -> None:
+        """Mux remediated audio into video if enabled.
+
+        This is called AFTER detection models are unloaded to minimize memory usage.
+        """
+        # Mux remediated audio into video if output path specified
+        if self.remediated_audio_path and self.output_video_path:
+            self.debug_output.subsection("Video Muxing")
+            self.debug_output.step("Muxing remediated audio into video...")
+            
+            try:
+                from video_censor_personal.video_muxer import VideoMuxer
+                
+                muxer = VideoMuxer(str(self.video_path), self.remediated_audio_path)
+                muxer.mux_video(self.output_video_path)
+                logger.info(f"Output video saved to: {self.output_video_path}")
+                self.debug_output.step(f"Output video saved to: {self.output_video_path}")
+                
+            except Exception as e:
+                logger.error(f"Video muxing failed: {e}", exc_info=True)
+                self.debug_output.info(f"ERROR: Video muxing failed: {e}")
+                raise
 
     def cleanup(self) -> None:
         """Clean up pipeline resources (extractor, detectors).
