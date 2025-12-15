@@ -7,6 +7,7 @@ merging with existing chapters if present.
 import logging
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -404,8 +405,10 @@ def write_skip_chapters_to_mp4(
         
         # Use ffmpeg to copy video with new metadata
         logger.debug("Starting ffmpeg metadata write (codec copy mode)...")
+        start_time = time.time()
         try:
-            subprocess.run(
+            logger.info(f"ffmpeg command: ffmpeg -i {input_file} -i {metadata_path} -map_metadata 1 -c copy {output_file}")
+            result = subprocess.run(
                 [
                     "ffmpeg",
                     "-i",
@@ -422,7 +425,8 @@ def write_skip_chapters_to_mp4(
                 capture_output=True,
                 timeout=600,  # Increased from 300 to 600 seconds (10 minutes) for very large files
             )
-            logger.info(f"Video with skip chapters written to {output_path}")
+            elapsed = time.time() - start_time
+            logger.info(f"Video with skip chapters written to {output_path} (took {elapsed:.1f}s)")
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode() if e.stderr else str(e)
             logger.error(f"ffmpeg error: {error_msg}")
