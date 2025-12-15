@@ -448,3 +448,8 @@ def write_skip_chapters_to_mp4(
     logger.info(
         f"Successfully wrote {len(skip_chapters)} skip chapters to {output_path}"
     )
+    logger.info(
+        "Note: Chapter markers are written using FFMETADATA format. "
+        "Full chapter support may vary by media player and container format. "
+        "For best compatibility with chapter navigation, consider using MKV format."
+    )
