@@ -77,6 +77,47 @@ def _extract_chapters_from_video(input_path: Path) -> Optional[str]:
         raise VideoMetadataError(f"Failed to extract chapters from {input_path}: {e}") from e
 
 
+def _parse_timestamp_to_seconds(timestamp_str: str) -> float:
+    """Parse timestamp from various formats to seconds.
+    
+    Handles:
+    - Milliseconds: "5000" → 5.0
+    - HH:MM:SS format: "00:00:05" → 5.0
+    - HH:MM:SS.milliseconds: "00:00:05.500" → 5.5
+    
+    Args:
+        timestamp_str: Timestamp string to parse.
+    
+    Returns:
+        Time in seconds as float.
+    
+    Raises:
+        ValueError: If timestamp format is not recognized.
+    """
+    timestamp_str = timestamp_str.strip()
+    
+    # Try milliseconds format first
+    try:
+        return int(timestamp_str) / 1000.0
+    except ValueError:
+        pass
+    
+    # Try HH:MM:SS or HH:MM:SS.milliseconds format
+    if ":" in timestamp_str:
+        parts = timestamp_str.split(":")
+        if len(parts) == 3:
+            try:
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                # Handle seconds with decimal point
+                seconds = float(parts[2])
+                return hours * 3600 + minutes * 60 + seconds
+            except ValueError:
+                pass
+    
+    raise ValueError(f"Could not parse timestamp: {timestamp_str}")
+
+
 def _parse_ffmetadata_chapters(ffmetadata_str: str) -> List[Dict[str, Any]]:
     """Parse FFMETADATA format to extract existing chapters.
 
@@ -92,30 +133,39 @@ def _parse_ffmetadata_chapters(ffmetadata_str: str) -> List[Dict[str, Any]]:
     for line in ffmetadata_str.strip().split("\n"):
         line = line.strip()
         
+        if not line or line.startswith(";"):
+            # Skip empty lines and comments
+            continue
+        
         if line.startswith("[CHAPTER"):
             # New chapter section: [CHAPTER01]
-            if current_chapter:
+            if current_chapter is not None and "start" in current_chapter:
                 chapters.append(current_chapter)
             current_chapter = {}
         elif line.startswith("TIMEBASE="):
             # Extract timebase if needed (for now, we'll use milliseconds)
-            pass
+            if current_chapter is not None:
+                current_chapter["timebase"] = line.split("=", 1)[1]
         elif line.startswith("START="):
             if current_chapter is not None:
-                # Convert to seconds
-                start_ms = int(line.split("=", 1)[1])
-                current_chapter["start"] = start_ms / 1000.0
+                try:
+                    timestamp_val = line.split("=", 1)[1]
+                    current_chapter["start"] = _parse_timestamp_to_seconds(timestamp_val)
+                except ValueError as e:
+                    logger.warning(f"Failed to parse START timestamp: {e}")
         elif line.startswith("END="):
             if current_chapter is not None:
-                # Convert to seconds
-                end_ms = int(line.split("=", 1)[1])
-                current_chapter["end"] = end_ms / 1000.0
+                try:
+                    timestamp_val = line.split("=", 1)[1]
+                    current_chapter["end"] = _parse_timestamp_to_seconds(timestamp_val)
+                except ValueError as e:
+                    logger.warning(f"Failed to parse END timestamp: {e}")
         elif line.startswith("title="):
             if current_chapter is not None:
                 current_chapter["title"] = line.split("=", 1)[1]
     
     # Don't forget the last chapter
-    if current_chapter:
+    if current_chapter is not None and "start" in current_chapter:
         chapters.append(current_chapter)
     
     return chapters

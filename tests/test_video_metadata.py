@@ -12,6 +12,7 @@ from video_censor_personal.config import validate_config, is_skip_chapters_enabl
 from video_censor_personal.video_metadata_writer import (
     VideoMetadataError,
     _format_chapter_name,
+    _parse_timestamp_to_seconds,
     _parse_ffmetadata_chapters,
     _build_skip_chapters,
     _merge_chapters,
@@ -251,6 +252,40 @@ class TestChapterFormatting:
         assert result == "skip: Nudity [55%]" or result == "skip: Nudity [54%]"  # rounding
 
 
+class TestTimestampParsing:
+    """Test timestamp parsing from various formats."""
+
+    def test_parse_milliseconds(self):
+        """Parse milliseconds format."""
+        result = _parse_timestamp_to_seconds("5000")
+        assert result == 5.0
+
+    def test_parse_hms_format(self):
+        """Parse HH:MM:SS format."""
+        result = _parse_timestamp_to_seconds("00:00:05")
+        assert result == 5.0
+
+    def test_parse_hms_with_minutes(self):
+        """Parse HH:MM:SS with minutes."""
+        result = _parse_timestamp_to_seconds("00:02:07")
+        assert result == 127.0
+
+    def test_parse_hms_with_hours(self):
+        """Parse HH:MM:SS with hours."""
+        result = _parse_timestamp_to_seconds("01:02:07")
+        assert result == 3727.0
+
+    def test_parse_hms_with_decimals(self):
+        """Parse HH:MM:SS.milliseconds format."""
+        result = _parse_timestamp_to_seconds("00:00:05.500")
+        assert result == 5.5
+
+    def test_parse_invalid_timestamp(self):
+        """Invalid timestamp raises ValueError."""
+        with pytest.raises(ValueError):
+            _parse_timestamp_to_seconds("invalid")
+
+
 class TestChapterParsing:
     """Test FFMETADATA chapter parsing."""
 
@@ -259,12 +294,26 @@ class TestChapterParsing:
         result = _parse_ffmetadata_chapters("")
         assert result == []
 
-    def test_parse_single_chapter(self):
-        """Parse single chapter from FFMETADATA."""
+    def test_parse_single_chapter_milliseconds(self):
+        """Parse single chapter with milliseconds from FFMETADATA."""
         ffmetadata = """[CHAPTER01]
 TIMEBASE=1/1000
 START=5000
 END=10000
+title=Chapter 1
+"""
+        result = _parse_ffmetadata_chapters(ffmetadata)
+        assert len(result) == 1
+        assert result[0]["start"] == 5.0
+        assert result[0]["end"] == 10.0
+        assert result[0]["title"] == "Chapter 1"
+
+    def test_parse_single_chapter_hms(self):
+        """Parse single chapter with HH:MM:SS format from FFMETADATA."""
+        ffmetadata = """[CHAPTER01]
+TIMEBASE=1/1000
+START=00:00:05
+END=00:00:10
 title=Chapter 1
 """
         result = _parse_ffmetadata_chapters(ffmetadata)
@@ -291,6 +340,23 @@ title=Chapter 2
         assert len(result) == 2
         assert result[0]["title"] == "Chapter 1"
         assert result[1]["title"] == "Chapter 2"
+
+    def test_parse_skips_incomplete_chapters(self):
+        """Parser skips chapters without start time."""
+        ffmetadata = """[CHAPTER01]
+TIMEBASE=1/1000
+title=Chapter 1 (no START)
+
+[CHAPTER02]
+TIMEBASE=1/1000
+START=5000
+END=10000
+title=Chapter 2
+"""
+        result = _parse_ffmetadata_chapters(ffmetadata)
+        # Only Chapter 2 should be included (Chapter 1 has no START)
+        assert len(result) == 1
+        assert result[0]["title"] == "Chapter 2"
 
 
 class TestSkipChapterBuilding:
