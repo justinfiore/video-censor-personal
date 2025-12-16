@@ -33,15 +33,15 @@
 
 ## 5. Allow Override Integration
 
-- [ ] 5.1 Filter segments by `"allow": true` before remediation
-- [ ] 5.2 Ensure allow takes precedence over segment mode
-- [ ] 5.3 Write unit tests for allow override filtering
+- [x] 5.1 Filter segments by `"allow": true` before remediation
+- [x] 5.2 Ensure allow takes precedence over segment mode
+- [x] 5.3 Write unit tests for allow override filtering
 
 ## 6. Combined Audio + Video Remediation
 
-- [ ] 6.1 Merge audio and video remediation into single ffmpeg command
-- [ ] 6.2 Handle different categories for audio vs video
-- [ ] 6.3 Write integration test for combined remediation
+- [x] 6.1 Merge audio and video remediation into single ffmpeg command
+- [x] 6.2 Handle different categories for audio vs video
+- [x] 6.3 Write integration test for combined remediation
 
 ## 7. Error Handling & Edge Cases
 

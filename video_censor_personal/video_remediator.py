@@ -437,3 +437,54 @@ class VideoRemediator:
             return "cut"
         
         return "blank"
+    
+    def filter_allowed_segments(
+        self,
+        segments: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Filter out segments marked as allowed.
+        
+        Segments with "allow": true should not be remediated.
+        
+        Args:
+            segments: List of segment dicts with optional allow field.
+        
+        Returns:
+            List of segments to remediate (those without allow=true).
+        """
+        filtered = []
+        for segment in segments:
+            if segment.get("allow", False):
+                logger.debug(
+                    f"Skipping allowed segment at {segment.get('start_time')}"
+                )
+                continue
+            filtered.append(segment)
+        
+        logger.info(f"Filtered {len(segments) - len(filtered)} allowed segments")
+        return filtered
+    
+    def group_segments_by_mode(
+        self,
+        segments: List[Dict[str, Any]],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Group segments by remediation mode.
+        
+        Useful for combined remediation where different modes may be used.
+        
+        Args:
+            segments: List of segment dicts.
+        
+        Returns:
+            Dict mapping mode ("blank" or "cut") to list of segments.
+        """
+        groups = {"blank": [], "cut": []}
+        
+        for segment in segments:
+            mode = self.resolve_segment_mode(segment)
+            groups[mode].append(segment)
+        
+        logger.debug(
+            f"Grouped segments: {len(groups['blank'])} blank, {len(groups['cut'])} cut"
+        )
+        return groups

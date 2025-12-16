@@ -601,3 +601,135 @@ class TestModeResolution:
         
         mode = remediator._resolve_category_mode(["UnknownCategory"])
         assert mode is None
+
+
+class TestAllowOverride:
+    """Test allow override filtering."""
+    
+    def test_filter_allowed_segments_none_allowed(self):
+        """Test filtering when no segments are allowed."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20"},
+            {"start_time": "30", "end_time": "40"}
+        ]
+        
+        filtered = remediator.filter_allowed_segments(segments)
+        assert len(filtered) == 2
+    
+    def test_filter_allowed_segments_all_allowed(self):
+        """Test filtering when all segments are allowed."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "allow": True},
+            {"start_time": "30", "end_time": "40", "allow": True}
+        ]
+        
+        filtered = remediator.filter_allowed_segments(segments)
+        assert len(filtered) == 0
+    
+    def test_filter_allowed_segments_mixed(self):
+        """Test filtering with mix of allowed and not allowed."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "allow": False},
+            {"start_time": "30", "end_time": "40", "allow": True},
+            {"start_time": "50", "end_time": "60"}  # No allow field
+        ]
+        
+        filtered = remediator.filter_allowed_segments(segments)
+        assert len(filtered) == 2
+        assert filtered[0]["start_time"] == "10"
+        assert filtered[1]["start_time"] == "50"
+    
+    def test_filter_allowed_segments_precedence_over_mode(self):
+        """Test that allow takes precedence over segment mode."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segments = [
+            {
+                "start_time": "10",
+                "end_time": "20",
+                "allow": True,
+                "video_remediation": "cut"  # Should be ignored due to allow
+            }
+        ]
+        
+        filtered = remediator.filter_allowed_segments(segments)
+        assert len(filtered) == 0
+
+
+class TestCombinedRemediation:
+    """Test combined audio and video remediation support."""
+    
+    def test_group_segments_by_mode_all_blank(self):
+        """Test grouping when all segments use blank mode."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20"},
+            {"start_time": "30", "end_time": "40"}
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        assert len(groups["blank"]) == 2
+        assert len(groups["cut"]) == 0
+    
+    def test_group_segments_by_mode_all_cut(self):
+        """Test grouping when all segments use cut mode."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20"},
+            {"start_time": "30", "end_time": "40"}
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        assert len(groups["blank"]) == 0
+        assert len(groups["cut"]) == 2
+    
+    def test_group_segments_by_mode_mixed(self):
+        """Test grouping with mixed modes."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "labels": ["Nudity"]},
+            {"start_time": "30", "end_time": "40", "labels": ["Violence"]},
+            {"start_time": "50", "end_time": "60", "video_remediation": "cut"}
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        assert len(groups["blank"]) == 1  # Violence segment
+        assert len(groups["cut"]) == 2    # Nudity + explicit cut
+    
+    def test_group_segments_by_mode_with_allow_filtered(self):
+        """Test grouping after filtering allowed segments."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "labels": ["Nudity"]},
+            {"start_time": "30", "end_time": "40", "labels": ["Violence"], "allow": True},
+            {"start_time": "50", "end_time": "60", "labels": ["Profanity"]}
+        ]
+        
+        # First filter allowed segments
+        filtered = remediator.filter_allowed_segments(segments)
+        
+        # Then group by mode
+        groups = remediator.group_segments_by_mode(filtered)
+        
+        assert len(groups["cut"]) == 1    # Nudity
+        assert len(groups["blank"]) == 1  # Profanity
+        # Violence was filtered out
