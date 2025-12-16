@@ -475,6 +475,39 @@ output:
 | `include_confidence` | boolean | No | `true` | Include detection confidence scores |
 | `pretty_print` | boolean | No | `true` | Format JSON with indentation |
 
+### Segment Allow Override
+
+Each segment in the output JSON supports an optional `allow` property for user remediation control:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `allow` | boolean | No | `false` | When `true`, segment is excluded from remediation |
+
+**Behavior:**
+- Segments with `"allow": true` are excluded from audio bleep/silence, chapter generation, and all remediation
+- Missing `allow` property is treated as `false` (backward compatible)
+- Original detection data is always preserved regardless of allow status
+
+**Use Case - False Positive Handling:**
+1. Run analysis to generate JSON output
+2. Review detected segments
+3. Set `"allow": true` on false positives
+4. Run remediation - only non-allowed segments are processed
+
+**CLI Flag:**
+
+Use `--allow-all-segments` during analysis to pre-mark all segments as allowed:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config config.yaml \
+  --output results.json \
+  --allow-all-segments
+```
+
+This is useful for "preview mode" where you want to analyze but not remediate until you've reviewed the detections. The flag has no effect during remediation phase (when using `--input-segments`).
+
 ---
 
 ## Video Section

@@ -84,6 +84,17 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--allow-all-segments",
+        action="store_true",
+        help=(
+            "During analysis phase, automatically mark all detected segments with 'allow: true' "
+            "in the output JSON. Useful for preview/test runs. "
+            "This flag only applies during analysis; it has no effect during remediation phase "
+            "(when using --input-segments to load JSON from a previous analysis)."
+        ),
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s 0.1.0",

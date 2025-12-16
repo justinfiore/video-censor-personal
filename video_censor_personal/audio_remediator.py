@@ -63,16 +63,19 @@ class AudioRemediator:
         audio_data: np.ndarray,
         sample_rate: int,
         detections: List[DetectionResult],
+        segments: Optional[List[Dict[str, Any]]] = None,
     ) -> np.ndarray:
         """Apply remediation to audio based on detections.
         
         Modifies audio in-place for specified detection categories.
         Handles overlapping detections and respects sample rate.
+        Respects the 'allow' flag in segments to skip remediation of allowed segments.
         
         Args:
             audio_data: Audio array (mono, float32).
             sample_rate: Sample rate in Hz (typically 16000).
             detections: List of DetectionResult with timecodes.
+            segments: Optional list of segment dicts with 'allow' property to override detection processing.
         
         Returns:
             Remediated audio array (same shape as input).
@@ -94,12 +97,36 @@ class AudioRemediator:
         else:
             num_samples, num_channels = remediated.shape
         
+        # Build a map of time ranges to segment allow status if segments provided
+        segment_allow_map: Dict[tuple, bool] = {}
+        if segments:
+            for segment in segments:
+                start = segment["start_time"]
+                end = segment["end_time"]
+                allow = segment.get("allow", False)
+                segment_allow_map[(start, end)] = allow
+        
         # Filter and apply remediation per detection
         remediated_count = 0
         for detection in detections:
             if detection.label not in self.categories:
                 logger.debug(
                     f"Skipping '{detection.label}' (not in remediation categories)"
+                )
+                continue
+            
+            # Check if detection is in an allowed segment
+            is_allowed = False
+            if segment_allow_map:
+                for (seg_start, seg_end), allow in segment_allow_map.items():
+                    # Check if detection overlaps with segment
+                    if detection.start_time < seg_end and detection.end_time > seg_start:
+                        is_allowed = allow
+                        break
+            
+            if is_allowed:
+                logger.debug(
+                    f"Skipping '{detection.label}' at {detection.start_time:.2f}s (marked as allowed)"
                 )
                 continue
             

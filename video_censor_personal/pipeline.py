@@ -665,6 +665,7 @@ class AnalysisRunner:
         config_path: str,
         output_video_path: Optional[str] = None,
         log_level: str = "INFO",
+        allow_all_segments: bool = False,
     ) -> None:
         """Initialize analysis runner.
 
@@ -674,12 +675,14 @@ class AnalysisRunner:
             config_path: Path to configuration file (for metadata).
             output_video_path: Optional path for output video with remediated audio.
             log_level: Logging level (INFO, DEBUG, TRACE).
+            allow_all_segments: If True, mark all detected segments with 'allow: true' in output.
         """
         self.video_path = video_path
         self.config = config
         self.config_path = config_path
         self.output_video_path = output_video_path
         self.log_level = log_level
+        self.allow_all_segments = allow_all_segments
         self.trace_enabled = log_level == "TRACE"
         self.debug_output = DebugOutput(enabled=self.trace_enabled)
 
@@ -727,6 +730,12 @@ class AnalysisRunner:
                 "segment_merge", {}
             ).get("merge_threshold", 2.0)
             merged_segments = merge_segments(detections, threshold=merge_threshold)
+
+            # Apply allow flag to all segments if requested
+            if self.allow_all_segments:
+                logger.info(f"Marking all {len(merged_segments)} detected segments as allowed")
+                for segment in merged_segments:
+                    segment["allow"] = True
 
             # Generate output
             output_dict = generate_json_output(

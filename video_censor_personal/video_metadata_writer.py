@@ -280,14 +280,23 @@ def _build_skip_chapters(
 
     Args:
         merged_segments: List of merged segment dictionaries from output.merge_segments().
-                        Each should have 'start_time', 'end_time', 'labels', and 'confidence'.
+                        Each should have 'start_time', 'end_time', 'labels', 'confidence', and optional 'allow' flag.
 
     Returns:
         List of skip chapter dictionaries with 'start', 'end', and 'title' keys.
+        Excludes segments marked with 'allow': True.
     """
     skip_chapters = []
     
     for segment in merged_segments:
+        # Skip segments marked as allowed
+        if segment.get("allow", False):
+            logger.debug(
+                f"Skipping chapter for segment at {segment['start_time']:.2f}s "
+                f"(marked as allowed)"
+            )
+            continue
+        
         chapter = {
             "start": segment["start_time"],
             "end": segment["end_time"],

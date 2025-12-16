@@ -548,8 +548,29 @@ python video_censor_personal.py \
 - `--input PATH` (required): Path to video file to analyze
 - `--output PATH` (optional): Path to output JSON file (default: `results.json`)
 - `--config PATH` (optional): Path to YAML configuration file
+- `--allow-all-segments`: Mark all detected segments as allowed (useful for preview/review mode)
 - `--verbose`: Enable debug-level logging for troubleshooting
 - `--help`: Show help message
+
+### Segment Allow Override
+
+The `allow` property enables you to mark false positives or intentionally skip specific segments from remediation without re-analyzing the video:
+
+1. **Analyze video** - Run detection to generate the JSON output
+2. **Review segments** - Inspect the detected segments in the output file
+3. **Mark allowed segments** - Set `"allow": true` on any segment you want to exclude from remediation
+4. **Run remediation** - Only segments with `allow: false` (or missing) will be processed
+
+Use `--allow-all-segments` during analysis to pre-mark all segments as allowed (preview mode):
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config config.yaml \
+  --output results.json \
+  --allow-all-segments
+```
+
+Then un-allow specific segments by editing the JSON and setting `"allow": false` before remediation.
 
 ### Output Format
 
@@ -571,6 +592,7 @@ Analysis results are saved as JSON with detected segments:
       "labels": ["Profanity", "Sexual Theme"],
       "description": "A character uses explicit language in a sexual context",
       "confidence": 0.92,
+      "allow": false,
       "detections": [
         {
           "label": "Profanity",

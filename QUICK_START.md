@@ -657,12 +657,73 @@ with VideoExtractor("path/to/video.mp4") as extractor:
     segment = extractor.extract_audio_segment(start_sec=10.0, end_sec=15.0)
 ```
 
+## Handling False Positives with Allow Override
+
+Sometimes the detection system flags content that isn't actually problematic (false positives). Instead of re-analyzing the entire video, you can use the **allow override** feature:
+
+### Workflow: Detect → Review → Override → Remediate
+
+#### Step 1: Analyze with Allow-All-Segments (Preview Mode)
+
+For testing or preview, mark all detected segments as allowed to preview output without applying remediation:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor.yaml \
+  --output results.json \
+  --allow-all-segments
+```
+
+This creates `results.json` with all segments marked `"allow": true`, preventing any remediation.
+
+#### Step 2: Manual Override in JSON
+
+For targeted adjustments:
+
+1. Run normal analysis (no flag):
+   ```bash
+   python video_censor_personal.py --input video.mp4 --config video-censor.yaml --output results.json
+   ```
+
+2. Review `results.json` and find false-positive segments
+
+3. Edit JSON to mark false positives as allowed:
+   ```json
+   {
+     "segments": [
+       {
+         "start_time": "00:05:30",
+         "end_time": "00:05:45",
+         "labels": ["Violence"],
+         "allow": true  // ← Change to true for false positive
+       },
+       {
+         "start_time": "00:10:15",
+         "end_time": "00:10:30",
+         "labels": ["Profanity"],
+         "allow": false  // ← Keep false to remediate
+       }
+     ]
+   }
+   ```
+
+4. Apply remediation using the modified JSON (requires `--input-segments` implementation)
+
+### Benefits
+
+- **No Re-analysis Needed**: Skip expensive re-processing of entire video
+- **Reversible**: Toggle `"allow"` flag without losing original detection data
+- **Selective Control**: Mark only false positives as allowed, remediate everything else
+- **Audit Trail**: Original detection scores preserved for reference
+
 ## Next Steps
 
 1. **Customize Detection Settings**: Adjust sensitivity levels in `video-censor.yaml`
-2. **Add Custom Detections**: Create custom detection categories
-3. **Batch Processing**: Create a script to analyze multiple videos
-4. **Integrate Results**: Use the JSON output in your own applications
+2. **Handle False Positives**: Use allow override when detection is too aggressive
+3. **Add Custom Detections**: Create custom detection categories
+4. **Batch Processing**: Create a script to analyze multiple videos
+5. **Integrate Results**: Use the JSON output in your own applications
 
 ## Getting Help
 
@@ -678,11 +739,14 @@ with VideoExtractor("path/to/video.mp4") as extractor:
 python video_censor_personal.py --input FILE --config FILE [--output FILE]
 
 # All optional arguments
---output FILE      # Output JSON file (default: results.json)
---config FILE      # Config file (default: ./video-censor.yaml)
---verbose          # Debug output
---help             # Show help
---version          # Show version
+--output FILE              # Output JSON file (default: results.json)
+--output-video FILE        # Save video with remediated audio / skip chapters
+--config FILE              # Config file (default: ./video-censor.yaml)
+--allow-all-segments       # Mark all detected segments as allowed (preview mode)
+--download-models          # Auto-download required models
+--log-level LEVEL          # Logging level: INFO, DEBUG, TRACE (default: INFO)
+--help                     # Show help
+--version                  # Show version
 ```
 
 ---

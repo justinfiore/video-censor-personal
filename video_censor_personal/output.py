@@ -119,6 +119,7 @@ def _build_merged_segment(detections: List[DetectionResult]) -> Dict[str, Any]:
         "confidence": avg_confidence,
         "detections": detections_array,
         "frame_data": frame_data,
+        "allow": False,  # Default to not allowed (will be remediated)
     }
 
 
@@ -187,6 +188,9 @@ def generate_json_output(
         # Add confidence if configured
         if config.get("output", {}).get("include_confidence", True):
             segment_dict["confidence"] = segment["confidence"]
+
+        # Add allow flag (always included)
+        segment_dict["allow"] = segment.get("allow", False)
 
         # Build detections array
         detections_array = []
