@@ -483,8 +483,6 @@ class AnalysisPipeline:
             for label, count in sorted(label_counts.items()):
                 self.debug_output.detail(f"  {label}", count)
 
-            return all_results
-
         finally:
             # Cleanup detectors BEFORE post-processing to free model memory
             # This ensures large models (CLIP, LLaVA) are unloaded before audio remediation
@@ -505,6 +503,8 @@ class AnalysisPipeline:
             logger.error(f"Post-processing failed: {e}", exc_info=True)
             self.debug_output.info(f"ERROR: Post-processing failed: {e}")
             raise
+
+        return all_results
 
     def _apply_audio_remediation(
         self,
@@ -565,6 +565,9 @@ class AnalysisPipeline:
         """Mux remediated audio into video if enabled.
 
         This is called AFTER detection models are unloaded to minimize memory usage.
+        
+        If output_video_path already exists (pre-created), uses that as the video source
+        to preserve any pre-applied modifications. Otherwise uses the original video.
         """
         # Mux remediated audio into video if output path specified
         if self.remediated_audio_path and self.output_video_path:
@@ -573,9 +576,36 @@ class AnalysisPipeline:
             
             try:
                 from video_censor_personal.video_muxer import VideoMuxer
+                from pathlib import Path
                 
-                muxer = VideoMuxer(str(self.video_path), self.remediated_audio_path)
-                muxer.mux_video(self.output_video_path)
+                # If output video file already exists (e.g., pre-created for skip chapters),
+                # use that as the video source to preserve any pre-applied modifications
+                video_source = self.output_video_path if Path(self.output_video_path).exists() else str(self.video_path)
+                
+                if video_source == self.output_video_path:
+                    logger.debug("Using pre-existing output video file as source for audio muxing")
+                else:
+                    logger.debug("Using original video as source for audio muxing")
+                
+                muxer = VideoMuxer(video_source, self.remediated_audio_path)
+                
+                # If we're using the pre-created output file, we need to use a temp file
+                # and then move it back to preserve the original
+                import tempfile
+                if video_source == self.output_video_path:
+                    # Create temporary output to avoid reading and writing same file
+                    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+                        temp_output = tmp.name
+                    
+                    muxer.mux_video(temp_output)
+                    
+                    # Replace the output file with the muxed version
+                    import shutil
+                    shutil.move(temp_output, self.output_video_path)
+                    logger.debug(f"Moved temp muxed video to: {self.output_video_path}")
+                else:
+                    muxer.mux_video(self.output_video_path)
+                
                 logger.info(f"Output video saved to: {self.output_video_path}")
                 self.debug_output.step(f"Output video saved to: {self.output_video_path}")
                 

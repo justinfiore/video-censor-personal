@@ -119,6 +119,16 @@ def main() -> int:
 
         # Run analysis pipeline
         try:
+            # If output video is requested with skip chapters enabled, pre-create it
+            # This ensures both audio remediation and skip chapters operate on the same file.
+            # This avoids the issue where audio remediation creates a new file that gets
+            # overwritten when skip chapters are applied.
+            if args.output_video and is_skip_chapters_enabled(config_dict):
+                logger.info(f"Pre-creating output video file from input: {args.output_video}")
+                import shutil
+                shutil.copy2(args.input, args.output_video)
+                logger.debug(f"Output video copied to: {args.output_video}")
+            
             runner = AnalysisRunner(
                 args.input,
                 config_dict,
@@ -133,24 +143,17 @@ def main() -> int:
                 try:
                     # Use raw merged segments (with numeric timestamps) instead of JSON formatted ones
                     merged_segments = output_dict.get("_raw_merged_segments", [])
-                    if merged_segments:
-                        logger.info(
-                            f"Writing skip chapters to output video: {args.output_video}"
-                        )
-                        write_skip_chapters(
-                            args.input,
-                            args.output_video,
-                            merged_segments,
-                        )
-                    else:
-                        logger.info(
-                            "No detection segments found. Copying video without new chapters."
-                        )
-                        write_skip_chapters(
-                            args.input,
-                            args.output_video,
-                            [],
-                        )
+                    
+                    # The output video file was pre-created before the pipeline ran
+                    # (and potentially modified by audio remediation).
+                    # Now add skip chapters to it.
+                    logger.info(f"Writing skip chapters to: {args.output_video}")
+                    
+                    write_skip_chapters(
+                        args.output_video,
+                        args.output_video,
+                        merged_segments,
+                    )
                 except VideoMetadataError as e:
                     logger.error(f"Failed to write skip chapters: {e}")
                     # Don't fail the entire pipeline, just log the warning
