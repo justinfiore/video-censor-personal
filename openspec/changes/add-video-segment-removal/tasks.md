@@ -52,16 +52,16 @@
 
 ## 8. Documentation
 
-- [ ] 8.1 Update README with video remediation section
-- [ ] 8.2 Add YAML config example file (video-censor-video-remediation.yaml.example)
-- [ ] 8.3 Update CONFIGURATION_GUIDE.md with video remediation section
-  - [ ] Add Video Remediation Configuration subsection under Video Section
-  - [ ] Document `remediation.video_editing` config options (enabled, mode, category_modes, blank_color)
-  - [ ] Document three-tier mode resolution (global → category → segment)
-  - [ ] Add examples for blank and cut modes
-- [ ] 8.4 Update QUICK_START.md with video remediation workflow
-  - [ ] Add "Video Remediation" section after Audio Remediation
-  - [ ] Document per-segment mode override in JSON editing workflow
-  - [ ] Add example CLI commands for video remediation
-- [ ] 8.5 Document `video_remediation` field in JSON output schema
-- [ ] 8.6 Document supported codecs and limitations
+- [x] 8.1 Update README with video remediation section
+- [x] 8.2 Add YAML config example file (video-censor-video-remediation.yaml.example)
+- [x] 8.3 Update CONFIGURATION_GUIDE.md with video remediation section
+  - [x] Add Video Remediation Configuration subsection under Video Section
+  - [x] Document `remediation.video_editing` config options (enabled, mode, category_modes, blank_color)
+  - [x] Document three-tier mode resolution (global → category → segment)
+  - [x] Add examples for blank and cut modes
+- [x] 8.4 Update QUICK_START.md with video remediation workflow
+  - [x] Add "Video Remediation" section after Audio Remediation
+  - [x] Document per-segment mode override in JSON editing workflow
+  - [x] Add example CLI commands for video remediation
+- [x] 8.5 Document `video_remediation` field in JSON output schema
+- [x] 8.6 Document supported codecs and limitations

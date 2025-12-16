@@ -796,6 +796,111 @@ python video_censor_personal.py \
 - **Test Different Settings**: Try bleep vs silence, adjust frequencies, etc.
 - **Preserve Analysis**: Keep original segments as source of truth
 
+## Video Remediation Workflow
+
+Visual content can be censored using either blank or cut modes. This provides control over how detected segments are handled in the output video.
+
+### Step 1: Configure Video Remediation
+
+Create or edit your config file (`video-censor-video-remediation.yaml`):
+
+```yaml
+remediation:
+  video_editing:
+    enabled: true
+    mode: "blank"         # Global default: "blank" or "cut"
+    blank_color: "#000000"  # Black
+    category_modes:
+      Nudity: "cut"       # Cut nudity entirely
+      Violence: "blank"   # Blank violence (preserves timing)
+```
+
+### Step 2: Run Analysis with Video Remediation
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-video-remediation.yaml \
+  --output results.json \
+  --output-video censored.mp4
+```
+
+This will:
+1. Detect segments (nudity, violence, etc.)
+2. Apply video remediation based on configuration
+3. Save censored video to `censored.mp4`
+4. Save detection results to `results.json`
+
+### Step 3: Per-Segment Mode Override
+
+After initial analysis, you can edit `results.json` to override the mode for specific segments:
+
+```json
+{
+  "segments": [
+    {
+      "start_time": "00:05:30",
+      "end_time": "00:05:45",
+      "labels": ["Nudity"],
+      "video_remediation": "blank",  // Override: blank instead of cut
+      "allow": false
+    },
+    {
+      "start_time": "00:10:15",
+      "end_time": "00:10:30",
+      "labels": ["Violence"],
+      "allow": true  // Skip remediation entirely for this segment
+    }
+  ]
+}
+```
+
+Then re-run remediation with the modified JSON:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments results.json \
+  --config video-censor-video-remediation.yaml \
+  --output-video censored-v2.mp4
+```
+
+### Remediation Modes
+
+**Blank Mode** (preserves timing):
+- Replaces video with solid color
+- Audio continues to play
+- Useful when context/timing is important
+
+**Cut Mode** (removes content):
+- Removes both video and audio
+- Creates shorter output video
+- Useful for permanent removal
+
+### Combining Audio and Video Remediation
+
+You can use both audio and video remediation together:
+
+```yaml
+remediation:
+  audio_editing:
+    enabled: true
+    mode: "bleep"
+    categories: ["Profanity"]
+  
+  video_editing:
+    enabled: true
+    mode: "blank"
+    category_modes:
+      Nudity: "cut"
+      Violence: "blank"
+```
+
+This configuration will:
+- Bleep profanity audio
+- Cut nudity video segments
+- Blank violence video (keep audio)
+
 ## Next Steps
 
 1. **Customize Detection Settings**: Adjust sensitivity levels in `video-censor.yaml`

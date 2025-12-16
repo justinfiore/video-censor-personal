@@ -17,6 +17,7 @@ The system detects:
 Output and Enhancement Options:
 - **JSON Detection Results** - Detailed analysis with confidence scores and timestamps
 - **Audio Remediation** - Automatically bleep or silence profanity
+- **Video Remediation** - Blank or cut visual content (blank mode preserves timing, cut mode removes segments)
 - **Skip Chapter Markers** - Add chapter markers to video files (MKV or MP4) for easy navigation to flagged segments in media players (VLC, Plex, Kodi, etc.)
 
 ## System Requirements
@@ -390,6 +391,42 @@ python video_censor_personal.py \
 ```
 
 See [AUDIO.md](AUDIO.md) for detailed audio setup and configuration.
+
+### Video Remediation
+
+Detected visual content can be censored by either blanking or cutting segments:
+
+- **Blank mode**: Replaces video with a solid color (black by default) while keeping audio
+- **Cut mode**: Removes both video and audio segments from the timeline entirely
+
+Video remediation supports:
+- **Global default mode**: Apply blank or cut to all detections
+- **Per-category modes**: Different remediation for different categories (e.g., cut nudity, blank violence)
+- **Per-segment overrides**: Manual control via JSON editing after detection
+
+When video remediation is enabled, use `--output-video` to specify the output file:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-video-remediation.yaml \
+  --output results.json \
+  --output-video censored_video.mp4
+```
+
+Example configuration:
+```yaml
+remediation:
+  video_editing:
+    enabled: true
+    mode: "blank"         # Global default
+    blank_color: "#000000"  # Black
+    category_modes:
+      Nudity: "cut"       # Cut nudity entirely
+      Violence: "blank"   # Blank violence (preserves timing)
+```
+
+See `video-censor-video-remediation.yaml.example` for a complete configuration template.
 
 ### Skip Chapter Markers
 

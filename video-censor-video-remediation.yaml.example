@@ -1,0 +1,45 @@
+# Example configuration for video remediation
+# This demonstrates both blank and cut modes for visual content censoring
+
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "clip-vit-base-patch32"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "clip-vit-base-patch32"
+
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  
+  segment_merge:
+    merge_threshold: 2.0
+  
+  max_workers: 4
+
+output:
+  format: "json"
+
+# Video remediation configuration
+remediation:
+  video_editing:
+    enabled: true
+    
+    # Global default mode: "blank" or "cut"
+    # - blank: Replace video with solid color (keeps audio)
+    # - cut: Remove segment entirely from timeline
+    mode: "blank"
+    
+    # Blank color (hex format)
+    blank_color: "#000000"  # Black
+    
+    # Per-category mode overrides
+    # These take precedence over the global default
+    category_modes:
+      Nudity: "cut"      # Always cut nudity segments
+      Violence: "blank"  # Blank violence (preserves timing)
