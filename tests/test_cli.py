@@ -136,6 +136,36 @@ class TestParseArgs:
         assert args.output == "../results/output.json"
 
 
+class TestInputSegmentsArgument:
+    """Test --input-segments argument parsing."""
+
+    def test_parser_has_input_segments_argument(self):
+        """Parser should have --input-segments argument."""
+        parser = create_parser()
+        args = parser.parse_args([
+            "--input", "video.mp4",
+            "--input-segments", "segments.json",
+        ])
+        assert args.input_segments == "segments.json"
+
+    def test_input_segments_is_optional(self):
+        """--input-segments should be optional."""
+        parser = create_parser()
+        args = parser.parse_args(["--input", "video.mp4"])
+        assert args.input_segments is None
+
+    def test_input_segments_with_output_video(self):
+        """--input-segments should work with --output-video."""
+        parser = create_parser()
+        args = parser.parse_args([
+            "--input", "video.mp4",
+            "--input-segments", "segments.json",
+            "--output-video", "output.mp4",
+        ])
+        assert args.input_segments == "segments.json"
+        assert args.output_video == "output.mp4"
+
+
 class TestParserHelpText:
     """Test that help text is clear and complete."""
 

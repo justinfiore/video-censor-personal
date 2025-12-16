@@ -95,6 +95,20 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--input-segments",
+        type=str,
+        required=False,
+        help=(
+            "Path to a segments JSON file from a previous analysis run. "
+            "When provided, skips all detection/analysis phases and uses the pre-existing "
+            "segments directly for remediation (audio, video, chapters). "
+            "Segments marked with 'allow: true' will be skipped during remediation. "
+            "Example: python video_censor_personal.py --input video.mp4 --input-segments results.json --output-video output.mp4"
+        ),
+        metavar="PATH",
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s 0.1.0",
@@ -159,6 +173,20 @@ def validate_cli_args(
     from video_censor_personal.config import is_skip_chapters_enabled
 
     logger = logging.getLogger(__name__)
+    
+    input_segments_path = getattr(args, 'input_segments', None)
+    
+    if input_segments_path:
+        segments_path = Path(input_segments_path)
+        if not segments_path.exists():
+            logger.error(f"Input segments file not found: {input_segments_path}")
+            sys.exit(1)
+        
+        if args.output != "results.json":
+            logger.warning(
+                f"--output '{args.output}' is ignored when using --input-segments. "
+                "JSON output is not generated in remediation-only mode."
+            )
     
     # Check if skip chapters is enabled
     skip_chapters_enabled = is_skip_chapters_enabled(config)

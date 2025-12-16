@@ -717,6 +717,85 @@ For targeted adjustments:
 - **Selective Control**: Mark only false positives as allowed, remediate everything else
 - **Audit Trail**: Original detection scores preserved for reference
 
+## Three-Phase Workflow: Analyze → Review → Remediate
+
+For iterative workflows where you want to analyze once and remediate multiple times with different settings, use the **three-phase workflow** with `--input-segments`:
+
+### Phase 1: Analyze (One Time)
+
+Run analysis and save segments to JSON:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor.yaml \
+  --output segments.json
+```
+
+This produces `segments.json` with all detected content.
+
+### Phase 2: Review & Edit
+
+Open `segments.json` and review detected segments. Mark false positives as allowed:
+
+```json
+{
+  "segments": [
+    {
+      "start_time": "00:05:30",
+      "start_time_seconds": 330.0,
+      "end_time": "00:05:45",
+      "end_time_seconds": 345.0,
+      "labels": ["Violence"],
+      "allow": true  // ← False positive, mark as allowed
+    },
+    {
+      "start_time": "00:10:15",
+      "start_time_seconds": 615.0,
+      "end_time": "00:10:30",
+      "end_time_seconds": 630.0,
+      "labels": ["Profanity"],
+      "allow": false  // ← Real issue, will be remediated
+    }
+  ]
+}
+```
+
+### Phase 3: Remediate (No Re-Analysis)
+
+Apply remediation using the edited segments file:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments segments.json \
+  --config video-censor.yaml \
+  --output-video output.mp4
+```
+
+This skips all detection phases and directly applies audio remediation and/or skip chapters based on the segments file.
+
+### Re-Remediate with Different Settings
+
+Change remediation settings in config (e.g., switch from silence to bleep) and re-run:
+
+```bash
+# Edit config to change remediation mode to bleep
+# Then re-run remediation without re-analyzing
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments segments.json \
+  --config video-censor-bleep.yaml \
+  --output-video output-bleep.mp4
+```
+
+### Benefits of Three-Phase Workflow
+
+- **Saves Time**: Skip expensive ML analysis when only adjusting remediation
+- **Iterative Refinement**: Edit allow flags and re-remediate without re-analyzing
+- **Test Different Settings**: Try bleep vs silence, adjust frequencies, etc.
+- **Preserve Analysis**: Keep original segments as source of truth
+
 ## Next Steps
 
 1. **Customize Detection Settings**: Adjust sensitivity levels in `video-censor.yaml`
@@ -742,11 +821,23 @@ python video_censor_personal.py --input FILE --config FILE [--output FILE]
 --output FILE              # Output JSON file (default: results.json)
 --output-video FILE        # Save video with remediated audio / skip chapters
 --config FILE              # Config file (default: ./video-censor.yaml)
+--input-segments FILE      # Load segments from JSON (skip analysis, remediation only)
 --allow-all-segments       # Mark all detected segments as allowed (preview mode)
 --download-models          # Auto-download required models
 --log-level LEVEL          # Logging level: INFO, DEBUG, TRACE (default: INFO)
 --help                     # Show help
 --version                  # Show version
+```
+
+### Remediation-Only Mode
+
+```bash
+# Skip analysis and apply remediation from existing segments file
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments segments.json \
+  --config video-censor.yaml \
+  --output-video output.mp4
 ```
 
 ---

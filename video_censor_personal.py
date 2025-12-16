@@ -9,7 +9,8 @@ from pathlib import Path
 from video_censor_personal.cli import parse_args, setup_logging, validate_cli_args
 from video_censor_personal.config import ConfigError, load_config, Config, is_skip_chapters_enabled
 from video_censor_personal.model_manager import ModelManager, ModelDownloadError
-from video_censor_personal.pipeline import AnalysisRunner
+from video_censor_personal.pipeline import AnalysisRunner, RemediationRunner
+from video_censor_personal.segments_loader import load_segments_from_json, SegmentsLoadError
 from video_censor_personal.video_metadata_writer import write_skip_chapters, VideoMetadataError
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,65 @@ def main() -> int:
 
 
 
-        # Run analysis pipeline
+        input_segments_path = getattr(args, 'input_segments', None)
+        
+        if input_segments_path:
+            # Remediation-only mode: load segments from JSON and apply remediation
+            try:
+                if args.allow_all_segments:
+                    logger.warning(
+                        "--allow-all-segments is ignored in remediation mode. "
+                        "Edit the segments JSON file to set 'allow: true' on segments."
+                    )
+                
+                # Pre-create output video if skip chapters enabled
+                if args.output_video and is_skip_chapters_enabled(config_dict):
+                    logger.info(f"Pre-creating output video file from input: {args.output_video}")
+                    import shutil
+                    shutil.copy2(args.input, args.output_video)
+                
+                runner = RemediationRunner(
+                    args.input,
+                    input_segments_path,
+                    config_dict,
+                    output_video_path=args.output_video,
+                    log_level=args.log_level,
+                )
+                output_dict = runner.run()
+                
+                # Write skip chapters to video if enabled
+                if is_skip_chapters_enabled(config_dict) and args.output_video:
+                    try:
+                        merged_segments = output_dict.get("_raw_merged_segments", [])
+                        logger.info(f"Writing skip chapters to: {args.output_video}")
+                        
+                        write_skip_chapters(
+                            args.output_video,
+                            args.output_video,
+                            merged_segments,
+                        )
+                    except VideoMetadataError as e:
+                        logger.error(f"Failed to write skip chapters: {e}")
+                        logger.warning(
+                            "Continuing despite chapter writing failure"
+                        )
+                
+                elapsed_time = time.perf_counter() - start_time
+                minutes, seconds = divmod(elapsed_time, 60)
+                if minutes >= 1:
+                    logger.info(f"Remediation complete in {int(minutes)}m {seconds:.1f}s")
+                else:
+                    logger.info(f"Remediation complete in {elapsed_time:.1f}s")
+                return 0
+
+            except SegmentsLoadError as e:
+                logger.error(f"Failed to load segments: {e}")
+                return 1
+            except Exception as e:
+                logger.error(f"Remediation failed: {e}", exc_info=True)
+                return 1
+        
+        # Standard analysis mode
         try:
             # If output video is requested with skip chapters enabled, pre-create it
             # This ensures both audio remediation and skip chapters operate on the same file.

@@ -13,6 +13,11 @@ from video_censor_personal.frame import DetectionResult
 from video_censor_personal.model_manager import ModelManager, ModelDownloadError
 from video_censor_personal.output import generate_json_output, merge_segments
 from video_censor_personal.progress import DebugOutput, VideoProgressBar
+from video_censor_personal.segments_loader import (
+    load_segments_from_json,
+    segments_to_detections,
+    SegmentsLoadError,
+)
 from video_censor_personal.video_extraction import VideoExtractor
 
 logger = logging.getLogger(__name__)
@@ -757,3 +762,197 @@ class AnalysisRunner:
 
             logger.info(f"Analysis complete. Output written to: {output_path}")
             return output_dict
+
+
+class RemediationRunner:
+    """Runner for remediation-only mode (no analysis).
+
+    Loads segments from a pre-existing JSON file and applies remediation
+    (audio, video, chapters) without running detection.
+    """
+
+    def __init__(
+        self,
+        video_path: str,
+        segments_path: str,
+        config: Dict[str, Any],
+        output_video_path: Optional[str] = None,
+        log_level: str = "INFO",
+    ) -> None:
+        """Initialize remediation runner.
+
+        Args:
+            video_path: Path to input video file.
+            segments_path: Path to segments JSON from previous analysis.
+            config: Configuration dictionary.
+            output_video_path: Path for output video with remediated audio.
+            log_level: Logging level (INFO, DEBUG, TRACE).
+        """
+        self.video_path = video_path
+        self.segments_path = segments_path
+        self.config = config
+        self.output_video_path = output_video_path
+        self.log_level = log_level
+        self.trace_enabled = log_level == "TRACE"
+        self.debug_output = DebugOutput(enabled=self.trace_enabled)
+
+    def run(self) -> Dict[str, Any]:
+        """Run remediation using loaded segments.
+
+        Returns:
+            Dictionary with loaded segments and metadata.
+
+        Raises:
+            SegmentsLoadError: If segments file is invalid.
+            Exception: If remediation fails.
+        """
+        logger.info(f"Running remediation-only mode")
+        logger.info(f"  Video: {self.video_path}")
+        logger.info(f"  Segments: {self.segments_path}")
+        if self.output_video_path:
+            logger.info(f"  Output video: {self.output_video_path}")
+
+        self.debug_output.section("Remediation-Only Mode")
+        self.debug_output.detail("Input video", self.video_path)
+        self.debug_output.detail("Segments file", self.segments_path)
+        self.debug_output.detail("Output video", self.output_video_path or "None")
+
+        extractor = VideoExtractor(str(self.video_path))
+        try:
+            video_duration = extractor.get_duration_seconds()
+        finally:
+            extractor.close()
+
+        loaded = load_segments_from_json(
+            self.segments_path,
+            video_path=self.video_path,
+            video_duration=video_duration,
+        )
+
+        segments = loaded["segments"]
+        metadata = loaded["metadata"]
+
+        logger.info(f"Loaded {len(segments)} segments from JSON")
+        self.debug_output.detail("Segments loaded", len(segments))
+
+        allowed_count = sum(1 for s in segments if s.get("allow", False))
+        if allowed_count > 0:
+            logger.info(f"  {allowed_count} segment(s) marked as allowed (will be skipped)")
+            self.debug_output.detail("Allowed segments", allowed_count)
+
+        detections = segments_to_detections(segments)
+
+        self._apply_remediation(detections, segments)
+
+        return {
+            "segments": segments,
+            "metadata": metadata,
+            "_raw_merged_segments": segments,
+        }
+
+    def _apply_remediation(
+        self,
+        detections: List[DetectionResult],
+        segments: List[Dict[str, Any]],
+    ) -> None:
+        """Apply audio remediation and mux video.
+
+        Args:
+            detections: Detection results for remediation.
+            segments: Original segments (for allow flag checking).
+        """
+        remediation_config = self.config.get("audio", {}).get("remediation", {})
+        if not remediation_config.get("enabled", False):
+            logger.info("Audio remediation is disabled in config")
+            if not self.output_video_path:
+                logger.warning("No output video path specified and remediation is disabled. Nothing to do.")
+                return
+
+        audio_data_original = None
+        audio_sample_rate_original = None
+        remediated_audio_path = None
+
+        if remediation_config.get("enabled", False):
+            self.debug_output.subsection("Audio Extraction")
+            extractor = VideoExtractor(str(self.video_path))
+            try:
+                audio_segment = extractor.extract_audio()
+                audio_data_original = audio_segment.data
+                audio_sample_rate_original = audio_segment.sample_rate
+                logger.debug(
+                    f"Extracted audio: {audio_segment.duration():.2f} seconds, "
+                    f"sample rate: {audio_sample_rate_original} Hz"
+                )
+            except Exception as e:
+                logger.error(f"Failed to extract audio: {e}")
+                raise
+            finally:
+                extractor.close()
+
+            if audio_data_original is not None:
+                import numpy as np
+                import soundfile as sf
+                import io
+
+                if isinstance(audio_data_original, bytes):
+                    audio_np, sr = sf.read(
+                        io.BytesIO(audio_data_original),
+                        dtype='float32'
+                    )
+                    audio_sample_rate_original = sr
+                else:
+                    audio_np = audio_data_original
+
+                audio_data_original = audio_np
+
+                self.debug_output.subsection("Audio Remediation")
+                self.debug_output.step("Applying audio remediation...")
+                self.debug_output.detail("Method", remediation_config.get("mode", "silence"))
+                self.debug_output.detail("Sample rate", f"{audio_sample_rate_original} Hz")
+
+                from video_censor_personal.audio_remediator import AudioRemediator
+
+                remediator = AudioRemediator(remediation_config)
+                remediated_audio = remediator.remediate(
+                    audio_np,
+                    audio_sample_rate_original,
+                    detections,
+                    segments=segments,
+                )
+
+                output_audio_path = remediation_config.get(
+                    "output_path",
+                    "/tmp/remediated_audio.wav"
+                )
+                remediator.write_audio(
+                    remediated_audio,
+                    audio_sample_rate_original,
+                    output_audio_path
+                )
+                remediated_audio_path = output_audio_path
+                logger.info(f"Remediated audio saved to: {output_audio_path}")
+                self.debug_output.step(f"Audio saved to: {output_audio_path}")
+
+        if remediated_audio_path and self.output_video_path:
+            self._mux_video(remediated_audio_path)
+        elif self.output_video_path and not remediated_audio_path:
+            import shutil
+            shutil.copy2(self.video_path, self.output_video_path)
+            logger.info(f"Copied video to: {self.output_video_path} (no audio remediation)")
+
+    def _mux_video(self, remediated_audio_path: str) -> None:
+        """Mux remediated audio into output video.
+
+        Args:
+            remediated_audio_path: Path to remediated audio file.
+        """
+        self.debug_output.subsection("Video Muxing")
+        self.debug_output.step("Muxing remediated audio into video...")
+
+        from video_censor_personal.video_muxer import VideoMuxer
+
+        muxer = VideoMuxer(str(self.video_path), remediated_audio_path)
+        muxer.mux_video(self.output_video_path)
+
+        logger.info(f"Output video saved to: {self.output_video_path}")
+        self.debug_output.step(f"Output video saved to: {self.output_video_path}")

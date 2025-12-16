@@ -548,8 +548,11 @@ python video_censor_personal.py \
 - `--input PATH` (required): Path to video file to analyze
 - `--output PATH` (optional): Path to output JSON file (default: `results.json`)
 - `--config PATH` (optional): Path to YAML configuration file
+- `--output-video PATH` (optional): Path to output video with remediated audio and/or skip chapters
+- `--input-segments PATH` (optional): Path to segments JSON file from previous analysis (skips detection, remediation only)
 - `--allow-all-segments`: Mark all detected segments as allowed (useful for preview/review mode)
-- `--verbose`: Enable debug-level logging for troubleshooting
+- `--download-models`: Automatically download required models before analysis
+- `--log-level LEVEL`: Logging level: INFO, DEBUG, or TRACE (default: INFO)
 - `--help`: Show help message
 
 ### Segment Allow Override
@@ -571,6 +574,72 @@ python video_censor_personal.py \
 ```
 
 Then un-allow specific segments by editing the JSON and setting `"allow": false` before remediation.
+
+### Three-Phase Workflow: Analyze → Review → Remediate
+
+For iterative workflows where you want to analyze once and remediate multiple times with different settings, use the `--input-segments` option:
+
+#### Phase 1: Analyze (One Time)
+
+Run the full analysis pipeline and save segments to JSON:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor.yaml \
+  --output segments.json
+```
+
+#### Phase 2: Review & Edit
+
+Open `segments.json` and mark false positives as allowed:
+
+```json
+{
+  "segments": [
+    {
+      "start_time": "00:05:30",
+      "start_time_seconds": 330.0,
+      "end_time": "00:05:45",
+      "end_time_seconds": 345.0,
+      "labels": ["Violence"],
+      "allow": true
+    }
+  ]
+}
+```
+
+#### Phase 3: Remediate (Skip Analysis)
+
+Apply remediation using the edited segments file—no ML re-analysis required:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments segments.json \
+  --config video-censor.yaml \
+  --output-video output.mp4
+```
+
+This loads segments directly from `segments.json` and applies audio remediation and/or skip chapters without running any detection. Segments marked `"allow": true` are skipped.
+
+#### Re-Remediate with Different Settings
+
+Change remediation settings (e.g., switch from silence to bleep) and re-run without re-analyzing:
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --input-segments segments.json \
+  --config video-censor-bleep.yaml \
+  --output-video output-bleep.mp4
+```
+
+**Benefits:**
+- Skip expensive ML analysis when only adjusting remediation settings
+- Iterate on allow flags without re-processing the entire video
+- Test different bleep frequencies, silence modes, or chapter configurations
+- Preserve original analysis as the single source of truth
 
 ### Output Format
 
