@@ -16,11 +16,11 @@
 
 ## 3. Video Cut Mode Implementation
 
-- [ ] 3.1 Implement segment extraction logic (non-censored segments)
-- [ ] 3.2 Generate ffmpeg concat demuxer file
-- [ ] 3.3 Handle keyframe alignment via re-encoding at boundaries
-- [ ] 3.4 Write unit tests for segment extraction logic
-- [ ] 3.5 Write integration test for cut mode end-to-end
+- [x] 3.1 Implement segment extraction logic (non-censored segments)
+- [x] 3.2 Generate ffmpeg concat demuxer file
+- [x] 3.3 Handle keyframe alignment via re-encoding at boundaries
+- [x] 3.4 Write unit tests for segment extraction logic
+- [x] 3.5 Write integration test for cut mode end-to-end
 
 ## 4. Three-Tier Mode Resolution
 

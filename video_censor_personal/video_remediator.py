@@ -180,3 +180,186 @@ class VideoRemediator:
         
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid timecode format: {timecode}") from e
+    
+    def extract_non_censored_segments(
+        self,
+        segments: List[Dict[str, Any]],
+        video_duration: float,
+    ) -> List[Dict[str, float]]:
+        """Extract non-censored segments for cut mode.
+        
+        Inverts the censored segments to get the segments that should be kept.
+        
+        Args:
+            segments: List of censored segment dicts with start_time, end_time.
+            video_duration: Total video duration in seconds.
+        
+        Returns:
+            List of segment dicts with 'start' and 'end' (in seconds).
+        """
+        if not segments:
+            # No censored segments, keep entire video
+            return [{"start": 0.0, "end": video_duration}]
+        
+        # Parse and sort censored segments by start time
+        censored = []
+        for segment in segments:
+            start = self._parse_timecode(segment["start_time"])
+            end = self._parse_timecode(segment["end_time"])
+            censored.append({"start": start, "end": end})
+        
+        censored.sort(key=lambda x: x["start"])
+        
+        # Extract non-censored segments
+        keep_segments = []
+        current_pos = 0.0
+        
+        for segment in censored:
+            # Add segment before this censored part
+            if current_pos < segment["start"]:
+                keep_segments.append({
+                    "start": current_pos,
+                    "end": segment["start"]
+                })
+            
+            # Move position to end of censored segment
+            current_pos = max(current_pos, segment["end"])
+        
+        # Add final segment if there's video left after last censored part
+        if current_pos < video_duration:
+            keep_segments.append({
+                "start": current_pos,
+                "end": video_duration
+            })
+        
+        return keep_segments
+    
+    def generate_concat_file(
+        self,
+        segments: List[Dict[str, float]],
+        concat_file_path: str,
+    ) -> None:
+        """Generate ffmpeg concat demuxer file for cut mode.
+        
+        Creates a text file listing video segments to concatenate.
+        
+        Args:
+            segments: List of segment dicts with 'start' and 'end' (in seconds).
+            concat_file_path: Path where concat file will be written.
+        """
+        with open(concat_file_path, "w") as f:
+            for segment in segments:
+                # Write in concat demuxer format
+                # Note: We'll extract segments first, then list them here
+                f.write(f"file 'segment_{segment['start']}_{segment['end']}.mp4'\n")
+    
+    def apply_cut_mode(
+        self,
+        input_video: str,
+        output_video: str,
+        censored_segments: List[Dict[str, Any]],
+        video_duration: float,
+        work_dir: Optional[str] = None,
+    ) -> None:
+        """Apply cut mode remediation to video.
+        
+        Extracts non-censored segments and concatenates them together.
+        
+        Args:
+            input_video: Path to input video file.
+            output_video: Path to output video file.
+            censored_segments: List of censored segment dicts.
+            video_duration: Total video duration in seconds.
+            work_dir: Working directory for temporary files (default: temp dir).
+        
+        Raises:
+            RuntimeError: If ffmpeg fails.
+        """
+        import tempfile
+        import shutil
+        
+        # Extract non-censored segments
+        keep_segments = self.extract_non_censored_segments(
+            censored_segments, video_duration
+        )
+        
+        if not keep_segments:
+            logger.warning("No segments to keep; entire video is censored")
+            return
+        
+        # Create working directory
+        if work_dir is None:
+            temp_dir = tempfile.mkdtemp(prefix="video_cut_")
+        else:
+            temp_dir = work_dir
+            Path(temp_dir).mkdir(parents=True, exist_ok=True)
+        
+        try:
+            segment_files = []
+            
+            # Extract each non-censored segment
+            for i, segment in enumerate(keep_segments):
+                segment_file = Path(temp_dir) / f"segment_{i}.mp4"
+                
+                cmd = [
+                    "ffmpeg",
+                    "-i", input_video,
+                    "-ss", str(segment["start"]),
+                    "-to", str(segment["end"]),
+                    "-c:v", "libx264",  # Re-encode video
+                    "-c:a", "aac",  # Re-encode audio
+                    "-preset", "ultrafast",
+                    "-avoid_negative_ts", "1",
+                    "-y",
+                    str(segment_file)
+                ]
+                
+                logger.debug(f"Extracting segment {i}: {segment['start']}-{segment['end']}")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                
+                if result.returncode != 0:
+                    raise RuntimeError(f"Failed to extract segment {i}: {result.stderr}")
+                
+                segment_files.append(segment_file)
+            
+            # Create concat file
+            concat_file = Path(temp_dir) / "concat.txt"
+            with open(concat_file, "w") as f:
+                for segment_file in segment_files:
+                    # Use relative paths for concat file
+                    f.write(f"file '{segment_file.name}'\n")
+            
+            # Concatenate segments
+            cmd = [
+                "ffmpeg",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_file),
+                "-c:v", "copy",  # Copy video stream
+                "-c:a", "copy" if len(segment_files) > 0 else "aac",  # Copy audio if present
+                "-y",
+                output_video
+            ]
+            
+            logger.debug(f"Concatenating {len(segment_files)} segments")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to concatenate segments: {result.stderr}")
+            
+            logger.info(f"Cut mode applied: kept {len(keep_segments)} segments")
+            
+        finally:
+            # Clean up temporary directory
+            if work_dir is None:
+                shutil.rmtree(temp_dir, ignore_errors=True)

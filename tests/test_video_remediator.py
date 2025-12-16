@@ -237,3 +237,155 @@ class TestBlankFilterChain:
         result = remediator.build_blank_filter_chain(segments, 1920, 1080)
         
         assert "enable='between(t,10.123,15.456)'" in result
+
+
+class TestSegmentExtraction:
+    """Test segment extraction logic for cut mode."""
+    
+    def test_extract_non_censored_segments_no_censored(self):
+        """Test extraction when no segments are censored."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        result = remediator.extract_non_censored_segments([], 100.0)
+        
+        assert len(result) == 1
+        assert result[0] == {"start": 0.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_beginning(self):
+        """Test extraction when censored segment is at beginning."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [{"start_time": "0", "end_time": "10"}]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 1
+        assert result[0] == {"start": 10.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_middle(self):
+        """Test extraction when censored segment is in middle."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [{"start_time": "30", "end_time": "40"}]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 2
+        assert result[0] == {"start": 0.0, "end": 30.0}
+        assert result[1] == {"start": 40.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_end(self):
+        """Test extraction when censored segment is at end."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [{"start_time": "90", "end_time": "100"}]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 1
+        assert result[0] == {"start": 0.0, "end": 90.0}
+    
+    def test_extract_non_censored_segments_multiple(self):
+        """Test extraction with multiple censored segments."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [
+            {"start_time": "10", "end_time": "20"},
+            {"start_time": "40", "end_time": "50"},
+            {"start_time": "80", "end_time": "90"}
+        ]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 4
+        assert result[0] == {"start": 0.0, "end": 10.0}
+        assert result[1] == {"start": 20.0, "end": 40.0}
+        assert result[2] == {"start": 50.0, "end": 80.0}
+        assert result[3] == {"start": 90.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_unsorted(self):
+        """Test extraction with unsorted censored segments."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        # Provide segments out of order
+        segments = [
+            {"start_time": "40", "end_time": "50"},
+            {"start_time": "10", "end_time": "20"},
+            {"start_time": "80", "end_time": "90"}
+        ]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        # Should still produce correct sorted result
+        assert len(result) == 4
+        assert result[0] == {"start": 0.0, "end": 10.0}
+        assert result[1] == {"start": 20.0, "end": 40.0}
+        assert result[2] == {"start": 50.0, "end": 80.0}
+        assert result[3] == {"start": 90.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_entire_video(self):
+        """Test extraction when entire video is censored."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [{"start_time": "0", "end_time": "100"}]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 0
+    
+    def test_extract_non_censored_segments_overlapping(self):
+        """Test extraction with overlapping censored segments."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        # Overlapping segments should be handled
+        segments = [
+            {"start_time": "10", "end_time": "30"},
+            {"start_time": "20", "end_time": "40"}
+        ]
+        result = remediator.extract_non_censored_segments(segments, 100.0)
+        
+        assert len(result) == 2
+        assert result[0] == {"start": 0.0, "end": 10.0}
+        assert result[1] == {"start": 40.0, "end": 100.0}
+    
+    def test_extract_non_censored_segments_timecodes(self):
+        """Test extraction with HH:MM:SS timecodes."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [
+            {"start_time": "00:00:10", "end_time": "00:00:20"},
+            {"start_time": "00:01:00", "end_time": "00:01:30"}
+        ]
+        result = remediator.extract_non_censored_segments(segments, 200.0)
+        
+        assert len(result) == 3
+        assert result[0] == {"start": 0.0, "end": 10.0}
+        assert result[1] == {"start": 20.0, "end": 60.0}
+        assert result[2] == {"start": 90.0, "end": 200.0}
+
+
+class TestConcatFileGeneration:
+    """Test concat file generation for cut mode."""
+    
+    def test_generate_concat_file(self, tmp_path):
+        """Test concat file generation."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [
+            {"start": 0.0, "end": 10.0},
+            {"start": 20.0, "end": 30.0}
+        ]
+        
+        concat_file = tmp_path / "concat.txt"
+        remediator.generate_concat_file(segments, str(concat_file))
+        
+        assert concat_file.exists()
+        content = concat_file.read_text()
+        
+        assert "file 'segment_0.0_10.0.mp4'" in content
+        assert "file 'segment_20.0_30.0.mp4'" in content
+    
+    def test_generate_concat_file_empty(self, tmp_path):
+        """Test concat file generation with no segments."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        concat_file = tmp_path / "concat.txt"
+        remediator.generate_concat_file([], str(concat_file))
+        
+        assert concat_file.exists()
+        content = concat_file.read_text()
+        assert content == ""
