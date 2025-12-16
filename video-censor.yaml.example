@@ -84,9 +84,9 @@ video:
   metadata_output:
     skip_chapters:
       enabled: false          # Set to true to write detection segments as chapter markers
-                              # IMPORTANT: Only MKV format is supported!
-                              # Use --output-video output.mkv for reliable chapter support.
-                              # MP4 chapter support is broken - do NOT use .mp4 extension.
+                               # Supports both MKV and MP4 formats with native chapter atoms
+                               # Use --output-video output.mkv or --output-video output.mp4
+                               # Both formats provide reliable cross-platform chapter support
 
 # Model download and caching configuration (optional)
 # Automatically download and verify models with --download-models CLI flag

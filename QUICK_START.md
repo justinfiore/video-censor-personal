@@ -147,7 +147,7 @@ mkvmerge --version
 # Output should show MKVtoolnix version
 ```
 
-**Why mkvtoolnix?** MKV (Matroska) format has native, robust chapter support that works in all media players (VLC, Plex, Kodi, etc.). MP4 chapter support is fundamentally unreliable. See `video-censor-skip-chapters.yaml.example` for usage.
+**Why mkvtoolnix?** MKV (Matroska) format uses mkvmerge for native chapter support. Alternatively, use MP4 output with ffmpeg >= 8.0 for native MP4 chapter atoms. Both formats work reliably in all media players (VLC, Plex, Kodi, etc.). See `video-censor-skip-chapters.yaml.example` for usage.
 
 ## Step 4: Download AI Models (5-10 minutes)
 

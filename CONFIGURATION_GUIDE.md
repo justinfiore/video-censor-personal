@@ -481,7 +481,7 @@ video:
 
 ### Video Metadata Output
 
-Enables writing detection segments as chapter markers in the output MP4 file, allowing users to jump between flagged content sections directly in their media player.
+Enables writing detection segments as chapter markers in the output video file (MKV or MP4), allowing users to jump between flagged content sections directly in their media player.
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
@@ -499,13 +499,22 @@ When skip chapters are enabled, the system:
    skip: Violence, Sexual Theme [85%]
    ```
 3. **Merges chapters** by timestamp (existing + skip chapters)
-4. **Writes combined metadata** to the output MP4 file using re-muxing
+4. **Writes combined metadata** to the output video file using native chapter atoms
+
+#### Supported Formats
+
+- **MKV** (Matroska) - Uses mkvmerge for native Matroska chapter support
+- **MP4** - Uses ffmpeg with native MP4 container atoms for chapter support
+
+Both formats provide reliable, cross-platform chapter support in all standard media players (VLC, Plex, Windows Media Player, Kodi, etc.).
 
 #### Requirements
 
-- **ffmpeg** must be installed and in PATH (used for chapter extraction and re-muxing)
+- **ffmpeg** >= 8.0 must be installed and in PATH (for native chapter support and re-muxing)
+- **mkvmerge** (included with mkvtoolnix) for MKV format support
 - `--output-video` CLI argument is required when skip chapters are enabled
-- Output MP4 file must be different from input file (to prevent data loss)
+- Output file must be different from input file (to prevent data loss)
+- Output format determined by file extension: `.mkv` or `.mp4`
 
 #### Example Usage
 

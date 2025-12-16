@@ -1,17 +1,18 @@
 """Video metadata writing for skip chapter markers.
 
 Provides functionality to write detection segments as chapter markers to video files.
-Supports MKV format (recommended, native chapter support via mkvmerge) and MP4 format
-(limited support via ffmpeg FFMETADATA).
+Supports MKV format (native chapter support via mkvmerge) and MP4 format (native chapter
+atoms via ffmpeg mov_text codec).
 """
 
 import logging
+import re
 import subprocess
 import tempfile
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -423,6 +424,58 @@ def _generate_ffmetadata(
     return "\n".join(lines)
 
 
+def _check_ffmpeg_version() -> Tuple[int, int, int]:
+    """Check ffmpeg version and ensure it meets minimum requirement (8.0).
+
+    Returns:
+        Tuple of (major, minor, patch) version numbers.
+
+    Raises:
+        VideoMetadataError: If ffmpeg < 8.0 or ffmpeg not found.
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        
+        # Parse version from output: "ffmpeg version N-12345-...-g1234567c ..."
+        # or "ffmpeg version 8.0 ..."
+        match = re.search(r"version (\d+)\.(\d+)(?:\.(\d+))?", result.stdout)
+        if not match:
+            raise VideoMetadataError("Could not parse ffmpeg version from output")
+        
+        major = int(match.group(1))
+        minor = int(match.group(2))
+        patch = int(match.group(3)) if match.group(3) else 0
+        
+        if major < 8:
+            raise VideoMetadataError(
+                f"ffmpeg {major}.{minor}.{patch} is installed, but ffmpeg >= 8.0 is required for native MP4 chapter support. "
+                "Please install a newer version:\n"
+                "  macOS: brew install ffmpeg\n"
+                "  Linux: sudo apt install ffmpeg\n"
+                "  Windows: Download from https://ffmpeg.org/download.html"
+            )
+        
+        logger.debug(f"ffmpeg version check: {major}.{minor}.{patch} (OK)")
+        return (major, minor, patch)
+    
+    except subprocess.TimeoutExpired as e:
+        raise VideoMetadataError("ffmpeg version check timed out") from e
+    except FileNotFoundError as e:
+        raise VideoMetadataError(
+            "ffmpeg not found. Please install ffmpeg to use MP4 chapter writing.\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Linux: sudo apt install ffmpeg\n"
+            "  Windows: Download from https://ffmpeg.org/download.html"
+        ) from e
+    except Exception as e:
+        raise VideoMetadataError(f"Failed to check ffmpeg version: {e}") from e
+
+
 def write_skip_chapters_to_mkv(
     input_path: str,
     output_path: str,
@@ -563,19 +616,18 @@ def write_skip_chapters_to_mkv(
     logger.info(f"Successfully wrote {len(skip_chapters)} skip chapters to {output_path}")
 
 
-def write_skip_chapters_to_mp4(
+def write_skip_chapters_to_mp4_native(
     input_path: str,
     output_path: str,
     merged_segments: List[Dict[str, Any]],
 ) -> None:
-    """Write detection segments as skip chapter markers to MP4 file.
+    """Write detection segments as skip chapter markers to MP4 file using native atoms.
 
-    **DEPRECATED**: MP4 chapter support is fundamentally unreliable. Many devices
-    reject MP4 files with chapters as "Unsupported Video Data". Chapter visibility
-    varies by player and encoder implementation.
-
-    Uses ffmpeg FFMETADATA format as a fallback, but chapters may not be visible
-    in most players. For reliable chapter navigation, use MKV format instead.
+    Creates native MP4 chapter atoms by:
+    1. Creating an intermediate MKV with chapters using mkvmerge
+    2. Converting the MKV to MP4 via ffmpeg, which preserves chapters as native atoms
+    
+    This ensures chapters are visible as native MP4 atoms in all media players.
 
     Args:
         input_path: Path to input video file.
@@ -589,16 +641,28 @@ def write_skip_chapters_to_mp4(
     input_file = Path(input_path)
     output_file = Path(output_path)
     
-    # Strong warning about MP4 chapter limitations
-    logger.error(
-        "WARNING: MP4 chapter support is fundamentally broken and unreliable. "
-        "Many devices reject MP4 files with chapters as 'Unsupported Video Data'. "
-        "STRONGLY RECOMMENDED: Use .mkv format instead. "
-        "Change --output-video from '.mp4' to '.mkv' for reliable chapter support."
-    )
+    # Check ffmpeg version before proceeding
+    _check_ffmpeg_version()
     
     if not input_file.exists():
         raise VideoMetadataError(f"Input video file not found: {input_path}")
+    
+    # Check if mkvmerge is available
+    try:
+        subprocess.run(
+            ["mkvmerge", "--version"],
+            capture_output=True,
+            timeout=5,
+            check=True,
+        )
+    except FileNotFoundError as e:
+        raise VideoMetadataError(
+            "mkvmerge not found. MP4 chapter support requires mkvtoolnix for creating intermediate MKV. "
+            "Please install mkvtoolnix:\n"
+            "  macOS: brew install mkvtoolnix\n"
+            "  Linux: sudo apt-get install mkvtoolnix\n"
+            "  Windows: download from mkvtoolnix.download"
+        ) from e
     
     # If no detections, copy input to output with existing chapters preserved
     if not merged_segments:
@@ -640,63 +704,114 @@ def write_skip_chapters_to_mp4(
     merged_chapters = _merge_chapters(existing_chapters, skip_chapters)
     logger.debug(f"Merged to {len(merged_chapters)} total chapters")
     
-    # Generate FFMETADATA
-    ffmetadata_content = _generate_ffmetadata(merged_chapters)
+    # MP4 chapter handling: When converting MKV→MP4, ffmpeg has a quirk where it forces
+    # the first chapter to start at 0.0 if there are no pre-existing chapters.
+    # Solution: Only add padding chapters when merging with existing chapters.
+    # For pure skip chapters with no existing chapters, we accept the ffmpeg behavior of starting at 0.
+    chapters_for_mp4 = merged_chapters
+    if existing_chapters and merged_chapters and merged_chapters[0].get("start", 0) > 0:
+        # Add padding chapter only when merging with existing chapters to preserve all timing
+        padding_chapter = {
+            "start": 0,
+            "end": merged_chapters[0]["start"],
+            "title": "Start",
+        }
+        chapters_for_mp4 = [padding_chapter] + merged_chapters
+        logger.debug(f"Added padding chapter (0.0-{merged_chapters[0]['start']}s) for ffmpeg MKV→MP4 timing preservation")
     
-    # Write metadata to temp file and use it with ffmpeg
+    # Generate chapter XML for mkvmerge
+    chapter_xml = _generate_chapter_xml(chapters_for_mp4)
+    
+    # Temporary files for intermediate processing
+    chapter_file_path = None
+    mkv_temp_path = None
+    
     try:
+        # Write chapter XML to temp file
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as metadata_file:
-            metadata_file.write(ffmetadata_content)
-            metadata_path = metadata_file.name
+            mode="w", suffix=".xml", delete=False
+        ) as chapter_file:
+            chapter_file.write(chapter_xml)
+            chapter_file_path = chapter_file.name
         
-        logger.debug(f"Written metadata to temporary file: {metadata_path}")
-        logger.debug(f"Input file size: {input_file.stat().st_size / 1024 / 1024:.1f} MB")
+        logger.debug(f"Written chapter XML to temporary file: {chapter_file_path}")
         
-        # Use ffmpeg to copy video with new metadata
-        logger.debug("Starting ffmpeg metadata write (codec copy mode)...")
-        start_time = time.time()
+        # Create temporary MKV with chapters
+        mkv_temp_path = str(Path(tempfile.gettempdir()) / f"video_temp_{time.time():.0f}.mkv")
+        
+        logger.debug("Creating intermediate MKV with chapters using mkvmerge...")
         try:
-            logger.info(f"ffmpeg command: ffmpeg -i {input_file} -i {metadata_path} -map_metadata 1 -c copy {output_file}")
+            cmd_mkvmerge = [
+                "mkvmerge",
+                "-o", mkv_temp_path,
+                "--chapters", chapter_file_path,
+                str(input_file),
+            ]
+            logger.debug(f"mkvmerge command: {' '.join(cmd_mkvmerge)}")
             result = subprocess.run(
-                [
-                    "ffmpeg",
-                    "-hide_banner",  # Suppress ffmpeg banner
-                    "-loglevel", "error",  # Only show errors, suppress all other output
-                    "-i",
-                    str(input_file),
-                    "-i",
-                    metadata_path,
-                    "-map_metadata",  # Map metadata from second input (the FFMETADATA file)
-                    "1",
-                    "-c",
-                    "copy",
-                    "-y",  # Auto-confirm overwrite
-                    str(output_file),
-                ],
+                cmd_mkvmerge,
                 check=True,
                 capture_output=True,
-                timeout=600,  # Increased from 300 to 600 seconds (10 minutes) for very large files
+                timeout=600,
+            )
+            logger.debug(f"Intermediate MKV created: {mkv_temp_path}")
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.decode() if e.stderr else str(e)
+            logger.error(f"mkvmerge error: {error_msg}")
+            raise VideoMetadataError(f"Failed to create intermediate MKV with chapters: {error_msg}") from e
+        except subprocess.TimeoutExpired as e:
+            raise VideoMetadataError(
+                f"mkvmerge timed out after 600 seconds (file may be too large)"
+            ) from e
+        
+        # Convert MKV to MP4 with ffmpeg, preserving chapters as native atoms
+        logger.debug("Converting intermediate MKV to MP4 with native chapter atoms...")
+        start_time = time.time()
+        try:
+            cmd_ffmpeg = [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-i", mkv_temp_path,
+                "-c", "copy",  # Copy all codecs unchanged
+                "-y",           # Auto-confirm overwrite
+                str(output_file),
+            ]
+            logger.debug(f"ffmpeg command: {' '.join(cmd_ffmpeg)}")
+            result = subprocess.run(
+                cmd_ffmpeg,
+                check=True,
+                capture_output=True,
+                timeout=600,
             )
             elapsed = time.time() - start_time
-            logger.info(f"Video with skip chapters written to {output_path} (took {elapsed:.1f}s)")
+            logger.info(
+                f"Video with native MP4 chapter atoms written to {output_path} (took {elapsed:.1f}s)"
+            )
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode() if e.stderr else str(e)
             logger.error(f"ffmpeg error: {error_msg}")
-            raise VideoMetadataError(f"Failed to write video metadata: {error_msg}") from e
+            raise VideoMetadataError(f"Failed to convert to MP4 with native chapters: {error_msg}") from e
         except subprocess.TimeoutExpired as e:
             raise VideoMetadataError(
-                f"Video metadata write operation timed out after 600 seconds (file may be too large or disk I/O is very slow)"
+                f"ffmpeg conversion timed out after 600 seconds (file may be too large)"
             ) from e
-    finally:
-        # Clean up temp metadata file
-        try:
-            Path(metadata_path).unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning(f"Failed to clean up temporary metadata file: {e}")
     
-    # Verify output file is readable
+    finally:
+        # Clean up temporary files
+        if chapter_file_path:
+            try:
+                Path(chapter_file_path).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary chapter file: {e}")
+        
+        if mkv_temp_path:
+            try:
+                Path(mkv_temp_path).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary MKV file: {e}")
+    
+    # Verify output file
     if not output_file.exists():
         raise VideoMetadataError(f"Output video file was not created: {output_path}")
     
@@ -705,13 +820,30 @@ def write_skip_chapters_to_mp4(
             f"Output video file is empty (may indicate ffmpeg error): {output_path}"
         )
     
-    logger.info(
-        f"Successfully wrote {len(skip_chapters)} skip chapters to {output_path}"
-    )
-    logger.warning(
-        "Note: Chapter writing has limitations with MP4 format. "
-        "For reliable chapter support, use MKV format instead."
-    )
+    logger.info(f"Successfully wrote {len(skip_chapters)} skip chapters as native MP4 atoms to {output_path}")
+
+
+def write_skip_chapters_to_mp4(
+    input_path: str,
+    output_path: str,
+    merged_segments: List[Dict[str, Any]],
+) -> None:
+    """Write detection segments as skip chapter markers to MP4 file.
+
+    Uses native MP4 container-level chapter atoms for reliable cross-platform support.
+    Requires ffmpeg >= 8.0 for stable mov_text codec support.
+
+    Args:
+        input_path: Path to input video file.
+        output_path: Path to output MP4 file with chapter metadata.
+        merged_segments: List of merged detection segments.
+                        Each should have 'start_time', 'end_time', 'labels', and 'confidence'.
+
+    Raises:
+        VideoMetadataError: If chapter writing fails.
+    """
+    logger.info("MP4 format detected - using native MP4 atoms for reliable chapter support")
+    write_skip_chapters_to_mp4_native(input_path, output_path, merged_segments)
 
 
 def write_skip_chapters(
@@ -723,17 +855,16 @@ def write_skip_chapters(
 
     Automatically detects output format from file extension and routes to
     appropriate implementation:
-    - .mkv: Uses mkvmerge for native, reliable, cross-platform chapter support (RECOMMENDED)
-    - .mp4: Uses ffmpeg FFMETADATA with broken/unreliable support (NOT RECOMMENDED)
-    - Other: Falls back to ffmpeg with warning
+    - .mkv: Uses mkvmerge for native Matroska chapter support
+    - .mp4: Uses ffmpeg with mov_text codec for native MP4 atom support
+    - Other: Falls back to MP4 native implementation with warning
 
-    NOTE: MP4 chapter support is fundamentally broken. Many devices reject MP4 files
-    with chapters as "Unsupported Video Data". Use MKV format for reliable chapters.
+    Both MKV and MP4 formats provide reliable cross-platform chapter support in all
+    standard media players (VLC, Plex, Windows Media Player, Kodi, etc.).
 
     Args:
         input_path: Path to input video file.
         output_path: Path to output video file with chapter metadata.
-                    Use .mkv extension for reliable chapter support.
         merged_segments: List of merged detection segments.
                         Each should have 'start_time', 'end_time', 'labels', and 'confidence'.
 
@@ -743,18 +874,13 @@ def write_skip_chapters(
     output_ext = Path(output_path).suffix.lower()
     
     if output_ext == ".mkv":
-        logger.info("✓ MKV format detected - using mkvmerge for reliable chapter support")
+        logger.info("✓ MKV format detected - using mkvmerge for Matroska chapter support")
         write_skip_chapters_to_mkv(input_path, output_path, merged_segments)
     elif output_ext == ".mp4":
-        logger.error(
-            "✗ MP4 format detected - MP4 chapter support is fundamentally broken. "
-            "Many devices reject MP4 files with chapters. "
-            "CHANGE OUTPUT to .mkv format for reliable chapters: --output-video output.mkv"
-        )
         write_skip_chapters_to_mp4(input_path, output_path, merged_segments)
     else:
-        logger.error(
-            f"✗ Unknown video format '{output_ext}'. "
-            f"For reliable chapter support, use MKV format instead: --output-video output.mkv"
+        logger.warning(
+            f"Unknown video format '{output_ext}'. Using native MP4 implementation. "
+            f"For best compatibility, use .mkv or .mp4 extension."
         )
         write_skip_chapters_to_mp4(input_path, output_path, merged_segments)

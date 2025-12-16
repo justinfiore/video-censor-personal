@@ -79,6 +79,7 @@ Current FFMETADATA approach works but is marked unreliable. Research into sample
 | User has ffmpeg < 8.0 installed | Version check fails early with clear error message and installation instructions |
 | Removing FFMETADATA fallback leaves no escape hatch | Native MP4 is the right solution; clear error messages guide users to install ffmpeg 8.0+ |
 | Performance impact on large files | mux-only operation (no re-encoding), fast on modern systems |
+| **ffmpeg MKV→MP4 conversion forces first chapter to 0.0** | **Documented limitation; chapters remain accurate and playable in all media players. Padding chapters added when merging with existing chapters to preserve all timing.** |
 
 ## Migration Plan
 

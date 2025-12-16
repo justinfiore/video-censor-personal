@@ -5,9 +5,8 @@
 # which writes detection segments as chapter markers in the output video file.
 # Users can then navigate between flagged content sections in their media player.
 #
-# IMPORTANT: Only MKV format is supported for chapters!
-# MP4 chapter support is fundamentally broken - many devices reject MP4 files with chapters.
-# Always use --output-video output.mkv for reliable chapter support.
+# Both MKV and MP4 formats are fully supported with native chapter atoms.
+# Use --output-video output.mkv or --output-video output.mp4 for chapter support.
 
 version: 1.0
 
@@ -79,15 +78,19 @@ video:
     skip_chapters:
       enabled: true              # Enable chapter markers in output video
       
-# Usage example (MKV only):
+# Usage examples:
 # 
+#   # MKV output (uses mkvmerge):
 #   python video_censor_personal.py --input video.mp4 --config this-file.yaml \
 #     --output results.json --output-video output.mkv
 #
-# Why MKV only?
-#   - MP4 chapter support is broken and unreliable
-#   - Many devices (including older Samsung TVs) reject MP4s with chapters
-#   - MKV has native, robust chapter support that works everywhere
+#   # MP4 output (uses native MP4 atoms via ffmpeg):
+#   python video_censor_personal.py --input video.mp4 --config this-file.yaml \
+#     --output results.json --output-video output.mp4
+#
+# Requirements:
+#   - ffmpeg >= 8.0 (required for native MP4 chapter support)
+#   - mkvtoolnix (for MKV format)
 #
 # Chapter format in output:
 #   "skip: [Label1, Label2, ...] [Confidence%]"

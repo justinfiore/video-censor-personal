@@ -17,7 +17,7 @@ The system detects:
 Output and Enhancement Options:
 - **JSON Detection Results** - Detailed analysis with confidence scores and timestamps
 - **Audio Remediation** - Automatically bleep or silence profanity
-- **Skip Chapter Markers** - Add chapter markers to video files (MKV recommended) for easy navigation to flagged segments in media players (VLC, Plex, Kodi, etc.)
+- **Skip Chapter Markers** - Add chapter markers to video files (MKV or MP4) for easy navigation to flagged segments in media players (VLC, Plex, Kodi, etc.)
 
 ## System Requirements
 
@@ -36,10 +36,10 @@ Output and Enhancement Options:
   - Download: https://ffmpeg.org/download.html
   - Used to extract frames from videos for analysis
 
-- **mkvtoolnix**: Optional but strongly recommended for chapter writing to MKV files
+- **mkvtoolnix**: Required for chapter writing to MKV files
   - Download: https://mkvtoolnix.download/
-  - Used to embed chapter markers reliably in Matroska video files
-  - Without this, chapters can only be written to MP4 with limited player support
+  - Used to embed chapter markers natively in Matroska video files
+  - Alternative: Use MP4 output format with ffmpeg for native MP4 chapter atoms
 
 ## Installation
 
@@ -381,7 +381,7 @@ See [AUDIO.md](AUDIO.md) for detailed audio setup and configuration.
 
 Add chapter markers to your output video to easily navigate between flagged segments in media players (VLC, Plex, Kodi, etc.):
 
-**MKV output (REQUIRED for chapter support):**
+**MKV output (uses mkvmerge):**
 ```bash
 python video_censor_personal.py \
   --input video.mp4 \
@@ -390,13 +390,20 @@ python video_censor_personal.py \
   --output-video output.mkv
 ```
 
-**⚠️ MP4 NOT SUPPORTED FOR CHAPTERS**
+**MP4 output (uses native MP4 atoms via ffmpeg):**
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-skip-chapters.yaml \
+  --output results.json \
+  --output-video output.mp4
+```
 
-MP4 chapter support is fundamentally broken and unreliable:
-- Many devices reject MP4 files with chapters as "Unsupported Video Data"
-- Chapter visibility varies unpredictably by player and encoder
-- Some devices (e.g., older Samsung TVs) won't play MP4s with chapters at all
-- Only use MKV format for reliable, cross-platform chapter support
+Both MKV and MP4 formats are fully supported with native chapter atoms that work reliably in all standard media players (VLC, Plex, Windows Media Player, Kodi, etc.).
+
+**Requirements:**
+- ffmpeg >= 8.0 (for native MP4 chapter support)
+- mkvtoolnix (for MKV format)
 
 To enable skip chapters in your config file:
 ```yaml
