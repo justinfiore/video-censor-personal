@@ -1,10 +1,10 @@
 ## 1. Configuration & Validation
 
-- [ ] 1.1 Add `remediation.video_editing` schema to YAML config parser
-- [ ] 1.2 Add validation for global default mode (mode, blank_color)
-- [ ] 1.3 Add `category_modes` config parsing and validation
-- [ ] 1.4 Update `--output-video` validation to require when video remediation enabled
-- [ ] 1.5 Write unit tests for config parsing and validation
+- [x] 1.1 Add `remediation.video_editing` schema to YAML config parser
+- [x] 1.2 Add validation for global default mode (mode, blank_color)
+- [x] 1.3 Add `category_modes` config parsing and validation
+- [x] 1.4 Update `--output-video` validation to require when video remediation enabled
+- [x] 1.5 Write unit tests for config parsing and validation
 
 ## 2. Video Blank Mode Implementation
 
