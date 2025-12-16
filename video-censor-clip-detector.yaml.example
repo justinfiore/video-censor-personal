@@ -16,9 +16,25 @@
 detection:
   detectors:
     # CLIP-based detector with custom prompts per category
+    #
+    # Available OpenAI CLIP Models (from Hugging Face):
+    # ┌─────────────────────────────────────────┬────────────┬─────────┬─────────────────────────────────────────────────┐
+    # │ model_name                              │ Parameters │ Size    │ Notes                                           │
+    # ├─────────────────────────────────────────┼────────────┼─────────┼─────────────────────────────────────────────────┤
+    # │ openai/clip-vit-base-patch32            │ ~151M      │ ~600MB  │ Fastest, lowest quality. ViT-B/32 architecture. │
+    # │ openai/clip-vit-base-patch16            │ ~151M      │ ~600MB  │ Better than patch32, slower. ViT-B/16.          │
+    # │ openai/clip-vit-large-patch14           │ ~428M      │ ~1.7GB  │ Best quality for 224px images. ViT-L/14.        │
+    # │ openai/clip-vit-large-patch14-336       │ ~428M      │ ~1.7GB  │ Highest quality, fine-tuned for 336px input.    │
+    # └─────────────────────────────────────────┴────────────┴─────────┴─────────────────────────────────────────────────┘
+    #
+    # Trade-offs:
+    #   - Patch size: Smaller patches (14 vs 32) = more patches per image = better detail but slower
+    #   - Model size: "large" models are ~3x bigger than "base" but significantly more accurate
+    #   - The "336" variant expects higher-resolution inputs for maximum accuracy
+    #
     - type: "clip"
       name: "clip-detector"
-      model_name: "openai/clip-vit-base-patch32"  # Or "openai/clip-vit-large-patch14" for higher quality
+      model_name: "openai/clip-vit-base-patch32"  # Fast & lightweight (see table above for alternatives)
       confidence_threshold: 0.5  # Detection threshold (0.0-1.0); increase for fewer false positives
       categories:
         - "Nudity"

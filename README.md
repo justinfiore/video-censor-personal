@@ -194,6 +194,20 @@ CLIP is a lightweight, efficient model for content classification via text promp
 
 ### Download CLIP Model (Optional)
 
+#### Available CLIP Model Variants
+
+| `model_name` | Parameters | Size | Notes |
+|--------------|------------|------|-------|
+| `openai/clip-vit-base-patch32` | ~151M | ~600MB | Fastest, lowest quality. ViT-B/32 architecture. |
+| `openai/clip-vit-base-patch16` | ~151M | ~600MB | Better than patch32, slower. ViT-B/16 architecture. |
+| `openai/clip-vit-large-patch14` | ~428M | ~1.7GB | Best quality for 224px images. ViT-L/14 architecture. |
+| `openai/clip-vit-large-patch14-336` | ~428M | ~1.7GB | Highest quality, fine-tuned for 336px input images. |
+
+**Trade-offs:**
+- **Patch size**: Smaller patches (14 vs 32) = more patches per image = better detail but slower
+- **Model size**: `large` models are ~3x bigger than `base` but significantly more accurate
+- The `336` variant expects higher-resolution inputs, which can improve accuracy for detailed content
+
 Choose one model variant:
 
 **ViT-Base (Fast, Recommended)** - 600 MB, suitable for most cases
@@ -207,7 +221,7 @@ print('✓ CLIP model downloaded successfully')
 "
 ```
 
-**ViT-Large (More Accurate)** - 900 MB, better accuracy but slower
+**ViT-Large (More Accurate)** - 1.7 GB, better accuracy but slower
 ```bash
 python -c "
 from transformers import CLIPModel, CLIPProcessor

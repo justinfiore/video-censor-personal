@@ -219,10 +219,19 @@ Each prompt definition requires:
 | `category` | string | Yes | Category name (must match a category in `categories` list) |
 | `text` | list | Yes | List of candidate text phrases for this category (minimum 1) |
 
-**Model Variants:**
-- `openai/clip-vit-base-patch32` - Base model (~350 MB, ~1-2 GB VRAM)
-- `openai/clip-vit-large-patch14` - Large model (~700 MB, ~2-3 GB VRAM)
-- Other HuggingFace CLIP variants supported
+**Available CLIP Model Variants:**
+
+| `model_name` | Parameters | Size | Notes |
+|--------------|------------|------|-------|
+| `openai/clip-vit-base-patch32` | ~151M | ~600MB | Fastest, lowest quality. ViT-B/32 architecture. |
+| `openai/clip-vit-base-patch16` | ~151M | ~600MB | Better than patch32, slower. ViT-B/16 architecture. |
+| `openai/clip-vit-large-patch14` | ~428M | ~1.7GB | Best quality for 224px images. ViT-L/14 architecture. |
+| `openai/clip-vit-large-patch14-336` | ~428M | ~1.7GB | Highest quality, fine-tuned for 336px input images. |
+
+**Model Trade-offs:**
+- **Patch size**: Smaller patches (14 vs 32) = more patches per image = better detail but slower
+- **Model size**: `large` models are ~3x bigger than `base` but significantly more accurate
+- The `336` variant expects higher-resolution inputs, which can improve accuracy for detailed content
 
 **Confidence Threshold:**
 
