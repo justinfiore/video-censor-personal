@@ -1,6 +1,7 @@
 """Video remediation engine for blanking or cutting detected visual content."""
 
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -488,3 +489,48 @@ class VideoRemediator:
             f"Grouped segments: {len(groups['blank'])} blank, {len(groups['cut'])} cut"
         )
         return groups
+    
+    def validate_timecode(self, timecode: str) -> bool:
+        """Validate timecode format.
+        
+        Args:
+            timecode: Timecode string to validate.
+        
+        Returns:
+            True if valid, False otherwise.
+        """
+        try:
+            self._parse_timecode(timecode)
+            return True
+        except ValueError:
+            return False
+    
+    def check_disk_space(
+        self,
+        output_path: str,
+        required_mb: int = 100,
+    ) -> bool:
+        """Check if sufficient disk space is available.
+        
+        Args:
+            output_path: Path to output file/directory.
+            required_mb: Required space in MB (default: 100MB).
+        
+        Returns:
+            True if sufficient space available, False otherwise.
+        """
+        output_dir = Path(output_path).parent
+        if not output_dir.exists():
+            output_dir = Path.cwd()
+        
+        stat = shutil.disk_usage(output_dir)
+        available_mb = stat.free / (1024 * 1024)
+        
+        if available_mb < required_mb:
+            logger.warning(
+                f"Low disk space: {available_mb:.1f}MB available, "
+                f"{required_mb}MB required"
+            )
+            return False
+        
+        return True

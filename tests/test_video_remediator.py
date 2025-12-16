@@ -733,3 +733,52 @@ class TestCombinedRemediation:
         assert len(groups["cut"]) == 1    # Nudity
         assert len(groups["blank"]) == 1  # Profanity
         # Violence was filtered out
+
+
+class TestErrorHandling:
+    """Test error handling and edge cases."""
+    
+    def test_validate_timecode_valid_formats(self):
+        """Test timecode validation with valid formats."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        assert remediator.validate_timecode("10.5") is True
+        assert remediator.validate_timecode("01:30") is True
+        assert remediator.validate_timecode("00:01:30") is True
+        assert remediator.validate_timecode("01:30:45.5") is True
+    
+    def test_validate_timecode_invalid_formats(self):
+        """Test timecode validation with invalid formats."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        assert remediator.validate_timecode("invalid") is False
+        assert remediator.validate_timecode("::") is False
+        assert remediator.validate_timecode("") is False
+    
+    def test_check_disk_space_sufficient(self, tmp_path):
+        """Test disk space check when sufficient space available."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        output_path = tmp_path / "output.mp4"
+        # Check for very small requirement (should always pass)
+        assert remediator.check_disk_space(str(output_path), required_mb=1) is True
+    
+    def test_check_disk_space_nonexistent_dir(self):
+        """Test disk space check with nonexistent directory."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        # Should fall back to current directory
+        output_path = "/nonexistent/path/output.mp4"
+        result = remediator.check_disk_space(output_path, required_mb=1)
+        # Should not crash, will use current directory
+        assert isinstance(result, bool)
+    
+    def test_extract_non_censored_segments_handles_invalid_timecode(self):
+        """Test segment extraction with invalid timecodes logs and raises."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segments = [{"start_time": "invalid", "end_time": "20"}]
+        
+        # Should raise ValueError due to invalid timecode
+        with pytest.raises(ValueError, match="Invalid timecode format"):
+            remediator.extract_non_censored_segments(segments, 100.0)

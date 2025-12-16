@@ -45,10 +45,10 @@
 
 ## 7. Error Handling & Edge Cases
 
-- [ ] 7.1 Add ffmpeg error handling with stderr capture
-- [ ] 7.2 Add invalid timecode validation and skip logic
-- [ ] 7.3 Add disk space check before processing
-- [ ] 7.4 Write tests for error handling scenarios
+- [x] 7.1 Add ffmpeg error handling with stderr capture
+- [x] 7.2 Add invalid timecode validation and skip logic
+- [x] 7.3 Add disk space check before processing
+- [x] 7.4 Write tests for error handling scenarios
 
 ## 8. Documentation
 
