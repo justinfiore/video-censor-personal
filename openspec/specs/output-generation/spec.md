@@ -397,6 +397,7 @@ The system SHALL automatically detect output file format from extension and rout
 - **THEN** all chapters in output are sorted by start timestamp in ascending order
 
 ### Requirement: Bulk Allow Override via CLI Flag
+
 The system SHALL support a `--allow-all-segments` CLI flag that automatically marks all detected segments as allowed during the analysis phase.
 
 #### Scenario: Analysis with --allow-all-segments flag
@@ -409,6 +410,7 @@ The system SHALL support a `--allow-all-segments` CLI flag that automatically ma
 - **WHEN** `--allow-all-segments` flag is provided alongside `--input-segments` (remediation phase)
 - **THEN** the flag MUST be ignored
 - **AND** segments will use their existing `allow` property values from the input JSON
+- **AND** system logs info: `"--allow-all-segments ignored in remediation mode; using allow values from input segments"`
 
 #### Scenario: Use case - preview mode analysis
 - **WHEN** user wants to analyze a video without intending to remediate yet
