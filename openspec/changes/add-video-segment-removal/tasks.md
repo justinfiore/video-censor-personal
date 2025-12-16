@@ -24,12 +24,12 @@
 
 ## 4. Three-Tier Mode Resolution
 
-- [ ] 4.1 Parse `video_remediation` field from segment JSON
-- [ ] 4.2 Implement category-based mode lookup from config
-- [ ] 4.3 Implement multi-label "most restrictive" mode resolution
-- [ ] 4.4 Implement three-tier resolution (segment → category → global)
-- [ ] 4.5 Handle invalid segment mode values (log warning, use fallback)
-- [ ] 4.6 Write unit tests for mode resolution logic
+- [x] 4.1 Parse `video_remediation` field from segment JSON
+- [x] 4.2 Implement category-based mode lookup from config
+- [x] 4.3 Implement multi-label "most restrictive" mode resolution
+- [x] 4.4 Implement three-tier resolution (segment → category → global)
+- [x] 4.5 Handle invalid segment mode values (log warning, use fallback)
+- [x] 4.6 Write unit tests for mode resolution logic
 
 ## 5. Allow Override Integration
 

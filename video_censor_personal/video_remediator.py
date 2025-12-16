@@ -363,3 +363,77 @@ class VideoRemediator:
             # Clean up temporary directory
             if work_dir is None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    def resolve_segment_mode(
+        self,
+        segment: Dict[str, Any],
+    ) -> str:
+        """Resolve the remediation mode for a segment using three-tier hierarchy.
+        
+        Precedence (first match wins):
+        1. Segment-level override: segment.video_remediation field
+        2. Category-based default: category_modes config per category
+        3. Global default: self.mode
+        
+        For segments with multiple labels, uses most restrictive mode (cut > blank).
+        
+        Args:
+            segment: Segment dict with optional video_remediation and labels fields.
+        
+        Returns:
+            Resolved mode ("blank" or "cut").
+        """
+        # Tier 1: Segment-level override
+        segment_mode = segment.get("video_remediation")
+        if segment_mode:
+            # Validate segment mode
+            valid_modes = {"blank", "cut"}
+            if segment_mode not in valid_modes:
+                logger.warning(
+                    f"Invalid segment mode '{segment_mode}' at {segment.get('start_time')}, "
+                    f"using category/global default"
+                )
+            else:
+                logger.debug(f"Using segment-level mode: {segment_mode}")
+                return segment_mode
+        
+        # Tier 2: Category-based default
+        labels = segment.get("labels", [])
+        if labels and self.category_modes:
+            category_mode = self._resolve_category_mode(labels)
+            if category_mode:
+                logger.debug(f"Using category mode: {category_mode} for labels {labels}")
+                return category_mode
+        
+        # Tier 3: Global default
+        logger.debug(f"Using global mode: {self.mode}")
+        return self.mode
+    
+    def _resolve_category_mode(self, labels: List[str]) -> Optional[str]:
+        """Resolve mode from multiple category labels.
+        
+        Uses most restrictive mode when multiple labels present.
+        "cut" is more restrictive than "blank".
+        
+        Args:
+            labels: List of category labels.
+        
+        Returns:
+            Resolved mode or None if no category has configured mode.
+        """
+        if not labels:
+            return None
+        
+        modes = []
+        for label in labels:
+            if label in self.category_modes:
+                modes.append(self.category_modes[label])
+        
+        if not modes:
+            return None
+        
+        # "cut" is more restrictive than "blank"
+        if "cut" in modes:
+            return "cut"
+        
+        return "blank"

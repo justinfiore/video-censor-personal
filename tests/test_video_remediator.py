@@ -389,3 +389,215 @@ class TestConcatFileGeneration:
         assert concat_file.exists()
         content = concat_file.read_text()
         assert content == ""
+
+
+class TestModeResolution:
+    """Test three-tier mode resolution logic."""
+    
+    def test_resolve_segment_mode_global_default(self):
+        """Test mode resolution using global default."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segment = {"start_time": "10", "end_time": "20"}
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "blank"
+    
+    def test_resolve_segment_mode_segment_override(self):
+        """Test mode resolution with segment-level override."""
+        remediator = VideoRemediator({"mode": "blank"})
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "video_remediation": "cut"
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "cut"
+    
+    def test_resolve_segment_mode_category_default(self):
+        """Test mode resolution with category default."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Nudity": "cut",
+                "Violence": "blank"
+            }
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "cut"
+    
+    def test_resolve_segment_mode_precedence_segment_over_category(self):
+        """Test that segment-level override takes precedence over category."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"],
+            "video_remediation": "blank"  # Override category default
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "blank"
+    
+    def test_resolve_segment_mode_precedence_category_over_global(self):
+        """Test that category default takes precedence over global."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "cut"
+    
+    def test_resolve_segment_mode_multiple_labels_most_restrictive(self):
+        """Test mode resolution with multiple labels uses most restrictive."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Nudity": "cut",
+                "Violence": "blank"
+            }
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity", "Violence"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        # "cut" is more restrictive than "blank"
+        assert mode == "cut"
+    
+    def test_resolve_segment_mode_multiple_labels_all_blank(self):
+        """Test mode resolution with multiple labels all blank."""
+        remediator = VideoRemediator({
+            "mode": "cut",
+            "category_modes": {
+                "Violence": "blank",
+                "Profanity": "blank"
+            }
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Violence", "Profanity"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "blank"
+    
+    def test_resolve_segment_mode_unknown_category(self):
+        """Test mode resolution with unknown category falls back to global."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["UnknownCategory"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        # Unknown category, use global default
+        assert mode == "blank"
+    
+    def test_resolve_segment_mode_invalid_segment_mode(self):
+        """Test mode resolution with invalid segment mode falls back."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"],
+            "video_remediation": "invalid"
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        # Invalid segment mode, fall back to category
+        assert mode == "cut"
+    
+    def test_resolve_segment_mode_no_labels(self):
+        """Test mode resolution with no labels."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": []
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "blank"
+    
+    def test_resolve_segment_mode_no_category_modes_config(self):
+        """Test mode resolution with no category_modes configured."""
+        remediator = VideoRemediator({"mode": "cut"})
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        # No category modes, use global default
+        assert mode == "cut"
+    
+    def test_resolve_category_mode_single_label(self):
+        """Test category mode resolution with single label."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        mode = remediator._resolve_category_mode(["Nudity"])
+        assert mode == "cut"
+    
+    def test_resolve_category_mode_no_labels(self):
+        """Test category mode resolution with no labels."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        mode = remediator._resolve_category_mode([])
+        assert mode is None
+    
+    def test_resolve_category_mode_no_matching_categories(self):
+        """Test category mode resolution with no matching categories."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "cut"}
+        })
+        
+        mode = remediator._resolve_category_mode(["UnknownCategory"])
+        assert mode is None
