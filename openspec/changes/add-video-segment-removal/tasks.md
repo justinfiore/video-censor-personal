@@ -8,11 +8,11 @@
 
 ## 2. Video Blank Mode Implementation
 
-- [ ] 2.1 Implement ffmpeg filter chain builder for blank mode
-- [ ] 2.2 Handle time range expressions with `between(t,start,end)`
-- [ ] 2.3 Support configurable blank color (hex to ffmpeg color)
-- [ ] 2.4 Write unit tests for filter chain generation
-- [ ] 2.5 Write integration test for blank mode end-to-end
+- [x] 2.1 Implement ffmpeg filter chain builder for blank mode
+- [x] 2.2 Handle time range expressions with `between(t,start,end)`
+- [x] 2.3 Support configurable blank color (hex to ffmpeg color)
+- [x] 2.4 Write unit tests for filter chain generation
+- [x] 2.5 Write integration test for blank mode end-to-end
 
 ## 3. Video Cut Mode Implementation
 
