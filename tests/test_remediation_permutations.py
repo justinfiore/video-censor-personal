@@ -30,7 +30,9 @@ def config_audio_bleep(base_config):
     config = dict(base_config)
     config["audio"] = {
         "detection": {"enabled": False},
-        "remediation": {
+    }
+    config["remediation"] = {
+        "audio": {
             "enabled": True,
             "mode": "bleep",
             "categories": ["Nudity", "Violence"],
@@ -46,7 +48,9 @@ def config_audio_silence(base_config):
     config = dict(base_config)
     config["audio"] = {
         "detection": {"enabled": False},
-        "remediation": {
+    }
+    config["remediation"] = {
+        "audio": {
             "enabled": True,
             "mode": "silence",
             "categories": ["Nudity", "Violence"],
@@ -60,7 +64,7 @@ def config_video_blank(base_config):
     """Configuration with video remediation (blank mode)."""
     config = dict(base_config)
     config["remediation"] = {
-        "video_editing": {
+        "video": {
             "enabled": True,
             "mode": "blank",
             "blank_color": "#000000",
@@ -74,7 +78,7 @@ def config_video_cut(base_config):
     """Configuration with video remediation (cut mode)."""
     config = dict(base_config)
     config["remediation"] = {
-        "video_editing": {
+        "video": {
             "enabled": True,
             "mode": "cut",
         }
@@ -87,7 +91,13 @@ def config_audio_bleep_video_blank(config_audio_bleep):
     """Configuration with both audio (bleep) and video (blank) remediation."""
     config = dict(config_audio_bleep)
     config["remediation"] = {
-        "video_editing": {
+        "audio": {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Nudity", "Violence"],
+            "bleep_frequency": 1000,
+        },
+        "video": {
             "enabled": True,
             "mode": "blank",
             "blank_color": "#000000",
@@ -101,7 +111,13 @@ def config_audio_bleep_video_cut(config_audio_bleep):
     """Configuration with both audio (bleep) and video (cut) remediation."""
     config = dict(config_audio_bleep)
     config["remediation"] = {
-        "video_editing": {
+        "audio": {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Nudity", "Violence"],
+            "bleep_frequency": 1000,
+        },
+        "video": {
             "enabled": True,
             "mode": "cut",
         }
@@ -114,7 +130,12 @@ def config_audio_silence_video_blank(config_audio_silence):
     """Configuration with both audio (silence) and video (blank) remediation."""
     config = dict(config_audio_silence)
     config["remediation"] = {
-        "video_editing": {
+        "audio": {
+            "enabled": True,
+            "mode": "silence",
+            "categories": ["Nudity", "Violence"],
+        },
+        "video": {
             "enabled": True,
             "mode": "blank",
             "blank_color": "#000000",
@@ -128,7 +149,12 @@ def config_audio_silence_video_cut(config_audio_silence):
     """Configuration with both audio (silence) and video (cut) remediation."""
     config = dict(config_audio_silence)
     config["remediation"] = {
-        "video_editing": {
+        "audio": {
+            "enabled": True,
+            "mode": "silence",
+            "categories": ["Nudity", "Violence"],
+        },
+        "video": {
             "enabled": True,
             "mode": "cut",
         }
@@ -141,7 +167,7 @@ def config_video_mixed_modes(base_config):
     """Configuration with mixed video modes (category-based)."""
     config = dict(base_config)
     config["remediation"] = {
-        "video_editing": {
+        "video": {
             "enabled": True,
             "mode": "blank",  # Global default
             "blank_color": "#000000",

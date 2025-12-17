@@ -96,11 +96,11 @@ The system SHALL accept YAML configuration specifying remediation mode, categori
 - **THEN** remediation is disabled; no output file written
 
 #### Scenario: Enable silence mode
-- **WHEN** config specifies `audio.remediation.mode: "silence"`
+- **WHEN** config specifies `remediation.audio.mode: "silence"`
 - **THEN** detected audio is silenced (not bleeped)
 
 #### Scenario: Enable bleep mode
-- **WHEN** config specifies `audio.remediation.mode: "bleep"`
+- **WHEN** config specifies `remediation.audio.mode: "bleep"`
 - **THEN** detected audio is bleped with tone
 
 #### Scenario: Validate remediation config

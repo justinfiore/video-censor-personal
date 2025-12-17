@@ -16,7 +16,7 @@ The system SHALL accept `--output-video` argument and validate it against audio 
 - **THEN** argument is optional; analysis proceeds without video output
 
 #### Scenario: Fail-fast if remediation enabled without output-video
-- **WHEN** config has `audio.remediation.enabled: true` but `--output-video` is not provided
+- **WHEN** config has `remediation.audio.enabled: true` or `remediation.video.enabled: true` but `--output-video` is not provided
 - **THEN** system exits immediately with exit code 1 (before analysis begins)
 - **AND** error message clearly explains:
   - Audio remediation is enabled in config

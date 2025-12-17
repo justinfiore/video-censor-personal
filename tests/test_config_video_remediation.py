@@ -39,7 +39,7 @@ class TestVideoRemediationValidation:
     def test_video_remediation_enabled_valid(self, base_config):
         """Valid video remediation enabled configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
             }
@@ -49,7 +49,7 @@ class TestVideoRemediationValidation:
     def test_video_remediation_disabled(self, base_config):
         """Valid video remediation disabled configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": False,
             }
         }
@@ -60,32 +60,32 @@ class TestVideoRemediationValidation:
         validate_config(base_config)  # Should not raise
 
     def test_video_editing_section_not_required(self, base_config):
-        """video_editing section is optional within remediation."""
+        """video section is optional within remediation."""
         base_config["remediation"] = {}
         validate_config(base_config)  # Should not raise
 
     def test_remediation_not_dict_raises_error(self, base_config):
         """remediation field must be a dictionary."""
-        base_config["remediation"] = ["video_editing"]
+        base_config["remediation"] = ["video"]
         with pytest.raises(ConfigError, match="'remediation' field must be a dictionary"):
             validate_config(base_config)
 
     def test_video_editing_not_dict_raises_error(self, base_config):
         """video_editing field must be a dictionary."""
         base_config["remediation"] = {
-            "video_editing": "enabled"
+            "video": "enabled"
         }
-        with pytest.raises(ConfigError, match="'remediation.video_editing' field must be a dictionary"):
+        with pytest.raises(ConfigError, match="'remediation.video' field must be a dictionary"):
             validate_config(base_config)
 
     def test_enabled_not_boolean_raises_error(self, base_config):
         """enabled field must be a boolean."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": "true",
             }
         }
-        with pytest.raises(ConfigError, match="'remediation.video_editing.enabled' must be a boolean"):
+        with pytest.raises(ConfigError, match="'remediation.video.enabled' must be a boolean"):
             validate_config(base_config)
 
 
@@ -95,7 +95,7 @@ class TestVideoRemediationModeValidation:
     def test_valid_blank_mode(self, base_config):
         """Valid blank mode configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
             }
@@ -105,7 +105,7 @@ class TestVideoRemediationModeValidation:
     def test_valid_cut_mode(self, base_config):
         """Valid cut mode configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "cut",
             }
@@ -115,7 +115,7 @@ class TestVideoRemediationModeValidation:
     def test_invalid_mode_raises_error(self, base_config):
         """Invalid mode raises error."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blur",
             }
@@ -126,12 +126,12 @@ class TestVideoRemediationModeValidation:
     def test_mode_not_string_raises_error(self, base_config):
         """mode field must be a string."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": True,
             }
         }
-        with pytest.raises(ConfigError, match="'remediation.video_editing.mode' must be a string"):
+        with pytest.raises(ConfigError, match="'remediation.video.mode' must be a string"):
             validate_config(base_config)
 
 
@@ -141,7 +141,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_valid_hex_color_six_digits(self, base_config):
         """Valid 6-digit hex color."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "#000000",
             }
@@ -151,7 +151,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_valid_hex_color_three_digits(self, base_config):
         """Valid 3-digit hex color."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "#000",
             }
@@ -161,7 +161,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_valid_hex_color_uppercase(self, base_config):
         """Valid uppercase hex color."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "#FF0000",
             }
@@ -171,7 +171,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_invalid_color_no_hash_raises_error(self, base_config):
         """Color without # raises error."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "000000",
             }
@@ -182,7 +182,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_invalid_color_wrong_length_raises_error(self, base_config):
         """Color with wrong length raises error."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "#00",
             }
@@ -193,7 +193,7 @@ class TestVideoRemediationBlankColorValidation:
     def test_invalid_color_non_hex_chars_raises_error(self, base_config):
         """Color with non-hex characters raises error."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": "#GGGGGG",
             }
@@ -204,12 +204,12 @@ class TestVideoRemediationBlankColorValidation:
     def test_blank_color_not_string_raises_error(self, base_config):
         """blank_color field must be a string."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "blank_color": 0,
             }
         }
-        with pytest.raises(ConfigError, match="'remediation.video_editing.blank_color' must be a string"):
+        with pytest.raises(ConfigError, match="'remediation.video.blank_color' must be a string"):
             validate_config(base_config)
 
 
@@ -219,7 +219,7 @@ class TestVideoRemediationCategoryModesValidation:
     def test_valid_category_modes(self, base_config):
         """Valid category_modes configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "category_modes": {
                     "Nudity": "cut",
@@ -232,7 +232,7 @@ class TestVideoRemediationCategoryModesValidation:
     def test_empty_category_modes(self, base_config):
         """Empty category_modes is valid."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "category_modes": {}
             }
@@ -242,18 +242,18 @@ class TestVideoRemediationCategoryModesValidation:
     def test_category_modes_not_dict_raises_error(self, base_config):
         """category_modes field must be a dictionary."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "category_modes": ["Nudity", "Violence"]
             }
         }
-        with pytest.raises(ConfigError, match="'remediation.video_editing.category_modes' must be a dictionary"):
+        with pytest.raises(ConfigError, match="'remediation.video.category_modes' must be a dictionary"):
             validate_config(base_config)
 
     def test_category_mode_invalid_value_raises_error(self, base_config):
         """Invalid mode value in category_modes raises error."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "category_modes": {
                     "Nudity": "blur",
@@ -266,7 +266,7 @@ class TestVideoRemediationCategoryModesValidation:
     def test_category_mode_not_string_raises_error(self, base_config):
         """category_modes value must be a string."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "category_modes": {
                     "Nudity": True,
@@ -283,7 +283,7 @@ class TestVideoRemediationConfigHelpers:
     def test_is_video_remediation_enabled_true(self, base_config):
         """Check if video remediation is enabled."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
             }
         }
@@ -292,7 +292,7 @@ class TestVideoRemediationConfigHelpers:
     def test_is_video_remediation_enabled_false(self, base_config):
         """Check if video remediation is disabled."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": False,
             }
         }
@@ -305,7 +305,7 @@ class TestVideoRemediationConfigHelpers:
     def test_get_video_remediation_mode_blank(self, base_config):
         """Get blank mode from configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "mode": "blank",
             }
         }
@@ -314,7 +314,7 @@ class TestVideoRemediationConfigHelpers:
     def test_get_video_remediation_mode_cut(self, base_config):
         """Get cut mode from configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "mode": "cut",
             }
         }
@@ -327,7 +327,7 @@ class TestVideoRemediationConfigHelpers:
     def test_get_video_remediation_blank_color_custom(self, base_config):
         """Get custom blank color from configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "blank_color": "#FF0000",
             }
         }
@@ -340,7 +340,7 @@ class TestVideoRemediationConfigHelpers:
     def test_get_video_remediation_category_modes_configured(self, base_config):
         """Get category modes from configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "category_modes": {
                     "Nudity": "cut",
                     "Violence": "blank",
@@ -361,7 +361,7 @@ class TestVideoRemediationCompleteConfig:
     def test_complete_video_remediation_config_blank_mode(self, base_config):
         """Complete configuration with blank mode and all options."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
                 "blank_color": "#FF0000",
@@ -386,7 +386,7 @@ class TestVideoRemediationCompleteConfig:
     def test_complete_video_remediation_config_cut_mode(self, base_config):
         """Complete configuration with cut mode."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "cut",
                 "category_modes": {
@@ -405,7 +405,7 @@ class TestVideoRemediationCompleteConfig:
     def test_minimal_video_remediation_config(self, base_config):
         """Minimal valid video remediation configuration."""
         base_config["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
             }
         }

@@ -155,8 +155,8 @@ Replaces detected audio segments with a sine wave tone:
 You can choose which categories to remediate:
 
 ```yaml
-audio:
-  remediation:
+remediation:
+  audio:
     enabled: true
     mode: "silence"
     categories:
@@ -215,8 +215,6 @@ detectors:
 audio:
   detection:
     enabled: true
-  remediation:
-    enabled: false
 ```
 
 ### Remediation with Bleep
@@ -232,7 +230,9 @@ detectors:
 audio:
   detection:
     enabled: true
-  remediation:
+
+remediation:
+  audio:
     enabled: true
     mode: "bleep"
     categories: ["Profanity"]

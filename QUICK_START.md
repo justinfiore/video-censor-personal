@@ -806,7 +806,7 @@ Create or edit your config file (`video-censor-video-remediation.yaml`):
 
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"         # Global default: "blank" or "cut"
     blank_color: "#000000"  # Black
@@ -882,13 +882,17 @@ python video_censor_personal.py \
 You can use both audio and video remediation together:
 
 ```yaml
+audio:
+  detection:
+    enabled: true
+
 remediation:
-  audio_editing:
+  audio:
     enabled: true
     mode: "bleep"
     categories: ["Profanity"]
   
-  video_editing:
+  video:
     enabled: true
     mode: "blank"
     category_modes:

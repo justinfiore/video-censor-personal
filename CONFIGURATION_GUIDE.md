@@ -20,6 +20,9 @@ This document provides a comprehensive reference for configuring Video Censor Pe
 - [Video Section](#video-section)
   - [Video Metadata Output](#video-metadata-output)
   - [Skip Chapters](#skip-chapters)
+- [Remediation Section](#remediation-section)
+  - [Audio Remediation](#audio-remediation)
+  - [Video Remediation](#video-remediation)
 - [Models Section](#models-section)
 - [Complete Example](#complete-example)
 
@@ -64,9 +67,11 @@ version: 1.0                    # Optional: configuration version
 
 detections: { ... }             # REQUIRED: Detection category settings
 detectors: [ ... ]              # Optional: Detector configurations
-audio: { ... }                  # Optional: Audio processing settings
+audio: { ... }                  # Optional: Audio detection settings
 processing: { ... }             # REQUIRED: Frame/video processing settings
 output: { ... }                 # REQUIRED: Output format settings
+video: { ... }                  # Optional: Video metadata output settings
+remediation: { ... }            # Optional: Audio and video remediation settings
 models: { ... }                 # Optional: Model download/cache settings
 ```
 
@@ -371,43 +376,21 @@ For testing and development. Returns deterministic results without requiring mod
 
 ## Audio Section
 
-**Optional.** Controls audio extraction, detection, and remediation.
+**Optional.** Controls audio detection settings.
 
 ```yaml
 audio:
   detection:
     enabled: true               # Enable audio-based detection
-  
-  remediation:
-    enabled: true               # Enable audio remediation
-    mode: "silence"             # "silence" or "bleep"
-    categories:                 # Categories to remediate
-      - "Profanity"
-      - "Violence"
-    bleep_frequency: 1000       # Frequency in Hz for bleep mode
 ```
 
 ### Audio Detection Options
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `enabled` | boolean | No | `false` | Enable audio track analysis |
+| `detection.enabled` | boolean | No | `false` | Enable audio track analysis |
 
-### Audio Remediation Options
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `enabled` | boolean | No | `false` | Enable audio remediation |
-| `mode` | string | No | `"silence"` | Remediation mode: `"silence"` or `"bleep"` |
-| `categories` | list | No | `[]` | Categories to remediate (empty = all detected) |
-| `bleep_frequency` | integer | No | `1000` | Tone frequency in Hz for bleep mode |
-
-**Remediation Modes:**
-
-- **silence**: Replaces detected segments with silence (zero amplitude)
-- **bleep**: Replaces detected segments with a sine wave tone
-
-**Note:** When `remediation.enabled: true`, use `--output-video` CLI flag to specify output file.
+**Note:** Audio remediation is configured in the [Remediation Section](#remediation-section), not here.
 
 ---
 
@@ -519,15 +502,7 @@ video:
   metadata_output:
     skip_chapters:
       enabled: false              # Write detection segments as chapter markers
-
-remediation:
-  video_editing:
-    enabled: false                # Enable video remediation
-    mode: "blank"                 # Global default mode: "blank" or "cut"
-    blank_color: "#000000"        # Hex color for blank mode (default: black)
-    category_modes:               # Per-category mode overrides
-      Nudity: "cut"
-      Violence: "blank"
+      name_format: "Segment {index}"
 ```
 
 ### Video Metadata Output
@@ -609,13 +584,59 @@ Most modern media players support MP4 chapter markers:
 - Detailed error messages help diagnose ffmpeg issues
 - Non-interactive mode (CI/CD) requires different input/output paths (no overwrite confirmation prompt)
 
+---
+
+## Remediation Section
+
+**Optional.** Configures automatic remediation (censoring/silencing) of detected content. Audio and video remediation can be used independently or together.
+
+### Audio Remediation
+
+Automatically censors detected audio by replacing with silence or a beep tone.
+
+```yaml
+remediation:
+  audio:
+    enabled: false                # Enable audio remediation
+    mode: "silence"               # "silence" or "bleep"
+    categories:                   # Which categories to remediate
+      - "Profanity"
+    bleep_frequency: 1000         # Only for bleep mode: tone frequency in Hz
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `false` | Enable audio remediation |
+| `mode` | string | No | `"silence"` | Remediation mode: `"silence"` or `"bleep"` |
+| `categories` | list | No | `[]` | Categories to remediate (empty = all detected categories) |
+| `bleep_frequency` | integer | No | `1000` | Frequency in Hz for bleep mode (e.g., 800, 1000, 1200) |
+
+**Modes:**
+- **silence** - Replace detected audio with silence (useful for profanity, offensive language)
+- **bleep** - Replace with a beep tone at specified frequency (user-recognizable censoring)
+
+**Requirements:**
+- `--output-video` CLI argument required when enabled
+- Audio track must be present in input video
+- Output file must be different from input file
+
+#### Example Usage
+
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config config.yaml \
+  --output results.json \
+  --output-video censored_video.mp4
+```
+
 ### Video Remediation Configuration
 
 **Optional.** Enables censoring of visual content by either blanking or cutting detected segments.
 
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"                 # Global default: "blank" or "cut"
     blank_color: "#000000"        # Hex color (default: black)
@@ -683,7 +704,7 @@ Setting `"allow": true` bypasses video remediation entirely for that segment.
 Configuration (`video-censor-video-remediation.yaml`):
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"
     blank_color: "#000000"
@@ -706,19 +727,19 @@ python video_censor_personal.py \
 Video and audio remediation can be used together:
 
 ```yaml
-# Audio remediation config (from audio_detection.yaml)
-audio_detection:
-  profanity:
+# Audio detection enabled
+audio:
+  detection:
     enabled: true
-    # ... audio config
 
+# Both audio and video remediation
 remediation:
-  audio_editing:
+  audio:
     enabled: true
     mode: "bleep"
     categories: ["Profanity"]
   
-  video_editing:
+  video:
     enabled: true
     mode: "blank"
     category_modes:
@@ -868,8 +889,11 @@ detectors:
 audio:
   detection:
     enabled: true
-  
-  remediation:
+
+# Remediation settings
+remediation:
+  # Audio remediation
+  audio:
     enabled: true
     mode: "bleep"
     categories:

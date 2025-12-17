@@ -549,7 +549,7 @@ class AnalysisPipeline:
             segments: List of merged segment dictionaries to use for video remediation.
         """
         # Check if video remediation is enabled
-        video_config = self.config.get("remediation", {}).get("video_editing", {})
+        video_config = self.config.get("remediation", {}).get("video", {})
         if not video_config.get("enabled", False):
             logger.debug("Video remediation disabled")
             return
@@ -863,7 +863,7 @@ class AnalysisPipeline:
             detections: List of detection results to use for remediation.
         """
         # Apply audio remediation if enabled
-        remediation_config = self.config.get("audio", {}).get("remediation", {})
+        remediation_config = self.config.get("remediation", {}).get("audio", {})
         if remediation_config.get("enabled", False) and audio_data_original is not None:
             self.debug_output.subsection("Audio Remediation")
             self.debug_output.step("Applying audio remediation...")

@@ -125,7 +125,10 @@ class TestPipelineAudioRemediation:
                 }
             ],
             "audio": {
-                "remediation": {
+                "detection": {"enabled": False},
+            },
+            "remediation": {
+                "audio": {
                     "enabled": True,
                     "mode": "silence",
                     "categories": ["Profanity"],
@@ -238,7 +241,7 @@ class TestPipelineAudioRemediation:
         
         # Add output path to config
         config = config_with_remediation.copy()
-        config["audio"]["remediation"]["output_path"] = str(output_audio)
+        config["remediation"]["audio"]["output_path"] = str(output_audio)
         
         with patch("video_censor_personal.pipeline.VideoExtractor") as mock_extractor:
             instance = MagicMock()

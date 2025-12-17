@@ -79,10 +79,12 @@ detectors:
 audio:
   detection:
     enabled: true
-  
-  # Remediation ENABLED - bleep mode
+
+# Remediation settings
+remediation:
+  # Audio remediation - bleep mode
   # This will censor detected audio segments with a beep tone
-  remediation:
+  audio:
     enabled: true
     mode: "bleep"                    # Replace with sine wave tone
     categories:                      # Which categories to remediate

@@ -27,7 +27,7 @@ output:
 
 # Video remediation configuration
 remediation:
-  video_editing:
+  video:
     enabled: true
     
     # Global default mode: "blank" or "cut"

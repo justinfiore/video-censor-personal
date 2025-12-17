@@ -417,7 +417,7 @@ python video_censor_personal.py \
 Example configuration:
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"         # Global default
     blank_color: "#000000"  # Black

@@ -63,7 +63,11 @@ When video is cut:
 ### Audio Only (Bleep)
 ```yaml
 audio:
-  remediation:
+  detection:
+    enabled: true
+
+remediation:
+  audio:
     enabled: true
     mode: "bleep"
     categories: ["Profanity"]
@@ -73,7 +77,7 @@ audio:
 ### Video Only (Blank)
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"
     blank_color: "#000000"  # Black
@@ -82,13 +86,16 @@ remediation:
 ### Both Audio and Video
 ```yaml
 audio:
-  remediation:
+  detection:
+    enabled: true
+
+remediation:
+  audio:
     enabled: true
     mode: "bleep"
     categories: ["Profanity"]
-
-remediation:
-  video_editing:
+  
+  video:
     enabled: true
     mode: "blank"
     blank_color: "#000000"
@@ -97,7 +104,7 @@ remediation:
 ### Mixed Video Modes (Category-Based)
 ```yaml
 remediation:
-  video_editing:
+  video:
     enabled: true
     mode: "blank"  # Global default
     blank_color: "#000000"

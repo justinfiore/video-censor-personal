@@ -61,14 +61,15 @@ output:
   include_confidence: true
   pretty_print: true
 
-# Audio processing (optional)
+# Audio detection (optional)
 audio:
-  enabled: true
-  
   detection:
     enabled: true
-  
-  remediation:
+
+# Remediation configuration
+remediation:
+  # Audio remediation disabled for this example
+  audio:
     enabled: false               # Set to true if you also want audio remediation
 
 # Video metadata output configuration

@@ -136,19 +136,19 @@ The system SHALL apply both audio and video remediation in a single output when 
 The system SHALL accept YAML configuration specifying video remediation default mode, categories, and options.
 
 #### Scenario: Video remediation disabled by default
-- **WHEN** user provides config without `remediation.video_editing` section
+- **WHEN** user provides config without `remediation.video` section
 - **THEN** video remediation is disabled; video output is unchanged (audio may still be remediated)
 
 #### Scenario: Enable with blank as global default mode
-- **WHEN** config specifies `remediation.video_editing.enabled: true` and `mode: "blank"`
+- **WHEN** config specifies `remediation.video.enabled: true` and `mode: "blank"`
 - **THEN** segments without category or segment override are blanked with black screen
 
 #### Scenario: Enable with cut as global default mode
-- **WHEN** config specifies `remediation.video_editing.enabled: true` and `mode: "cut"`
+- **WHEN** config specifies `remediation.video.enabled: true` and `mode: "cut"`
 - **THEN** segments without category or segment override are removed entirely
 
 #### Scenario: Global default mode when not specified
-- **WHEN** config specifies `remediation.video_editing.enabled: true` but omits `mode`
+- **WHEN** config specifies `remediation.video.enabled: true` but omits `mode`
 - **THEN** global default mode is "blank" (safer option that preserves timing)
 
 #### Scenario: Configure category_modes
