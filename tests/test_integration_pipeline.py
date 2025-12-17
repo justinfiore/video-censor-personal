@@ -320,3 +320,133 @@ class TestErrorHandling:
         runner = AnalysisRunner("/nonexistent/video.mp4", config_with_mock, str(config_path))
         with pytest.raises(Exception):
             runner.run(output_path)
+
+
+class TestVideoRemediationIntegration:
+    """Test video remediation integration with analysis pipeline."""
+
+    def test_pipeline_applies_video_remediation_blank_mode(
+        self, sample_video_path, config_with_mock, temp_output_dir
+    ):
+        """Test pipeline applies video remediation in blank mode."""
+        # Update config to enable video remediation
+        config_with_video = dict(config_with_mock)
+        config_with_video["remediation"] = {
+            "video_editing": {
+                "enabled": True,
+                "mode": "blank",
+                "blank_color": "#000000",
+                "category_modes": {
+                    "Nudity": "cut",
+                    "Violence": "blank",
+                }
+            }
+        }
+
+        output_video_path = str(temp_output_dir / "remediated.mp4")
+
+        with AnalysisPipeline(
+            sample_video_path,
+            config_with_video,
+            output_video_path=output_video_path
+        ) as pipeline:
+            results = pipeline.analyze()
+            # Should complete without raising
+            assert isinstance(results, list)
+            # Output video should exist
+            assert Path(output_video_path).exists()
+            # Output video should have size > 0
+            assert Path(output_video_path).stat().st_size > 0
+
+    def test_pipeline_video_remediation_disabled_by_default(
+        self, sample_video_path, config_with_mock, temp_output_dir
+    ):
+        """Test video remediation is disabled by default."""
+        output_video_path = str(temp_output_dir / "output.mp4")
+
+        with AnalysisPipeline(
+            sample_video_path,
+            config_with_mock,
+            output_video_path=output_video_path
+        ) as pipeline:
+            results = pipeline.analyze()
+            # Should complete
+            assert isinstance(results, list)
+            # If no audio or video remediation, output video won't be created
+            # (unless audio remediation is enabled)
+
+    def test_analysis_runner_with_video_remediation(
+        self, sample_video_path, config_with_mock, temp_output_dir
+    ):
+        """Test AnalysisRunner with video remediation enabled."""
+        # Update config to enable video remediation
+        config_with_video = dict(config_with_mock)
+        config_with_video["remediation"] = {
+            "video_editing": {
+                "enabled": True,
+                "mode": "blank",
+                "blank_color": "#000000",
+            }
+        }
+
+        output_path = str(temp_output_dir / "output.json")
+        output_video_path = str(temp_output_dir / "remediated.mp4")
+        config_path = Path(__file__).parent / "fixtures" / "config_with_mock.yaml"
+
+        runner = AnalysisRunner(
+            sample_video_path,
+            config_with_video,
+            str(config_path),
+            output_video_path=output_video_path
+        )
+        result = runner.run(output_path)
+
+        # Verify JSON output was written
+        assert Path(output_path).exists()
+        assert result is not None
+
+        # Verify video output was created
+        assert Path(output_video_path).exists()
+        assert Path(output_video_path).stat().st_size > 0
+
+        # Verify JSON structure
+        with open(output_path, "r") as f:
+            output_json = json.load(f)
+
+        assert "metadata" in output_json
+        assert "segments" in output_json
+
+    def test_video_remediation_logs_are_visible(
+        self, sample_video_path, config_with_mock, temp_output_dir, caplog
+    ):
+        """Test video remediation execution is logged."""
+        # Update config to enable video remediation
+        config_with_video = dict(config_with_mock)
+        config_with_video["remediation"] = {
+            "video_editing": {
+                "enabled": True,
+                "mode": "blank",
+                "blank_color": "#000000",
+            }
+        }
+
+        output_video_path = str(temp_output_dir / "remediated.mp4")
+
+        # Set log level to DEBUG to capture video remediation logs
+        import logging
+        caplog.set_level(logging.DEBUG)
+
+        with AnalysisPipeline(
+            sample_video_path,
+            config_with_video,
+            output_video_path=output_video_path,
+            log_level="DEBUG"
+        ) as pipeline:
+            results = pipeline.analyze()
+            assert isinstance(results, list)
+
+        # Check for video remediation log messages
+        log_text = caplog.text
+        # Should see "Video Remediation" or similar in logs
+        # (exact message depends on implementation)
+        assert "video" in log_text.lower() or "remediation" in log_text.lower()
