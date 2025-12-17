@@ -507,12 +507,18 @@ class AnalysisPipeline:
         # Order is important: audio first (original timings), then video (may shift timings)
         # This includes audio remediation, video remediation and video muxing (I/O operations that don't need models)
         try:
+            # Merge detection segments for video remediation
+            merge_threshold = self.config.get("processing", {}).get(
+                "segment_merge", {}
+            ).get("merge_threshold", 2.0)
+            merged_segments = merge_segments(all_results, threshold=merge_threshold)
+            
             self._apply_audio_remediation(
                 audio_data_original,
                 audio_sample_rate_original,
                 all_results
             )
-            self._apply_video_remediation(all_results)
+            self._apply_video_remediation(merged_segments)
             self._mux_remediated_audio()
         except Exception as e:
             logger.error(f"Post-processing failed: {e}", exc_info=True)
@@ -532,7 +538,7 @@ class AnalysisPipeline:
 
     def _apply_video_remediation(
         self,
-        detections: List[DetectionResult],
+        segments: List[Dict[str, Any]],
     ) -> None:
         """Apply video remediation if enabled and output video path specified.
 
@@ -540,7 +546,7 @@ class AnalysisPipeline:
         Video remediation modifies the output video file (or creates it if not yet existing).
 
         Args:
-            detections: List of detection results to use for video remediation.
+            segments: List of merged segment dictionaries to use for video remediation.
         """
         # Check if video remediation is enabled
         video_config = self.config.get("remediation", {}).get("video_editing", {})
@@ -576,14 +582,13 @@ class AnalysisPipeline:
             self.debug_output.detail("Mode", video_config.get("mode", "blank"))
             self.debug_output.detail("Output video", self.output_video_path)
 
-            # Convert DetectionResult objects to segment dicts for VideoRemediator
-            segments = self._detections_to_segments(detections)
-
-            logger.info(f"Converting {len(detections)} detections to {len(segments)} segments for video remediation")
-            self.debug_output.detail("Detections", len(detections))
+            logger.info(f"Using {len(segments)} merged segments for video remediation")
             self.debug_output.detail("Segments", len(segments))
 
-            if not segments:
+            # Convert merged segments (with float times) to remediator format (with string timecodes)
+            remediation_segments = self._format_segments_for_remediation(segments)
+
+            if not remediation_segments:
                 logger.info("No segments to remediate; copying input video to output")
                 import shutil
                 shutil.copy2(str(self.video_path), self.output_video_path)
@@ -612,7 +617,7 @@ class AnalysisPipeline:
                 remediator.apply(
                     str(self.video_path),
                     video_temp_path,
-                    segments,
+                    remediation_segments,
                     video_duration,
                     video_width,
                     video_height,
@@ -622,7 +627,7 @@ class AnalysisPipeline:
                 self.debug_output.step(f"Video remediation complete (temporary file)")
 
                 # If video was cut, apply the same cuts to remediated audio to maintain sync
-                grouped = remediator.group_segments_by_mode(remediator.filter_allowed_segments(segments))
+                grouped = remediator.group_segments_by_mode(remediator.filter_allowed_segments(remediation_segments))
                 if len(grouped["cut"]) > 0:
                     self.debug_output.step("Applying matching cuts to remediated audio...")
                     self._apply_matching_cuts_to_audio(grouped["cut"], video_duration)
@@ -632,7 +637,7 @@ class AnalysisPipeline:
                 remediator.apply(
                     str(self.video_path),
                     self.output_video_path,
-                    segments,
+                    remediation_segments,
                     video_duration,
                     video_width,
                     video_height,
@@ -768,6 +773,42 @@ class AnalysisPipeline:
             logger.error(f"Failed to apply matching cuts to audio: {e}", exc_info=True)
             self.debug_output.info(f"WARNING: Audio cuts failed (continuing): {e}")
             # Don't raise - continue with mismatched audio/video rather than fail completely
+
+    def _format_segments_for_remediation(
+        self,
+        merged_segments: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Format merged segments for video remediator.
+
+        The video remediator's _parse_timecode method handles both float seconds
+        and HH:MM:SS format, so we pass through the float seconds directly to preserve
+        precision for short segments (e.g., 0.033 seconds).
+
+        Args:
+            merged_segments: List of merged segment dicts with float times.
+
+        Returns:
+            List of segments with start_time/end_time as floats.
+        """
+        formatted = []
+        for segment in merged_segments:
+            formatted_segment = {
+                "start_time": segment["start_time"],  # Keep as float (seconds)
+                "end_time": segment["end_time"],      # Keep as float (seconds)
+                "labels": segment.get("labels", []),
+            }
+            
+            # Copy over other fields if present
+            if "confidence" in segment:
+                formatted_segment["confidence"] = segment["confidence"]
+            if "allow" in segment:
+                formatted_segment["allow"] = segment["allow"]
+            if "detections" in segment:
+                formatted_segment["detections"] = segment["detections"]
+                
+            formatted.append(formatted_segment)
+        
+        return formatted
 
     def _detections_to_segments(
         self,

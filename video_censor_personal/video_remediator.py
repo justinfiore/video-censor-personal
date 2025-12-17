@@ -163,9 +163,16 @@ class VideoRemediator:
             ValueError: If timecode format is invalid.
         """
         try:
+            # Handle plain numeric seconds format (int or float)
+            if isinstance(timecode, (int, float)):
+                return float(timecode)
+            
+            # Handle string formats
+            timecode_str = str(timecode)
+            
             # Handle HH:MM:SS[.mmm] format
-            if ":" in timecode:
-                parts = timecode.split(":")
+            if ":" in timecode_str:
+                parts = timecode_str.split(":")
                 if len(parts) == 3:
                     hours = float(parts[0])
                     minutes = float(parts[1])
@@ -176,8 +183,8 @@ class VideoRemediator:
                     seconds = float(parts[1])
                     return minutes * 60 + seconds
             
-            # Handle plain seconds format
-            return float(timecode)
+            # Handle plain seconds format (string)
+            return float(timecode_str)
         
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid timecode format: {timecode}") from e
