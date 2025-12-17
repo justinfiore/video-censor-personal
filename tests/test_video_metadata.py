@@ -183,7 +183,7 @@ class TestCLIValidation:
         
         # Should warn but not fail
         validate_cli_args(args, valid_config_without_skip_chapters)
-        assert "skip chapters and audio remediation are both disabled" in caplog.text
+        assert "skip chapters, audio remediation, and video remediation are all disabled" in caplog.text
 
     @patch("builtins.input", return_value="n")
     def test_input_output_path_match_prompts_user_no(self, mock_input, valid_config_with_skip_chapters, tmp_path):
