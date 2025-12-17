@@ -120,7 +120,7 @@ class TestVideoRemediationModeValidation:
                 "mode": "blur",
             }
         }
-        with pytest.raises(ConfigError, match="must be one of.*blank.*cut"):
+        with pytest.raises(ConfigError, match=r"must be one of \{.*blank.*\}.*got 'blur'"):
             validate_config(base_config)
 
     def test_mode_not_string_raises_error(self, base_config):
@@ -260,7 +260,7 @@ class TestVideoRemediationCategoryModesValidation:
                 }
             }
         }
-        with pytest.raises(ConfigError, match="must be one of.*blank.*cut"):
+        with pytest.raises(ConfigError, match=r"must be one of \{.*blank.*\}.*got 'blur'"):
             validate_config(base_config)
 
     def test_category_mode_not_string_raises_error(self, base_config):
