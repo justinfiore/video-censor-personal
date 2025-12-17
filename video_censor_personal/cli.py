@@ -161,7 +161,7 @@ def validate_cli_args(
     """Validate CLI arguments against configuration.
 
     Ensures consistency between CLI arguments and configuration, particularly
-    for output video handling with audio remediation and skip chapters features.
+    for output video handling with audio remediation, video remediation, and skip chapters features.
 
     Args:
         args: Parsed command-line arguments.
@@ -170,7 +170,7 @@ def validate_cli_args(
     Raises:
         SystemExit: If validation fails.
     """
-    from video_censor_personal.config import is_skip_chapters_enabled
+    from video_censor_personal.config import is_skip_chapters_enabled, is_video_remediation_enabled
 
     logger = logging.getLogger(__name__)
     
@@ -194,6 +194,9 @@ def validate_cli_args(
     # Check if audio remediation is enabled
     audio_remediation_enabled = config.get("audio", {}).get("remediation", {}).get("enabled", False)
     
+    # Check if video remediation is enabled
+    video_remediation_enabled = is_video_remediation_enabled(config)
+    
     # Require --output-video when skip chapters is enabled
     if skip_chapters_enabled and not args.output_video:
         logger.error(
@@ -202,10 +205,18 @@ def validate_cli_args(
         )
         sys.exit(1)
     
-    # Warn if --output-video is provided but neither feature needs it
-    if args.output_video and not skip_chapters_enabled and not audio_remediation_enabled:
+    # Require --output-video when video remediation is enabled
+    if video_remediation_enabled and not args.output_video:
+        logger.error(
+            "Video remediation feature is enabled but --output-video is not specified. "
+            "--output-video is required when video remediation is enabled."
+        )
+        sys.exit(1)
+    
+    # Warn if --output-video is provided but no feature needs it
+    if args.output_video and not skip_chapters_enabled and not audio_remediation_enabled and not video_remediation_enabled:
         logger.warning(
-            "--output-video provided but skip chapters and audio remediation are both disabled. "
+            "--output-video provided but skip chapters, audio remediation, and video remediation are all disabled. "
             "The output video file will not be generated."
         )
     

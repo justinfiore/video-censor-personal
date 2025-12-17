@@ -87,44 +87,6 @@ Extensive research on detection methodologies and model selection has been condu
 
 ## Future Enhancements
 
-### `video-segment-removal` - Video Editing / Segment Removal
-
-Add an option similar to chapter generation or audio remediation that actually cuts out (or blanks out) video segments identified in the JSON file. This is a new remediation mode that operates on the visual content in addition to (or instead of) audio remediation.
-
-**Requirements:**
-- Requires `--output-video` option to be specified (similar to existing audio remediation modes)
-- Only segments that are NOT marked `"allow": true` should be removed or blanked (integrates with `segment-allow-override`)
-- Should be configurable via YAML config file similar to existing remediation options
-- Must preserve video quality and encoding settings where possible
-- Should work in conjunction with audio remediation (e.g., blank video + bleep audio for same segment)
-- Fits into Phase 3 (Remediate) of the `three-phase-workflow`
-
-**Open Questions (Discovery Required Before Implementation):**
-
-| Mode | Description | Pros | Cons |
-|------|-------------|------|------|
-| **Mode A - Blank Video Only** | Keep the audio playing but show a blank/black screen for the segment duration | Preserves timing/sync with original; no audio discontinuity; simpler to implement; viewer knows something was censored | May be jarring visually; audio context may reveal what was censored |
-| **Mode B - Cut Both Audio & Video** | Remove both audio and video for the segment, resulting in a shorter output video | Cleaner removal; no trace of censored content; shorter runtime | Causes continuity issues; video duration changes; may confuse viewers with sudden jumps; harder to implement with re-encoding |
-| **Mode C - Both Options Available** | Provide a YAML configuration option to let users choose their preferred mode per video | Maximum flexibility for different use cases; users can decide based on content type | More complex implementation; more testing required; more documentation needed |
-
-**Implementation Considerations:**
-- Decision on which mode(s) to implement should be made at implementation time based on user feedback and technical feasibility
-- Consider ffmpeg filter chains for blanking video frames (e.g., `drawbox` or `overlay` filters)
-- Consider ffmpeg segment extraction and concatenation for cutting (e.g., `-ss` and `-to` with concat demuxer)
-- May need to handle keyframe alignment issues when cutting to avoid artifacts
-- Should support common video codecs (H.264, H.265, VP9, AV1)
-- Consider whether to re-encode or use stream copy where possible for performance
-
-**Proposed YAML Configuration:**
-```yaml
-remediation:
-  video_editing:
-    enabled: true
-    mode: "blank"  # "blank" | "cut"
-    blank_color: "#000000"  # Color to show during blanked segments (hex color code)
-    blank_opacity: 1.0  # 0.0 (transparent) to 1.0 (fully opaque)
-```
-
 ### `preview-editor-ui` - Video Preview / Editing UI
 
 Build a simple Python-based desktop UI application for reviewing detection results and editing segment allow/disallow status. This UI enables users to visually review detected segments, watch the actual video content, and make informed decisions about which segments to allow or remediate.

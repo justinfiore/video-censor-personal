@@ -519,6 +519,15 @@ video:
   metadata_output:
     skip_chapters:
       enabled: false              # Write detection segments as chapter markers
+
+remediation:
+  video_editing:
+    enabled: false                # Enable video remediation
+    mode: "blank"                 # Global default mode: "blank" or "cut"
+    blank_color: "#000000"        # Hex color for blank mode (default: black)
+    category_modes:               # Per-category mode overrides
+      Nudity: "cut"
+      Violence: "blank"
 ```
 
 ### Video Metadata Output
@@ -599,6 +608,145 @@ Most modern media players support MP4 chapter markers:
 - If chapter writing fails, the JSON output still succeeds (JSON is primary output)
 - Detailed error messages help diagnose ffmpeg issues
 - Non-interactive mode (CI/CD) requires different input/output paths (no overwrite confirmation prompt)
+
+### Video Remediation Configuration
+
+**Optional.** Enables censoring of visual content by either blanking or cutting detected segments.
+
+```yaml
+remediation:
+  video_editing:
+    enabled: true
+    mode: "blank"                 # Global default: "blank" or "cut"
+    blank_color: "#000000"        # Hex color (default: black)
+    category_modes:
+      Nudity: "cut"               # Category-specific overrides
+      Violence: "blank"
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `false` | Enable video remediation |
+| `mode` | string | No | `"blank"` | Global default mode: `"blank"` or `"cut"` |
+| `blank_color` | string | No | `"#000000"` | Hex color for blank mode (e.g., `#FF0000` for red) |
+| `category_modes` | dict | No | `{}` | Per-category mode overrides |
+
+#### Remediation Modes
+
+**Blank Mode** - Replaces video with solid color while preserving audio:
+- Useful when timing/context is important
+- Audio continues to play during blanked sections
+- Uses ffmpeg drawbox filter with time-based expressions
+- No re-encoding of non-blanked portions
+
+**Cut Mode** - Removes both video and audio segments entirely:
+- Creates a shorter output video
+- Useful for permanent removal of unwanted content
+- Segments are extracted and concatenated using ffmpeg
+- All segments are re-encoded for consistency
+
+#### Three-Tier Mode Resolution
+
+Video remediation uses a three-tier hierarchy to determine the mode for each segment:
+
+1. **Segment-level override** - JSON field `video_remediation` (highest priority)
+2. **Category-based default** - `category_modes` config per detection category
+3. **Global default** - `mode` config setting (lowest priority)
+
+For segments with multiple labels (e.g., `["Nudity", "Violence"]`), the most restrictive mode wins (`cut` > `blank`).
+
+#### Per-Segment Mode Override
+
+After running detection, you can edit the JSON output to override the mode for specific segments:
+
+```json
+{
+  "start_time": "00:10:30",
+  "end_time": "00:10:35",
+  "labels": ["Nudity", "Violence"],
+  "video_remediation": "blank",  // Override: blank instead of cut
+  "allow": false
+}
+```
+
+Setting `"allow": true` bypasses video remediation entirely for that segment.
+
+#### Requirements
+
+- **ffmpeg** must be installed and in PATH
+- `--output-video` CLI argument required when enabled
+- Output file must be different from input file
+- Sufficient disk space for temporary files (cut mode)
+
+#### Example Usage
+
+Configuration (`video-censor-video-remediation.yaml`):
+```yaml
+remediation:
+  video_editing:
+    enabled: true
+    mode: "blank"
+    blank_color: "#000000"
+    category_modes:
+      Nudity: "cut"      # Always cut nudity
+      Violence: "blank"  # Blank violence (preserves timing)
+```
+
+Command line:
+```bash
+python video_censor_personal.py \
+  --input video.mp4 \
+  --config video-censor-video-remediation.yaml \
+  --output results.json \
+  --output-video censored.mp4
+```
+
+#### Combining with Audio Remediation
+
+Video and audio remediation can be used together:
+
+```yaml
+# Audio remediation config (from audio_detection.yaml)
+audio_detection:
+  profanity:
+    enabled: true
+    # ... audio config
+
+remediation:
+  audio_editing:
+    enabled: true
+    mode: "bleep"
+    categories: ["Profanity"]
+  
+  video_editing:
+    enabled: true
+    mode: "blank"
+    category_modes:
+      Nudity: "cut"
+      Violence: "blank"
+```
+
+In this configuration:
+- Profanity audio is bleeped out
+- Nudity video segments are cut entirely
+- Violence video is blanked but audio remains
+
+#### Supported Video Codecs
+
+Video remediation works with common codecs:
+- H.264 (AVC)
+- H.265 (HEVC)
+- VP9
+- AV1
+
+Output is re-encoded using H.264 with libx264 encoder for maximum compatibility.
+
+#### Performance Considerations
+
+- **Blank mode**: Faster processing, no segmentation needed
+- **Cut mode**: Slower due to segment extraction and concatenation
+- Large videos may require significant temporary disk space
+- Processing time scales with number of segments and video length
 
 ---
 
