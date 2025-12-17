@@ -133,7 +133,7 @@ The system SHALL apply both audio and video remediation in a single output when 
 
 ### Requirement: Video Remediation Configuration
 
-The system SHALL accept YAML configuration specifying video remediation default mode, categories, and options.
+The system SHALL accept YAML configuration specifying video remediation default mode, categories, and options under the `remediation.video` section.
 
 #### Scenario: Video remediation disabled by default
 - **WHEN** user provides config without `remediation.video` section
@@ -159,17 +159,13 @@ The system SHALL accept YAML configuration specifying video remediation default 
 - **WHEN** config specifies `category_modes: { Nudity: "blur" }` (invalid mode)
 - **THEN** system raises ConfigError during pipeline initialization
 
-#### Scenario: Configure blank color
-- **WHEN** config specifies `blank_color: "#FF0000"`
-- **THEN** blanked segments show red instead of black
+#### Scenario: Configure blank_color
+- **WHEN** config specifies `blank_color: "#FF0000"` (red)
+- **THEN** blank frames use red color instead of black
 
-#### Scenario: Validate remediation config
-- **WHEN** config specifies invalid mode (e.g., "blur" instead of "blank"/"cut")
-- **THEN** system raises ConfigError during pipeline initialization
-
-#### Scenario: Require output-video when enabled
-- **WHEN** video remediation is enabled but `--output-video` is not provided
-- **THEN** system fails fast with clear error message explaining requirement
+#### Scenario: Validate blank_color format
+- **WHEN** config specifies `blank_color: "invalid-color"`
+- **THEN** system raises ConfigError with helpful message about hex color format
 
 ### Requirement: Video Remediation Error Handling
 

@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Command-line Arguments
+### Requirement: Command-Line Interface
 
 The system SHALL provide a command-line interface with required arguments for input, config, and output paths, as well as optional arguments for video output and segment filtering.
 
