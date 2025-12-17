@@ -7,6 +7,26 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+def _normalize_log_level(value: str) -> str:
+    """Convert log level to uppercase.
+    
+    Args:
+        value: Log level string (case-insensitive).
+    
+    Returns:
+        Uppercase log level.
+        
+    Raises:
+        argparse.ArgumentTypeError: If log level is invalid.
+    """
+    normalized = value.upper()
+    if normalized not in ["INFO", "DEBUG", "TRACE"]:
+        raise argparse.ArgumentTypeError(
+            f"invalid log level: '{value}' (choose from 'info', 'debug', 'trace')"
+        )
+    return normalized
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create and return the argument parser.
 
@@ -73,13 +93,13 @@ def create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--log-level",
-        type=str,
-        choices=["INFO", "DEBUG", "TRACE"],
+        type=_normalize_log_level,
         default="INFO",
         help=(
             "Set logging verbosity: INFO (default, with progress bar), "
             "DEBUG (debug logging + progress bar), "
-            "TRACE (debug logging + detailed frame-by-frame output)"
+            "TRACE (debug logging + detailed frame-by-frame output). "
+            "Case-insensitive (e.g., 'info', 'Info', 'INFO' are all valid)."
         ),
     )
 

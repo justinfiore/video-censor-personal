@@ -58,6 +58,24 @@ class TestCreateParser:
         args = parser.parse_args(["--input", "video.mp4", "--log-level", "TRACE"])
         assert args.log_level == "TRACE"
 
+    def test_parser_log_level_case_insensitive_lowercase(self):
+        """Parser should accept lowercase log levels."""
+        parser = create_parser()
+        args = parser.parse_args(["--input", "video.mp4", "--log-level", "debug"])
+        assert args.log_level == "DEBUG"
+
+    def test_parser_log_level_case_insensitive_mixed(self):
+        """Parser should accept mixed-case log levels."""
+        parser = create_parser()
+        args = parser.parse_args(["--input", "video.mp4", "--log-level", "Info"])
+        assert args.log_level == "INFO"
+
+    def test_parser_log_level_case_insensitive_trace_lowercase(self):
+        """Parser should accept lowercase trace level."""
+        parser = create_parser()
+        args = parser.parse_args(["--input", "video.mp4", "--log-level", "trace"])
+        assert args.log_level == "TRACE"
+
     def test_parser_log_level_invalid_rejected(self):
         """Parser should reject invalid log levels."""
         parser = create_parser()
