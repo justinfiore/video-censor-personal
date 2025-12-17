@@ -163,9 +163,16 @@ class VideoRemediator:
             ValueError: If timecode format is invalid.
         """
         try:
+            # Handle plain numeric seconds format (int or float)
+            if isinstance(timecode, (int, float)):
+                return float(timecode)
+            
+            # Handle string formats
+            timecode_str = str(timecode)
+            
             # Handle HH:MM:SS[.mmm] format
-            if ":" in timecode:
-                parts = timecode.split(":")
+            if ":" in timecode_str:
+                parts = timecode_str.split(":")
                 if len(parts) == 3:
                     hours = float(parts[0])
                     minutes = float(parts[1])
@@ -176,8 +183,8 @@ class VideoRemediator:
                     seconds = float(parts[1])
                     return minutes * 60 + seconds
             
-            # Handle plain seconds format
-            return float(timecode)
+            # Handle plain seconds format (string)
+            return float(timecode_str)
         
         except (ValueError, IndexError) as e:
             raise ValueError(f"Invalid timecode format: {timecode}") from e
@@ -534,3 +541,139 @@ class VideoRemediator:
             return False
         
         return True
+    
+    def apply(
+        self,
+        input_video: str,
+        output_video: str,
+        segments: List[Dict[str, Any]],
+        video_duration: float,
+        video_width: int,
+        video_height: int,
+    ) -> None:
+        """Apply video remediation to input video.
+        
+        Applies configured remediation mode (blank or cut) to detected segments.
+        Filters out segments marked with "allow": true.
+        
+        Args:
+            input_video: Path to input video file.
+            output_video: Path to output video file.
+            segments: List of detected segments with start_time, end_time, etc.
+            video_duration: Total video duration in seconds.
+            video_width: Video width in pixels.
+            video_height: Video height in pixels.
+        
+        Raises:
+            RuntimeError: If remediation fails.
+        """
+        if not self.enabled:
+            logger.debug("Video remediation disabled, skipping")
+            return
+        
+        # Filter out allowed segments
+        segments_to_remediate = self.filter_allowed_segments(segments)
+        
+        if not segments_to_remediate:
+            logger.info("No segments to remediate (all marked as allowed)")
+            # Copy input to output if no remediation needed
+            import shutil
+            shutil.copy2(input_video, output_video)
+            return
+        
+        # Group by mode
+        grouped = self.group_segments_by_mode(segments_to_remediate)
+        
+        has_blank = len(grouped["blank"]) > 0
+        has_cut = len(grouped["cut"]) > 0
+        
+        logger.info(
+            f"Applying video remediation: "
+            f"{len(grouped['blank'])} blank, {len(grouped['cut'])} cut"
+        )
+        
+        try:
+            if has_blank and has_cut:
+                # Mixed modes: apply blank first, then cut
+                logger.debug("Mixed modes detected: applying blank then cut")
+                import tempfile
+                
+                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                    temp_path = tmp.name
+                
+                try:
+                    # Apply blank mode to temp file
+                    self._apply_blank_mode_impl(
+                        input_video, temp_path, grouped["blank"], video_width, video_height
+                    )
+                    
+                    # Apply cut mode to final output (cutting from blanked video)
+                    # Adjust blank segments to account for timeline, but use original timings
+                    self.apply_cut_mode(
+                        temp_path, output_video, grouped["cut"], video_duration
+                    )
+                finally:
+                    Path(temp_path).unlink(missing_ok=True)
+            
+            elif has_blank:
+                # Only blank mode
+                self._apply_blank_mode_impl(
+                    input_video, output_video, grouped["blank"], video_width, video_height
+                )
+            
+            elif has_cut:
+                # Only cut mode
+                self.apply_cut_mode(
+                    input_video, output_video, grouped["cut"], video_duration
+                )
+            
+            logger.info(f"Video remediation complete: {output_video}")
+        
+        except Exception as e:
+            logger.error(f"Video remediation failed: {e}", exc_info=True)
+            raise RuntimeError(f"Video remediation failed: {e}") from e
+    
+    def _apply_blank_mode_impl(
+        self,
+        input_video: str,
+        output_video: str,
+        segments: List[Dict[str, Any]],
+        video_width: int,
+        video_height: int,
+    ) -> None:
+        """Apply blank mode using ffmpeg filter chain.
+        
+        Args:
+            input_video: Path to input video.
+            output_video: Path to output video.
+            segments: List of segments to blank.
+            video_width: Video width in pixels.
+            video_height: Video height in pixels.
+        
+        Raises:
+            RuntimeError: If ffmpeg fails.
+        """
+        filter_chain = self.build_blank_filter_chain(segments, video_width, video_height)
+        
+        cmd = [
+            "ffmpeg",
+            "-i", input_video,
+            "-filter_complex", filter_chain,
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-c:a", "aac",
+            "-y",
+            output_video
+        ]
+        
+        logger.debug(f"Running ffmpeg blank mode: {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=3600  # 1 hour timeout
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"ffmpeg stderr: {result.stderr}")
+            raise RuntimeError(f"ffmpeg blank mode failed: {result.stderr}")

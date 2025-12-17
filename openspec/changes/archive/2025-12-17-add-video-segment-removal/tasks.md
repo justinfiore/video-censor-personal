@@ -65,3 +65,34 @@
   - [x] Add example CLI commands for video remediation
 - [x] 8.5 Document `video_remediation` field in JSON output schema
 - [x] 8.6 Document supported codecs and limitations
+
+## 9. Pipeline Integration
+
+- [x] 9.1 Import VideoRemediator into AnalysisPipeline
+- [x] 9.2 Call video remediation after detection but before audio remediation
+- [x] 9.3 Pass detections/segments and config to VideoRemediator
+- [x] 9.4 Handle video remediation output path generation
+- [x] 9.5 Chain video-remediated output to audio remediation input
+- [x] 9.6 Add TRACE logging for video remediation execution
+- [x] 9.7 Write integration test for full end-to-end pipeline (video + audio)
+- [x] 9.8 Verify logs show video editing operations when enabled
+
+## 10. Comprehensive Permutation Testing
+
+- [x] 10.1 Create test_remediation_permutations.py with all combinations
+- [x] 10.2 Test audio only (bleep and silence modes)
+- [x] 10.3 Test video only (blank and cut modes)
+- [x] 10.4 Test audio + video combinations:
+  - [x] Audio bleep + video blank
+  - [x] Audio bleep + video cut
+  - [x] Audio silence + video blank
+  - [x] Audio silence + video cut
+- [x] 10.5 Test mixed video modes (category-based blank/cut)
+- [x] 10.6 Test edge cases:
+  - [x] No detections
+  - [x] No output-video path specified
+  - [x] Allowed segments (skip remediation)
+- [x] 10.7 Test audio/video sync verification
+- [x] 10.8 Test logging for all permutations
+- [x] 10.9 Fix audio cutting logic to match video cuts exactly
+- [x] 10.10 Update tasks to reflect audio remediation before video remediation order

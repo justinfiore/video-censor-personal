@@ -90,6 +90,22 @@ class VideoExtractor:
         """
         return float(self._capture.get(cv2.CAP_PROP_FPS))
 
+    def get_video_width(self) -> int:
+        """Get video frame width in pixels.
+
+        Returns:
+            Width in pixels.
+        """
+        return int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+    def get_video_height(self) -> int:
+        """Get video frame height in pixels.
+
+        Returns:
+            Height in pixels.
+        """
+        return int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
     def extract_frames(
         self, sample_rate: float = 1.0
     ) -> Generator[Frame, None, None]:

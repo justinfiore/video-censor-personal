@@ -318,16 +318,21 @@ class TestFreshFileCreation:
                 mock_muxer_instance = MagicMock()
                 mock_muxer.return_value = mock_muxer_instance
                 
-                pipeline._mux_remediated_audio()
-                
-                mock_muxer.assert_called_once_with(
-                    str(video_file),
-                    str(audio_file)
-                )
-                
-                mock_muxer_instance.mux_video.assert_called_once_with(
-                    str(output_file)
-                )
+                with patch("shutil.move") as mock_move:
+                    pipeline._mux_remediated_audio()
+                    
+                    mock_muxer.assert_called_once_with(
+                        str(video_file),
+                        str(audio_file)
+                    )
+                    
+                    # Should use a temp file and then move it
+                    mux_call_args = mock_muxer_instance.mux_video.call_args[0]
+                    assert mux_call_args[0].endswith(".mp4")
+                    
+                    mock_move.assert_called_once()
+                    move_dest = mock_move.call_args[0][1]
+                    assert move_dest == str(output_file)
 
     def test_no_output_created_when_both_disabled(self, tmp_path):
         """No output created when both audio remediation and skip chapters disabled."""
