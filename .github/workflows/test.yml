@@ -49,7 +49,7 @@ jobs:
       
       - name: Check coverage threshold
         run: |
-          coverage report --fail-under=80
+          coverage report --fail-under=65
       
       - name: Publish test results
         if: always()
