@@ -434,13 +434,13 @@ def _generate_ffmetadata(
 
 
 def _check_ffmpeg_version() -> Tuple[int, int, int]:
-    """Check ffmpeg version and ensure it meets minimum requirement (8.0).
+    """Check ffmpeg version and ensure it meets minimum requirement (2.0+).
 
     Returns:
         Tuple of (major, minor, patch) version numbers.
 
     Raises:
-        VideoMetadataError: If ffmpeg < 8.0 or ffmpeg not found.
+        VideoMetadataError: If ffmpeg < 2.0 or ffmpeg not found.
     """
     try:
         result = subprocess.run(
@@ -451,7 +451,7 @@ def _check_ffmpeg_version() -> Tuple[int, int, int]:
         )
         
         # Parse version from output: "ffmpeg version N-12345-...-g1234567c ..."
-        # or "ffmpeg version 8.0 ..."
+        # or "ffmpeg version 2.0 ..."
         match = re.search(r"version (\d+)\.(\d+)(?:\.(\d+))?", result.stdout)
         if not match:
             raise VideoMetadataError("Could not parse ffmpeg version from output")
@@ -460,9 +460,9 @@ def _check_ffmpeg_version() -> Tuple[int, int, int]:
         minor = int(match.group(2))
         patch = int(match.group(3)) if match.group(3) else 0
         
-        if major < 8:
+        if major < 2:
             raise VideoMetadataError(
-                f"ffmpeg {major}.{minor}.{patch} is installed, but ffmpeg >= 8.0 is required for native MP4 chapter support. "
+                f"ffmpeg {major}.{minor}.{patch} is installed, but ffmpeg >= 2.0 is required for MKV to MP4 conversion. "
                 "Please install a newer version:\n"
                 "  macOS: brew install ffmpeg\n"
                 "  Linux: sudo apt install ffmpeg\n"
