@@ -8,7 +8,51 @@ Get Video Censor Personal up and running in 15 minutes.
 - pip installed (check: `pip --version`)
 - ~15-20 GB free disk space for models and environment
 
-## Step 1: Setup Python Environment (2 minutes)
+## Step 0: Install Python 3.13 with Tkinter Support (5-10 minutes)
+
+Before creating the virtual environment, ensure Python 3.13 is installed with Tkinter support. This is required for both the CLI and the optional desktop UI.
+
+### macOS (Homebrew - Simplest)
+```bash
+brew install python@3.13
+```
+
+### macOS (pyenv - Recommended for Multiple Versions)
+```bash
+# Install tcl-tk FIRST (required for Tkinter)
+brew install pyenv tcl-tk
+
+# Install Python 3.13 with Tkinter support
+PYTHON_CONFIGURE_OPTS="--with-tcltk" pyenv install 3.13.0
+pyenv local 3.13.0
+```
+
+### Linux (Ubuntu/Debian)
+```bash
+sudo apt-get update
+sudo apt-get install python3.13 python3.13-tk
+```
+
+### Linux (Fedora/RHEL)
+```bash
+sudo dnf install python3.13 python3.13-tkinter
+```
+
+### Windows
+1. Download from https://www.python.org/downloads/
+2. Run the installer
+3. **IMPORTANT**: Check the box for "tcl/tk and IDLE" during installation
+4. Complete the installation
+
+### Verify Python 3.13 Installation
+```bash
+python3 --version                              # Should show 3.13.x
+python3 -c "import tkinter; print('OK')"      # Should print OK
+```
+
+---
+
+## Step 1: Setup Python Virtual Environment (2 minutes)
 
 ### Create Virtual Environment
 
@@ -54,6 +98,7 @@ Expected output should show successful installation of:
 - PyYAML
 - numpy
 - click
+- customtkinter (desktop UI)
 - opencv-python
 
 ## Step 3: Install ffmpeg (3-5 minutes)
@@ -149,7 +194,80 @@ mkvmerge --version
 
 **Why mkvtoolnix?** MKV (Matroska) format uses mkvmerge for native chapter support. Alternatively, use MP4 output with ffmpeg >= 8.0 for native MP4 chapter atoms. Both formats work reliably in all media players (VLC, Plex, Kodi, etc.). See `video-censor-skip-chapters.yaml.example` for usage.
 
-## Step 4: Download AI Models (5-10 minutes)
+## Step 4: Launch Desktop UI (Optional)
+
+The desktop UI provides a graphical interface for the application. It's optional—you can use the command-line interface instead.
+
+All launch scripts automatically:
+- Detect and activate your Python virtual environment (venv or .venv)
+- Check if Python 3.13+ is installed
+- Verify Tkinter is available
+- Provide platform-specific instructions if anything is missing
+
+### Launch the UI
+
+**macOS (Finder - Recommended)**
+1. Open Finder and navigate to the project directory
+2. Double-click **launch-ui.command**
+3. The UI will launch automatically
+
+**macOS (Terminal)**
+```bash
+./launch-ui.sh
+```
+
+**Linux (File Manager - Recommended)**
+1. Open your file manager (Nautilus, Dolphin, Thunar, etc.)
+2. Navigate to the project directory
+3. Double-click **launch-ui.desktop**
+4. Choose "Execute" when prompted
+
+**Linux (Terminal)**
+```bash
+./launch-ui.sh
+```
+
+**Windows (Explorer - Graphical, No Console)**
+1. Open Windows Explorer and navigate to the project directory
+2. Double-click **launch-ui.vbs**
+3. The UI will launch silently
+
+**Windows (Explorer - With Console)**
+1. Open Windows Explorer and navigate to the project directory
+2. Double-click **launch-ui.bat**
+3. A console will appear during startup, then close when the UI opens
+
+**Windows (Terminal)**
+```bash
+launch-ui.bat
+```
+
+### Troubleshooting UI Launch
+
+If the UI fails to launch, the launch scripts will show clear error messages with installation instructions. Common issues:
+
+**"Python Tkinter module is not installed"**
+- The launch script will show platform-specific installation instructions
+- **Important for pyenv users**: Install `brew install tcl-tk` before reinstalling Python
+- Then run: `PYTHON_CONFIGURE_OPTS="--with-tcltk" pyenv install 3.13.0`
+
+**"Python 3.13 or higher is required"**
+- The launch script will show platform-specific installation instructions
+- Check: `python3 --version`
+
+See `LAUNCH_UI.md` for comprehensive troubleshooting and all launch methods.
+
+### Skip UI Installation
+
+If you only want to use the command-line interface, you can skip the UI launch. The CLI works without any UI components installed. Just use:
+
+```bash
+python video_censor_personal.py --input video.mp4 --config video-censor.yaml
+```
+
+---
+
+## Step 5: Download AI Models (5-10 minutes)
 
 Models are used for content analysis. Download them before your first run.
 
@@ -388,6 +506,24 @@ output:
 ```
 
 Save this as `video-censor.yaml` in the project root directory.
+
+## Step 6b: Launch Desktop UI (Optional)
+
+The project includes a cross-platform desktop UI built with CustomTkinter. To launch it:
+
+### From Python
+
+```bash
+python -c "from video_censor_personal.ui import DesktopApp; app = DesktopApp(); app.run()"
+```
+
+### Or run directly
+
+```bash
+python -m video_censor_personal.ui.main
+```
+
+The UI window will open with a clean interface. The desktop UI is currently bootstrapped with a minimal foundation and will be expanded in future releases with video preview, segment visualization, and full workflow integration.
 
 ## Step 7: Test Without Downloading Models (Optional - 1 minute)
 

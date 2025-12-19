@@ -24,12 +24,50 @@ Output and Enhancement Options:
 
 ### Prerequisites
 
-- **Python**: 3.13 or later
+- **Python**: 3.13 or later (with Tkinter support for desktop UI)
 - **Operating System**: macOS, Linux, or Windows
 - **Disk Space**: 
   - ~2-5 GB for Python environment and dependencies
   - ~10-20 GB for AI models (varies by model size)
   - Additional space for video files and analysis output
+
+### Python 3.13 Installation
+
+**macOS (Homebrew - Simplest)**
+```bash
+brew install python@3.13
+```
+
+**macOS (pyenv - Recommended for Multiple Versions)**
+```bash
+# Install tcl-tk FIRST (required for Tkinter support)
+brew install pyenv tcl-tk
+
+# Install Python 3.13
+PYTHON_CONFIGURE_OPTS="--with-tcltk" pyenv install 3.13.0
+pyenv local 3.13.0
+```
+
+**Linux (Ubuntu/Debian)**
+```bash
+sudo apt-get update
+sudo apt-get install python3.13 python3.13-tk
+```
+
+**Linux (Fedora/RHEL)**
+```bash
+sudo dnf install python3.13 python3.13-tkinter
+```
+
+**Windows**
+- Download from https://www.python.org/downloads/
+- **Important**: During installation, check the box for **"tcl/tk and IDLE"**
+
+**Verify Installation**
+```bash
+python3 --version          # Should show 3.13.x
+python3 -c "import tkinter; print('Tkinter works!')"
+```
 
 ### External Tools
 
@@ -41,6 +79,66 @@ Output and Enhancement Options:
   - Download: https://mkvtoolnix.download/
   - Used to embed chapter markers natively in Matroska video files
   - Alternative: Use MP4 output format with ffmpeg for native MP4 chapter atoms
+
+## Desktop UI (Optional)
+
+Video Censor Personal includes a desktop graphical interface built with CustomTkinter. The UI is optional—you can use the command-line interface instead.
+
+### Launching the Desktop UI
+
+After completing the installation steps below, launch the UI using one of these methods:
+
+#### macOS (Recommended: Install as macOS App)
+
+For the best experience on macOS with proper menu bar integration:
+
+1. Open Terminal and navigate to the project directory
+2. Run: `./launch-ui.sh`
+3. This will automatically create an app bundle and offer to install it to your Applications folder
+4. When prompted, choose **yes** to install to ~/Applications
+5. Once installed, you can:
+   - Launch from Spotlight (Cmd+Space, type "Video Censor Personal")
+   - Pin to your dock
+   - Use Cmd+Tab to switch between apps
+   - See the app name in the menu bar (not "Python")
+
+**Note on Updates**: The app bundle is a lightweight wrapper that runs your Python code from the original project directory. Python code changes take effect immediately without reinstalling the app.
+
+If you need to reinstall the app bundle after moving the project directory:
+```bash
+rm -rf "Video Censor Personal.app"
+./launch-ui.sh
+```
+
+#### macOS (Alternative: Run from Terminal)
+```bash
+./launch-ui.sh
+```
+
+#### Windows (Explorer Double-Click - Graphical, No Console)
+1. Open Windows Explorer and navigate to the project directory
+2. Double-click **launch-ui.vbs**
+3. The UI will launch silently
+
+#### Windows (Explorer Double-Click - With Console)
+1. Open Windows Explorer and navigate to the project directory
+2. Double-click **launch-ui.bat**
+3. A console will appear during startup, then close when the UI opens
+
+#### Linux (File Manager - Recommended)
+1. Open your file manager (Nautilus, Dolphin, Thunar, etc.)
+2. Navigate to the project directory
+3. Double-click **launch-ui.desktop**
+4. Choose "Execute" when prompted
+
+#### Linux/macOS (Terminal Alternative)
+```bash
+./launch-ui.sh
+```
+
+All launch scripts automatically detect and activate your Python virtual environment (venv or .venv) and verify Python version and Tkinter availability before starting the UI.
+
+See `LAUNCH_UI.md` for detailed UI launching instructions and troubleshooting.
 
 ## Installation
 
@@ -772,6 +870,9 @@ processing:
 ```
 video-censor-personal/
 ├── video_censor_personal/          # Main Python package
+│   ├── ui/                         # Desktop UI module (CustomTkinter)
+│   │   ├── __init__.py
+│   │   └── main.py
 │   ├── __init__.py                 # Package initialization and metadata
 │   ├── cli.py                      # Command-line interface
 │   ├── config.py                   # Configuration file parsing
@@ -782,6 +883,12 @@ video-censor-personal/
 ├── requirements.txt                # Python dependencies
 ├── README.md                       # This file
 ├── QUICK_START.md                  # Quick start guide
+├── LAUNCH_UI.md                    # Desktop UI launching guide
+├── launch-ui.sh                    # Launch script (macOS/Linux)
+├── launch-ui.command               # Launch script (macOS Finder)
+├── launch-ui.bat                   # Launch script (Windows)
+├── launch-ui.vbs                   # Launch script (Windows silent)
+├── launch-ui.desktop               # Launch script (Linux file manager)
 └── video-censor.yaml.example       # Example configuration
 ```
 
@@ -789,11 +896,47 @@ video-censor-personal/
 
 ### Common Issues
 
+**Python Tkinter Module Not Found**
+```
+ModuleNotFoundError: No module named '_tkinter'
+```
+
+This happens when Python is installed without Tkinter support. Solutions:
+
+**If you used pyenv (Most Common):**
+You must install `tcl-tk` BEFORE installing Python:
+```bash
+# 1. Install tcl-tk dependency
+brew install tcl-tk
+
+# 2. Uninstall broken Python
+pyenv uninstall 3.13.0
+
+# 3. Reinstall with Tkinter support
+PYTHON_CONFIGURE_OPTS="--with-tcltk" pyenv install 3.13.0
+pyenv local 3.13.0
+
+# 4. Verify
+python3 -c "import tkinter; print('Tkinter works!')"
+```
+
+**If you used Homebrew:**
+```bash
+brew install python-tk@3.13
+```
+
+**If you used Windows installer:**
+- Uninstall Python 3.13
+- Reinstall from https://www.python.org/downloads/
+- **CHECK** "tcl/tk and IDLE" during installation
+
+See `LAUNCH_UI.md` for detailed troubleshooting.
+
 **Python Version Error**
 ```
 Error: Python 3.13 or later is required
 ```
-Solution: Install Python 3.13+ from python.org
+Solution: Install Python 3.13+ (see System Requirements above)
 
 **ffmpeg Not Found**
 ```

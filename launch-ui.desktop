@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Video Censor Personal
+Comment=Desktop UI for Video Censor Personal
+Icon=video-x-generic
+Exec=/usr/bin/env bash -c "cd '%D' && ./launch-ui.sh; read -p 'Press enter to close...'"
+Terminal=true
+Categories=Utility;
+StartupNotify=true
+MimeType=
+X-Flatseal-Tags=
