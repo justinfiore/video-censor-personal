@@ -79,10 +79,12 @@ detectors:
 audio:
   detection:
     enabled: true
-  
-  # Remediation ENABLED - silence mode
+
+# Remediation settings
+remediation:
+  # Audio remediation - silence mode
   # This will censor detected audio segments
-  remediation:
+  audio:
     enabled: true
     mode: "silence"                  # Zero out audio samples (natural-sounding)
     categories:                      # Which categories to remediate

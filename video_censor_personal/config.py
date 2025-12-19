@@ -511,71 +511,116 @@ def _validate_remediation_section(config: Dict[str, Any]) -> None:
     if not isinstance(remediation, dict):
         raise ConfigError("'remediation' field must be a dictionary")
 
-    # Validate video_editing section if present
-    video_editing = remediation.get("video_editing")
-    if video_editing is None:
-        return
+    # Validate audio section if present
+    audio = remediation.get("audio")
+    if audio is not None:
+        if not isinstance(audio, dict):
+            raise ConfigError("'remediation.audio' field must be a dictionary")
 
-    if not isinstance(video_editing, dict):
-        raise ConfigError("'remediation.video_editing' field must be a dictionary")
+        # Validate enabled field
+        if "enabled" in audio:
+            if not isinstance(audio["enabled"], bool):
+                raise ConfigError(
+                    "'remediation.audio.enabled' must be a boolean"
+                )
 
-    # Validate enabled field
-    if "enabled" in video_editing:
-        if not isinstance(video_editing["enabled"], bool):
-            raise ConfigError(
-                "'remediation.video_editing.enabled' must be a boolean"
-            )
-
-    # Validate mode field if present
-    if "mode" in video_editing:
-        mode = video_editing["mode"]
-        if not isinstance(mode, str):
-            raise ConfigError(
-                "'remediation.video_editing.mode' must be a string"
-            )
-        valid_modes = {"blank", "cut"}
-        if mode not in valid_modes:
-            raise ConfigError(
-                f"'remediation.video_editing.mode' must be one of {valid_modes}, got '{mode}'"
-            )
-
-    # Validate blank_color field if present
-    if "blank_color" in video_editing:
-        color = video_editing["blank_color"]
-        if not isinstance(color, str):
-            raise ConfigError(
-                "'remediation.video_editing.blank_color' must be a string"
-            )
-        # Validate hex color format
-        if not color.startswith("#") or len(color) not in [4, 7]:
-            raise ConfigError(
-                f"'remediation.video_editing.blank_color' must be a valid hex color (e.g., '#000000' or '#000'), got '{color}'"
-            )
-        # Validate hex characters
-        try:
-            int(color[1:], 16)
-        except ValueError:
-            raise ConfigError(
-                f"'remediation.video_editing.blank_color' must be a valid hex color, got '{color}'"
-            )
-
-    # Validate category_modes field if present
-    if "category_modes" in video_editing:
-        category_modes = video_editing["category_modes"]
-        if not isinstance(category_modes, dict):
-            raise ConfigError(
-                "'remediation.video_editing.category_modes' must be a dictionary"
-            )
-        valid_modes = {"blank", "cut"}
-        for category, mode in category_modes.items():
+        # Validate mode field if present
+        if "mode" in audio:
+            mode = audio["mode"]
             if not isinstance(mode, str):
                 raise ConfigError(
-                    f"'remediation.video_editing.category_modes.{category}' must be a string, got {type(mode)}"
+                    "'remediation.audio.mode' must be a string"
                 )
+            valid_modes = {"silence", "bleep"}
             if mode not in valid_modes:
                 raise ConfigError(
-                    f"'remediation.video_editing.category_modes.{category}' must be one of {valid_modes}, got '{mode}'"
+                    f"'remediation.audio.mode' must be one of {valid_modes}, got '{mode}'"
                 )
+
+        # Validate categories field if present
+        if "categories" in audio:
+            categories = audio["categories"]
+            if not isinstance(categories, list):
+                raise ConfigError(
+                    "'remediation.audio.categories' must be a list"
+                )
+            for category in categories:
+                if not isinstance(category, str):
+                    raise ConfigError(
+                        f"'remediation.audio.categories' must contain strings, got {type(category)}"
+                    )
+
+        # Validate bleep_frequency field if present
+        if "bleep_frequency" in audio:
+            freq = audio["bleep_frequency"]
+            if not isinstance(freq, (int, float)) or freq <= 0:
+                raise ConfigError(
+                    f"'remediation.audio.bleep_frequency' must be a positive number, got {freq}"
+                )
+
+    # Validate video section if present
+    video = remediation.get("video")
+    if video is not None:
+        if not isinstance(video, dict):
+            raise ConfigError("'remediation.video' field must be a dictionary")
+
+        # Validate enabled field
+        if "enabled" in video:
+            if not isinstance(video["enabled"], bool):
+                raise ConfigError(
+                    "'remediation.video.enabled' must be a boolean"
+                )
+
+        # Validate mode field if present
+        if "mode" in video:
+            mode = video["mode"]
+            if not isinstance(mode, str):
+                raise ConfigError(
+                    "'remediation.video.mode' must be a string"
+                )
+            valid_modes = {"blank", "cut"}
+            if mode not in valid_modes:
+                raise ConfigError(
+                    f"'remediation.video.mode' must be one of {valid_modes}, got '{mode}'"
+                )
+
+        # Validate blank_color field if present
+        if "blank_color" in video:
+            color = video["blank_color"]
+            if not isinstance(color, str):
+                raise ConfigError(
+                    "'remediation.video.blank_color' must be a string"
+                )
+            # Validate hex color format
+            if not color.startswith("#") or len(color) not in [4, 7]:
+                raise ConfigError(
+                    f"'remediation.video.blank_color' must be a valid hex color (e.g., '#000000' or '#000'), got '{color}'"
+                )
+            # Validate hex characters
+            try:
+                int(color[1:], 16)
+            except ValueError:
+                raise ConfigError(
+                    f"'remediation.video.blank_color' must be a valid hex color, got '{color}'"
+                )
+
+        # Validate category_modes field if present
+        if "category_modes" in video:
+            category_modes = video["category_modes"]
+            if not isinstance(category_modes, dict):
+                raise ConfigError(
+                    "'remediation.video.category_modes' must be a dictionary"
+                )
+            valid_modes = {"blank", "cut"}
+            for category, mode in category_modes.items():
+                if not isinstance(mode, str):
+                    raise ConfigError(
+                        f"'remediation.video.category_modes.{category}' must be a string, got {type(mode)}"
+                    )
+                if mode not in valid_modes:
+                    raise ConfigError(
+                        f"'remediation.video.category_modes.{category}' must be one of {valid_modes}, got '{mode}'"
+                    )
 
 
 def validate_config(config: Dict[str, Any]) -> None:
@@ -704,6 +749,35 @@ def is_skip_chapters_enabled(config: Dict[str, Any]) -> bool:
     )
 
 
+def is_audio_remediation_enabled(config: Dict[str, Any]) -> bool:
+    """Check if audio remediation feature is enabled in configuration.
+
+    Args:
+        config: Configuration dictionary.
+
+    Returns:
+        True if audio remediation is enabled, False otherwise (default).
+    """
+    return get_config_value(
+        config, "remediation.audio.enabled", False
+    )
+
+
+def get_audio_remediation_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Get audio remediation configuration section.
+
+    Args:
+        config: Configuration dictionary.
+
+    Returns:
+        Audio remediation config dict with keys: enabled, mode, categories, bleep_frequency.
+        Returns empty dict if not configured.
+    """
+    return get_config_value(
+        config, "remediation.audio", {}
+    )
+
+
 def is_video_remediation_enabled(config: Dict[str, Any]) -> bool:
     """Check if video remediation feature is enabled in configuration.
 
@@ -714,7 +788,7 @@ def is_video_remediation_enabled(config: Dict[str, Any]) -> bool:
         True if video remediation is enabled, False otherwise (default).
     """
     return get_config_value(
-        config, "remediation.video_editing.enabled", False
+        config, "remediation.video.enabled", False
     )
 
 
@@ -728,7 +802,7 @@ def get_video_remediation_mode(config: Dict[str, Any]) -> str:
         Video remediation mode ("blank" or "cut"). Default is "blank".
     """
     return get_config_value(
-        config, "remediation.video_editing.mode", "blank"
+        config, "remediation.video.mode", "blank"
     )
 
 
@@ -742,7 +816,7 @@ def get_video_remediation_blank_color(config: Dict[str, Any]) -> str:
         Hex color string (e.g., "#000000"). Default is black.
     """
     return get_config_value(
-        config, "remediation.video_editing.blank_color", "#000000"
+        config, "remediation.video.blank_color", "#000000"
     )
 
 
@@ -757,5 +831,5 @@ def get_video_remediation_category_modes(config: Dict[str, Any]) -> Dict[str, st
         Empty dictionary if not configured.
     """
     return get_config_value(
-        config, "remediation.video_editing.category_modes", {}
+        config, "remediation.video.category_modes", {}
     )

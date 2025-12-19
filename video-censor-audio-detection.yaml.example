@@ -75,9 +75,11 @@ detectors:
 audio:
   detection:
     enabled: true
-  
-  # Remediation disabled - detection only
-  remediation:
+
+# Remediation settings
+remediation:
+  # Audio remediation disabled - detection only
+  audio:
     enabled: false
 
 # Video processing settings

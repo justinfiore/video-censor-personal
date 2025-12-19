@@ -332,7 +332,7 @@ class TestVideoRemediationIntegration:
         # Update config to enable video remediation
         config_with_video = dict(config_with_mock)
         config_with_video["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
                 "blank_color": "#000000",
@@ -382,7 +382,7 @@ class TestVideoRemediationIntegration:
         # Update config to enable video remediation
         config_with_video = dict(config_with_mock)
         config_with_video["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
                 "blank_color": "#000000",
@@ -423,7 +423,7 @@ class TestVideoRemediationIntegration:
         # Update config to enable video remediation
         config_with_video = dict(config_with_mock)
         config_with_video["remediation"] = {
-            "video_editing": {
+            "video": {
                 "enabled": True,
                 "mode": "blank",
                 "blank_color": "#000000",

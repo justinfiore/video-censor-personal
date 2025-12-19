@@ -212,7 +212,7 @@ def validate_cli_args(
     skip_chapters_enabled = is_skip_chapters_enabled(config)
     
     # Check if audio remediation is enabled
-    audio_remediation_enabled = config.get("audio", {}).get("remediation", {}).get("enabled", False)
+    audio_remediation_enabled = config.get("remediation", {}).get("audio", {}).get("enabled", False)
     
     # Check if video remediation is enabled
     video_remediation_enabled = is_video_remediation_enabled(config)

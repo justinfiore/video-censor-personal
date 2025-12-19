@@ -86,8 +86,8 @@ class TestRemediationConfig:
     def test_valid_remediation_config_silence(self):
         """Test valid remediation config with silence mode."""
         config_yaml = """
-        audio:
-          remediation:
+        remediation:
+          audio:
             enabled: true
             mode: "silence"
             categories:
@@ -95,7 +95,7 @@ class TestRemediationConfig:
         """
         config = yaml.safe_load(config_yaml)
         
-        remediation = config["audio"]["remediation"]
+        remediation = config["remediation"]["audio"]
         assert remediation["enabled"] is True
         assert remediation["mode"] == "silence"
         assert "Profanity" in remediation["categories"]
@@ -103,8 +103,8 @@ class TestRemediationConfig:
     def test_valid_remediation_config_bleep(self):
         """Test valid remediation config with bleep mode."""
         config_yaml = """
-        audio:
-          remediation:
+        remediation:
+          audio:
             enabled: true
             mode: "bleep"
             categories:
@@ -113,26 +113,26 @@ class TestRemediationConfig:
         """
         config = yaml.safe_load(config_yaml)
         
-        remediation = config["audio"]["remediation"]
+        remediation = config["remediation"]["audio"]
         assert remediation["mode"] == "bleep"
         assert remediation["bleep_frequency"] == 1000
 
     def test_remediation_disabled_by_default(self):
         """Test that remediation defaults to disabled."""
         config_yaml = """
-        audio:
-          remediation:
+        remediation:
+          audio:
             enabled: false
         """
         config = yaml.safe_load(config_yaml)
         
-        assert config["audio"]["remediation"]["enabled"] is False
+        assert config["remediation"]["audio"]["enabled"] is False
 
     def test_remediation_categories_validated(self):
         """Test that remediation categories are a list."""
         config_yaml = """
-        audio:
-          remediation:
+        remediation:
+          audio:
             enabled: true
             mode: "silence"
             categories:
@@ -141,7 +141,7 @@ class TestRemediationConfig:
         """
         config = yaml.safe_load(config_yaml)
         
-        categories = config["audio"]["remediation"]["categories"]
+        categories = config["remediation"]["audio"]["categories"]
         assert isinstance(categories, list)
         assert len(categories) == 2
 
@@ -171,7 +171,9 @@ class TestCombinedAudioConfig:
         audio:
           detection:
             enabled: true
-          remediation:
+        
+        remediation:
+          audio:
             enabled: true
             mode: "silence"
             categories:
@@ -188,8 +190,8 @@ class TestCombinedAudioConfig:
         
         # Verify audio config
         assert config["audio"]["detection"]["enabled"] is True
-        assert config["audio"]["remediation"]["enabled"] is True
-        assert config["audio"]["remediation"]["mode"] == "silence"
+        assert config["remediation"]["audio"]["enabled"] is True
+        assert config["remediation"]["audio"]["mode"] == "silence"
 
     def test_audio_only_config(self):
         """Test audio-only configuration (no visual detectors)."""
@@ -201,8 +203,8 @@ class TestCombinedAudioConfig:
             model: "base"
             languages: ["en"]
 
-        audio:
-          remediation:
+        remediation:
+          audio:
             enabled: true
             mode: "bleep"
             categories: ["Profanity"]
@@ -212,7 +214,7 @@ class TestCombinedAudioConfig:
         
         assert len(config["detectors"]) == 1
         assert config["detectors"][0]["type"] == "speech-profanity"
-        assert config["audio"]["remediation"]["bleep_frequency"] == 800
+        assert config["remediation"]["audio"]["bleep_frequency"] == 800
 
 
 class TestExampleConfigFiles:
@@ -246,8 +248,8 @@ class TestExampleConfigFiles:
         with open(config_file) as f:
             config = yaml.safe_load(f)
         
-        assert config["audio"]["remediation"]["enabled"] is True
-        assert config["audio"]["remediation"]["mode"] == "silence"
+        assert config["remediation"]["audio"]["enabled"] is True
+        assert config["remediation"]["audio"]["mode"] == "silence"
 
     def test_audio_remediation_bleep_example_valid(self, project_root):
         """Test audio remediation bleep example config is valid YAML."""
@@ -258,6 +260,6 @@ class TestExampleConfigFiles:
         with open(config_file) as f:
             config = yaml.safe_load(f)
         
-        assert config["audio"]["remediation"]["enabled"] is True
-        assert config["audio"]["remediation"]["mode"] == "bleep"
-        assert "bleep_frequency" in config["audio"]["remediation"]
+        assert config["remediation"]["audio"]["enabled"] is True
+        assert config["remediation"]["audio"]["mode"] == "bleep"
+        assert "bleep_frequency" in config["remediation"]["audio"]

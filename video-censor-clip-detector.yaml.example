@@ -12,10 +12,26 @@
 #   Run analysis:
 #     python -m video_censor --config video-censor-clip.yaml --input video.mp4 --output results.json
 
-# Detection Configuration
-detection:
-  detectors:
-    # CLIP-based detector with custom prompts per category
+# Detection settings
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+
+# Detector Configuration
+detectors:
+  # CLIP-based detector with custom prompts per category
     #
     # Available OpenAI CLIP Models (from Hugging Face):
     # ┌─────────────────────────────────────────┬────────────┬─────────┬─────────────────────────────────────────────────┐
@@ -68,32 +84,32 @@ detection:
             - "intimate scene"
             - "sexual content"
 
-# Video Processing Configuration
-video:
-  extraction:
-    fps: 2  # Frames per second to analyze (lower = faster, less detail)
-    max_width: 1280  # Max width; resizes larger videos
-
-# Audio Processing Configuration (optional)
+# Audio detection (optional)
 audio:
-  # Enable audio extraction and analysis
-  enabled: true
-  extraction:
-    sample_rate: 16000  # Audio sample rate in Hz
-
-  # Optional: Audio detection
   detection:
     enabled: false
-    # Audio detectors can be added here
-    detectors: []
 
+# Video processing settings
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 2.0
+  
+  max_workers: 4
+
+# Remediation Configuration
+remediation:
   # Optional: Audio remediation
-  remediation:
+  audio:
     enabled: false
     # Audio remediation would be configured here
 
-# Output Configuration
+# Output settings
 output:
-  format: "json"  # Output format (json, jsonl, etc.)
-  include_frames: false  # Include frame data in output
-  include_metadata: true  # Include video metadata
+  format: "json"
+  include_confidence: true
+  pretty_print: true
