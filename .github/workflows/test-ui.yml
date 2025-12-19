@@ -4,13 +4,7 @@ on:
   push:
     branches:
       - master
-      - feature/*
-    paths:
-      - 'video_censor_personal/ui/**'
-      - 'tests/ui/**'
-      - 'requirements.txt'
-      - 'pytest.ini'
-      - '.github/workflows/test-ui.yml'
+
   pull_request:
     branches:
       - master
