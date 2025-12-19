@@ -48,7 +48,8 @@ jobs:
           sudo apt-get install -y xvfb python3-tk
 
       - name: Verify Tk/Tkinter availability
-        run: python -c 'import tkinter; print(f"Tkinter available: {tkinter.TkVersion}")'
+        run: |
+          python -c 'import tkinter; print(f"Tkinter available: {tkinter.TkVersion}")'
 
       - name: Install dependencies
         run: |
