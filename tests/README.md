@@ -27,6 +27,9 @@ python -m pytest tests/unit/ -v
 # Integration tests only
 python -m pytest tests/integration/ -v
 
+# UI tests only
+python -m pytest tests/ui/ -v
+
 # Specific test file
 python -m pytest tests/test_audio_remediator.py -v
 ```
@@ -39,14 +42,30 @@ Some tests are marked as slow (e.g., tests requiring real AI models):
 python -m pytest tests/ -v -m "not slow"
 ```
 
+### Run by Marker
+
+Tests can be selected by marker:
+
+```bash
+# Run only UI tests
+python -m pytest -m ui -v
+
+# Run UI tests with coverage
+python -m pytest tests/ui/ -m ui --cov=video_censor_personal.ui --cov-report=term
+```
+
 ## Test Structure
 
 ```
 tests/
-├── conftest.py                    # Shared fixtures
+├── conftest.py                    # Shared project-wide fixtures
 ├── fixtures/                      # Test data files
 ├── unit/                          # Fast unit tests
 ├── integration/                   # Integration tests
+├── ui/                            # UI tests (desktop application)
+│   ├── conftest.py               # UI test fixtures
+│   ├── test_app_bootstrap.py      # Application initialization tests
+│   └── test_window_lifecycle.py   # Window lifecycle tests
 ├── test_audio_extractor.py        # Audio extraction tests
 ├── test_audio_remediator.py       # Audio remediation tests
 ├── test_audio_classification_detector.py  # Audio classifier tests
@@ -113,6 +132,44 @@ ffmpeg -version
 python -m pytest tests/integration/ -v -m "not slow"
 ```
 
+## UI Testing
+
+UI tests validate the desktop application (CustomTkinter-based) and run in CI on Windows, macOS, and Linux.
+
+### Running UI Tests Locally
+
+```bash
+# Run all UI tests
+python -m pytest tests/ui/ -v
+
+# Run specific UI test file
+python -m pytest tests/ui/test_app_bootstrap.py -v
+
+# Run with coverage
+python -m pytest tests/ui/ --cov=video_censor_personal.ui --cov-report=term
+```
+
+### UI Testing on Linux (Headless)
+
+On Linux CI environments without a display server, UI tests use a virtual display (xvfb):
+
+```bash
+# The CI workflow automatically wraps tests:
+xvfb-run -a pytest tests/ui/ -v
+
+# For local testing without display:
+# Install pyvirtualdisplay (already in requirements.txt)
+# Tests will automatically create virtual display if DISPLAY is not set
+```
+
+### UI Test Fixtures
+
+Fixtures defined in `tests/ui/conftest.py`:
+
+- `app`: Fresh DesktopApp instance with automatic cleanup
+- `app_window`: Access to the root window widget
+- Both fixtures ensure proper resource cleanup between tests
+
 ## Test Fixtures
 
 Common fixtures are defined in `conftest.py`:
@@ -120,6 +177,8 @@ Common fixtures are defined in `conftest.py`:
 - `sample_video_path`: Path to a test video file
 - `config_with_mock`: Config with mock detector
 - `tmp_path`: Temporary directory (pytest built-in)
+- `app` (UI tests): DesktopApp instance with cleanup
+- `app_window` (UI tests): Window widget for testing
 
 ## Writing New Tests
 

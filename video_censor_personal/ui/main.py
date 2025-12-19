@@ -66,6 +66,21 @@ class DesktopApp:
             f"{window_width}x{window_height}+{x_position}+{y_position}"
         )
 
+    def cleanup(self) -> None:
+        """Clean up application resources.
+
+        Destroys the window and releases all associated resources.
+        This should be called when the application is shutting down,
+        particularly important for testing to ensure proper resource
+        cleanup between test runs.
+        """
+        try:
+            if self.root.winfo_exists():
+                self.root.destroy()
+        except Exception:
+            # Window may already be destroyed or not yet fully initialized
+            pass
+
     def run(self) -> None:
         """Start the application event loop.
 

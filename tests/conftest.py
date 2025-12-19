@@ -1,11 +1,33 @@
-"""Pytest configuration and fixtures for integration tests."""
+"""Pytest configuration and fixtures for integration tests.
 
+This module includes:
+- Project-wide fixtures for video and config handling
+- Headless display setup for UI tests on Linux CI environments
+- Pytest plugins and markers configuration
+"""
+
+import os
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from video_censor_personal.config import load_config
+
+# Setup headless display for Linux CI environments
+# This initializes pyvirtualdisplay before any tests run
+if sys.platform == "linux" and "DISPLAY" not in os.environ:
+    try:
+        from pyvirtualdisplay import Display
+        _display = Display(visible=False, size=(1024, 768))
+        _display.start()
+    except ImportError:
+        # pyvirtualdisplay not installed, tests requiring display will fail
+        pass
+    except Exception as e:
+        # Virtual display setup failed, log but continue
+        print(f"Warning: Could not start virtual display: {e}")
 
 
 @pytest.fixture
