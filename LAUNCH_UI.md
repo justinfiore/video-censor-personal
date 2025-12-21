@@ -13,6 +13,14 @@ All launch scripts will automatically check both your Python version and Tkinter
 
 Choose the appropriate method for your operating system:
 
+### Opening Results (Optional)
+You can optionally pass a JSON file path to automatically load results for review:
+```bash
+./launch-ui.sh path/to/results.json
+```
+
+This is useful after running analysis with the `--edit` flag, or to directly review previous analysis results.
+
 ## macOS
 
 ### Method 1: Double-click in Finder (Recommended)
@@ -23,6 +31,12 @@ Choose the appropriate method for your operating system:
 ### Method 2: Terminal
 ```bash
 ./launch-ui.sh
+```
+
+### Method 3: Terminal with Results File
+To open the UI and automatically load a results JSON file:
+```bash
+./launch-ui.sh output-video/results.json
 ```
 
 ## Windows
@@ -42,6 +56,16 @@ Choose the appropriate method for your operating system:
 launch-ui.bat
 ```
 
+### Method 4: Command Prompt/PowerShell with Results File
+```cmd
+launch-ui.bat path\to\results.json
+```
+
+For example:
+```cmd
+launch-ui.bat output-video\Psych1_1.json
+```
+
 ## Linux
 
 ### Method 1: Double-click in File Manager (Recommended)
@@ -58,7 +82,13 @@ launch-ui.bat
 ./launch-ui.sh
 ```
 
-### Method 3: Programmatically
+### Method 3: Terminal with Results File
+To open the UI and automatically load a results JSON file:
+```bash
+./launch-ui.sh output-video/results.json
+```
+
+### Method 4: Programmatically
 You can also make launch-ui.desktop the default launcher by copying it to your applications directory:
 ```bash
 mkdir -p ~/.local/share/applications
@@ -70,6 +100,27 @@ Then search for "Video Censor Personal" in your applications menu.
 ## All Methods
 
 All launch files automatically detect and activate your Python virtual environment (venv or .venv) before starting the UI, so you don't need to manually activate it. Python version is verified before launching.
+
+## Using with Analysis Pipeline
+
+After running analysis, you can automatically open the results in the preview editor:
+
+```bash
+# Run analysis and open the editor automatically
+python video_censor_personal.py --input video.mp4 --config config.yaml --output results.json --edit
+```
+
+Or, if you've already run analysis and just want to review the results:
+
+```bash
+# Launch the UI with a previously generated results file
+./launch-ui.sh results.json
+
+# Or with absolute path
+./launch-ui.sh /path/to/results.json
+```
+
+The script will automatically convert relative paths to absolute paths for proper loading.
 
 ### Troubleshooting
 

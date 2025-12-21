@@ -85,6 +85,53 @@ python3 -c "import tkinter; print('Tkinter works!')"
 
 Video Censor Personal includes a desktop graphical interface built with CustomTkinter. The UI is optional—you can use the command-line interface instead.
 
+### Preview Editor UI
+
+The **Preview Editor** provides a visual interface for reviewing detection results and marking segments as allowed/not-allowed:
+
+- **Three-pane layout**: Segment list (left), video player (center/top), segment details (bottom)
+- **Video playback**: Built-in player with timeline visualization, controls (play/pause, skip, speed, volume)
+- **Segment review**: Click segments to jump to timestamp, view detailed detection reasoning
+- **Allow/not-allow marking**: Toggle segment allow status with immediate JSON persistence
+- **Keyboard shortcuts**: Space (play/pause), ←/→ (seek), ↑/↓ (navigate segments), A (toggle allow), Enter (jump to segment)
+- **Filtering**: Filter segments by label or allow status
+
+#### Launching Preview Editor
+
+**Simplest Method** (with results file):
+```bash
+./launch-ui.sh output-video/results.json
+```
+
+**Command Line** (no file):
+```bash
+python -m video_censor_personal.ui.preview_editor
+```
+
+**With results file** (command line):
+```bash
+python -m video_censor_personal.ui.preview_editor /path/to/results.json
+```
+
+**From Python**:
+```python
+from video_censor_personal.ui import launch_preview_editor
+launch_preview_editor(json_file="/path/to/results.json")  # Optional
+```
+
+**Automated Workflow**:
+```bash
+# Run analysis and automatically open results in editor
+python video_censor_personal.py --input video.mp4 --config config.yaml --output results.json --edit
+```
+
+**Manual Workflow**:
+1. Run detection analysis: `python video_censor_personal.py ...`
+2. Open Preview Editor with results: `./launch-ui.sh output-video/results.json`
+3. Review segments, mark as allowed/not-allowed
+4. JSON file is automatically saved on each change
+5. Use updated JSON for remediation workflows
+
 ### Launching the Desktop UI
 
 After completing the installation steps below, launch the UI using one of these methods:

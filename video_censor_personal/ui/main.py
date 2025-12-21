@@ -3,97 +3,54 @@
 Provides a cross-platform graphical interface for Video Censor Personal.
 """
 
-import customtkinter as ctk
 from typing import Optional
+import logging
+import os
+import sys
+from pathlib import Path
+
+from video_censor_personal.ui.preview_editor import PreviewEditorApp
+
+# Setup logging for main module
+# Get the workspace root (parent of video_censor_personal package)
+workspace_root = Path(__file__).parent.parent.parent
+log_dir = workspace_root / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "ui.log"
+
+logger = logging.getLogger("video_censor_personal.ui.main")
+if not logger.handlers:
+    handler = logging.FileHandler(log_file, encoding='utf-8')
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
 
 
-class DesktopApp:
-    """Desktop application window for Video Censor Personal.
-
-    Uses CustomTkinter for modern, cross-platform UI appearance.
-    Initializes a minimal window with empty frame content as a
-    foundation for future feature expansion.
-
-    Attributes:
-        root: The CTk root window instance.
+def launch_app(json_file: Optional[str] = None) -> None:
+    """Entry point for launching the desktop application.
+    
+    Args:
+        json_file: Optional path to JSON file to load on startup
     """
-
-    def __init__(self, title: str = "Video Censor Personal") -> None:
-        """Initialize the desktop application.
-
-        Args:
-            title: Window title. Defaults to "Video Censor Personal".
-        """
-        self.root: ctk.CTk = ctk.CTk()
-        self.root.title(title)
-        self._setup_window()
-
-    def _setup_window(self) -> None:
-        """Configure window geometry and layout."""
-        # Set default window size and position
-        window_width = 800
-        window_height = 600
-        self.root.geometry(f"{window_width}x{window_height}")
-
-        # Center window on screen
-        self._center_window()
-
-        # Configure grid layout for content
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
-
-        # Create empty content frame as placeholder
-        content_frame = ctk.CTkFrame(self.root)
-        content_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-
-    def _center_window(self) -> None:
-        """Center the window on the primary display."""
-        self.root.update_idletasks()
-
-        # Get window dimensions
-        window_width = self.root.winfo_width()
-        window_height = self.root.winfo_height()
-
-        # Get screen dimensions
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-
-        # Calculate position
-        x_position = (screen_width - window_width) // 2
-        y_position = (screen_height - window_height) // 2
-
-        self.root.geometry(
-            f"{window_width}x{window_height}+{x_position}+{y_position}"
-        )
-
-    def cleanup(self) -> None:
-        """Clean up application resources.
-
-        Destroys the window and releases all associated resources.
-        This should be called when the application is shutting down,
-        particularly important for testing to ensure proper resource
-        cleanup between test runs.
-        """
-        try:
-            if self.root.winfo_exists():
-                self.root.destroy()
-        except Exception:
-            # Window may already be destroyed or not yet fully initialized
-            pass
-
-    def run(self) -> None:
-        """Start the application event loop.
-
-        This method blocks until the window is closed.
-        """
-        self.root.mainloop()
-
-
-def launch_app() -> None:
-    """Entry point for launching the desktop application."""
-    app = DesktopApp()
+    logger.info(f"launch_app called with json_file={json_file}")
+    app = PreviewEditorApp(json_file=json_file)
     app.run()
 
 
 if __name__ == "__main__":
-    launch_app()
+    logger.info(f"Script called with sys.argv: {sys.argv}")
+    
+    # Check for command-line argument first
+    json_file = sys.argv[1] if len(sys.argv) > 1 else None
+    logger.info(f"Extracted json_file from argv: {json_file}")
+    
+    # Fall back to environment variable (set by launch-ui.sh for macOS app bundle)
+    if not json_file:
+        json_file = os.environ.get("VIDEO_CENSOR_JSON_FILE")
+        logger.info(f"Extracted json_file from environment: {json_file}")
+    
+    logger.info(f"Final json_file: {json_file}")
+    launch_app(json_file=json_file)
