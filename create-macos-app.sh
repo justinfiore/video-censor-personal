@@ -34,6 +34,7 @@ elif [ -d "$APP_ROOT/.venv" ]; then
 fi
 
 # Launch the Python application
+# Note: VIDEO_CENSOR_JSON_FILE is set by launch-ui.sh when launching with a JSON file argument
 cd "$APP_ROOT"
 exec python3 -m video_censor_personal.ui.main
 WRAPPER

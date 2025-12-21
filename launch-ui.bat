@@ -8,12 +8,16 @@ REM Requires: Python 3.13 or higher
 REM
 REM Usage:
 REM   launch-ui.bat
+REM   launch-ui.bat path\to\results.json
 REM   double-click launch-ui.bat in Windows Explorer
 
 setlocal enabledelayedexpansion
 
 REM Get the directory where this script is located
 set "SCRIPT_DIR=%~dp0"
+
+REM Parse optional JSON file argument
+set "JSON_FILE=%~1"
 
 REM Check Python version
 python3 -c "import sys; major, minor = sys.version_info[:2]; exit(0 if (major > 3 or (major == 3 and minor >= 13)) else 1)" 2>nul
@@ -71,7 +75,11 @@ if exist "%SCRIPT_DIR%venv\Scripts\activate.bat" (
 )
 
 REM Launch the desktop UI
-python3 -m video_censor_personal.ui.main
+if defined JSON_FILE (
+    python3 -m video_censor_personal.ui.main "%JSON_FILE%"
+) else (
+    python3 -m video_censor_personal.ui.main
+)
 
 REM Pause so errors are visible if they occur
 if errorlevel 1 pause
