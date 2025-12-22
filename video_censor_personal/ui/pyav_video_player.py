@@ -142,6 +142,14 @@ class PyAVVideoPlayer(VideoPlayer):
             self._pause_event.clear()
             self._stop_event.clear()
             
+            # Initialize audio player if needed
+            if self._audio_stream is not None and self._audio_player is None:
+                try:
+                    self._initialize_audio_player()
+                except Exception as e:
+                    logger.warning(f"Failed to initialize audio player: {e}")
+                    self._audio_player = None
+            
             # Start decode thread
             if self._decode_thread is None or not self._decode_thread.is_alive():
                 self._decode_thread = threading.Thread(target=self._decode_thread_main, daemon=True)
@@ -149,7 +157,10 @@ class PyAVVideoPlayer(VideoPlayer):
             
             # Start audio playback if audio stream exists
             if self._audio_stream is not None and self._audio_player is not None:
-                self._audio_player.play()
+                try:
+                    self._audio_player.play()
+                except Exception as e:
+                    logger.error(f"Error starting audio playback: {e}")
     
     def pause(self) -> None:
         """Pause playback."""
@@ -457,3 +468,65 @@ class PyAVVideoPlayer(VideoPlayer):
         
         except Exception as e:
             logger.error(f"Error rendering frame: {e}")
+    
+    def _initialize_audio_player(self) -> None:
+        """Initialize audio player and load audio stream."""
+        if self._audio_stream is None or self._audio_player is not None:
+            return
+        
+        logger.info("Initializing audio player")
+        self._audio_player = SimpleAudioPlayer()
+        
+        # Decode all audio frames
+        audio_frames_list = []
+        sample_rate = self._audio_stream.sample_rate
+        channels = self._audio_stream.channels
+        
+        logger.info(f"Extracting audio: {sample_rate}Hz, {channels} channels")
+        
+        try:
+            for frame in self._container.decode(self._audio_stream):
+                try:
+                    # Convert to numpy array (shape: (samples, channels) for multichannel or (samples,) for mono)
+                    array = frame.to_ndarray()
+                    
+                    # Ensure int16 format
+                    if array.dtype != np.int16:
+                        if array.dtype in [np.float32, np.float64]:
+                            # Convert float to int16
+                            array = (array * 32767).astype(np.int16)
+                        else:
+                            array = array.astype(np.int16)
+                    
+                    audio_frames_list.append(array)
+                except Exception as e:
+                    logger.warning(f"Error decoding audio frame: {e}")
+                    continue
+        except Exception as e:
+            logger.warning(f"Error decoding audio stream: {e}")
+            self._audio_player = None
+            return
+        
+        if not audio_frames_list:
+            logger.warning("No audio frames decoded")
+            self._audio_player = None
+            return
+        
+        try:
+            # Concatenate all frames
+            if audio_frames_list[0].ndim == 2:
+                # Multichannel audio: concatenate along samples axis
+                audio_data = np.concatenate(audio_frames_list, axis=0)
+            else:
+                # Mono audio
+                audio_data = np.concatenate(audio_frames_list, axis=0)
+            
+            logger.info(f"Loaded {len(audio_data)} audio samples")
+            
+            # Load into audio player
+            self._audio_player.load_audio_data(audio_data, sample_rate, channels)
+            self._audio_player.set_volume(self._volume)
+        
+        except Exception as e:
+            logger.error(f"Error loading audio data: {e}")
+            self._audio_player = None
