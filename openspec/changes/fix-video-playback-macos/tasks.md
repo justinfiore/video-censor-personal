@@ -134,13 +134,13 @@
 
 ## 14. Cleanup & Deprecation (Phase 3)
 
-- [ ] 14.1 Remove VLC-related code paths: delete VLCVideoPlayer class from video_player.py
-- [ ] 14.2 Verify requirements.txt: remove python-vlc (already done in section 2.2)
-- [ ] 14.3 Remove VLC import checks from codebase: simplify error handling (no fallback to VLC)
+- [x] 14.1 Remove VLC-related code paths: delete VLCVideoPlayer class from video_player.py
+- [x] 14.2 Verify requirements.txt: remove python-vlc (already done in section 2.2)
+- [x] 14.3 Remove VLC import checks from codebase: simplify error handling (no fallback to VLC)
 - [ ] 14.4 Remove VLC installation from CI/CD pipelines if present
 - [ ] 14.5 Remove or archive VLC-related troubleshooting docs
 - [ ] 14.6 Update CHANGELOG documenting: "Replaced VLC with PyAV for cross-platform video playback support on macOS, Windows, Linux"
-- [ ] 14.7 Verify no lingering imports: grep for "vlc" and "VLC" in codebase
+- [ ] 14.7 Verify no lingering imports: grep for "vlc" and "VLC" in codebase (done, only in docs/spec/archives)
 
 ## 15. Final Validation
 

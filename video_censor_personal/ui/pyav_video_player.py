@@ -119,6 +119,16 @@ class PyAVVideoPlayer(VideoPlayer):
             
             logger.info(f"Video loaded: duration={self._duration:.2f}s")
             
+            # Render first frame to canvas (on next tick to ensure canvas is realized)
+            if self._video_stream is not None:
+                try:
+                    logger.info("Scheduling first frame render")
+                    # Schedule for next iteration to ensure canvas has dimensions
+                    if self._canvas is not None:
+                        self._canvas.after(10, self._render_first_frame)
+                except Exception as e:
+                    logger.warning(f"Failed to schedule first frame: {e}")
+            
         except Exception as e:
             logger.error(f"Failed to load video: {e}")
             self._container = None
@@ -292,6 +302,33 @@ class PyAVVideoPlayer(VideoPlayer):
             logger.error(f"Decode thread error: {e}")
             self._is_playing = False
     
+    def _render_first_frame(self) -> None:
+        """Decode and render the first frame of the video."""
+        if self._video_stream is None or self._canvas is None:
+            logger.debug(f"Cannot render first frame: video_stream={self._video_stream is not None}, canvas={self._canvas is not None}")
+            return
+        
+        try:
+            logger.debug("Rendering first frame...")
+            # Seek to beginning
+            self._container.seek(0)
+            
+            # Decode first frame
+            frame_rendered = False
+            for packet in self._container.demux(self._video_stream):
+                for frame in packet.decode():
+                    self._render_frame_to_canvas(frame)
+                    logger.info("First frame rendered successfully")
+                    frame_rendered = True
+                    return
+            
+            if not frame_rendered:
+                logger.warning("No frames available to render")
+        except Exception as e:
+            logger.warning(f"Failed to render first frame: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def _perform_seek(self) -> None:
         """Perform seek operation."""
         try:
@@ -401,6 +438,19 @@ class PyAVVideoPlayer(VideoPlayer):
     def _render_frame_to_canvas(self, frame) -> None:
         """Render PyAV frame to tkinter Canvas."""
         try:
+            # Ensure canvas exists
+            if self._canvas is None:
+                logger.warning("Canvas not available for rendering")
+                return
+            
+            # Check canvas dimensions
+            canvas_width = self._canvas.winfo_width()
+            canvas_height = self._canvas.winfo_height()
+            
+            if canvas_width < 1 or canvas_height < 1:
+                logger.debug(f"Canvas not ready: {canvas_width}x{canvas_height}, skipping frame")
+                return
+            
             # Convert frame to RGB
             try:
                 if frame.format.name in ['yuv420p', 'yuvj420p']:
@@ -420,46 +470,53 @@ class PyAVVideoPlayer(VideoPlayer):
                 logger.warning(f"Failed to convert frame to ndarray: {e}")
                 return
             
+            # Validate array shape
+            if image_array.size == 0 or len(image_array.shape) < 2:
+                logger.warning(f"Invalid frame array shape: {image_array.shape}")
+                return
+            
             # Convert numpy array to PIL Image
             try:
                 from PIL import Image, ImageTk
                 
                 pil_image = Image.fromarray(image_array, mode='RGB')
                 
-                # Resize if needed to fit canvas
+                # Calculate aspect-preserving resize
                 try:
-                    canvas_width = self._canvas.winfo_width()
-                    canvas_height = self._canvas.winfo_height()
+                    frame_height, frame_width = image_array.shape[0], image_array.shape[1]
+                    aspect_ratio = frame_width / frame_height
                     
-                    if canvas_width > 1 and canvas_height > 1:
-                        aspect_ratio = image_array.shape[1] / image_array.shape[0]
-                        
-                        # Fit within canvas
-                        if (canvas_width / canvas_height) > aspect_ratio:
-                            new_height = canvas_height
-                            new_width = int(new_height * aspect_ratio)
-                        else:
-                            new_width = canvas_width
-                            new_height = int(new_width / aspect_ratio)
-                        
+                    # Fit within canvas preserving aspect
+                    if (canvas_width / canvas_height) > aspect_ratio:
+                        new_height = canvas_height
+                        new_width = int(new_height * aspect_ratio)
+                    else:
+                        new_width = canvas_width
+                        new_height = int(new_width / aspect_ratio)
+                    
+                    if new_width > 0 and new_height > 0:
                         pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                        logger.debug(f"Resized frame to {new_width}x{new_height}")
                 except Exception as e:
                     logger.warning(f"Failed to resize frame: {e}")
                 
-                # Convert to PhotoImage
+                # Convert to PhotoImage and keep reference
                 self._canvas_photo_image = ImageTk.PhotoImage(pil_image)
                 
-                # Update canvas
+                # Update canvas on main thread
                 try:
                     canvas_width = self._canvas.winfo_width()
                     canvas_height = self._canvas.winfo_height()
                     
-                    self._canvas.delete("all")
-                    self._canvas.create_image(
-                        canvas_width // 2,
-                        canvas_height // 2,
-                        image=self._canvas_photo_image
-                    )
+                    if canvas_width > 0 and canvas_height > 0:
+                        self._canvas.delete("all")
+                        self._canvas.create_image(
+                            canvas_width // 2,
+                            canvas_height // 2,
+                            image=self._canvas_photo_image
+                        )
+                        self._canvas.update_idletasks()
+                        logger.debug(f"Frame rendered to canvas")
                 except Exception as e:
                     logger.warning(f"Failed to update canvas: {e}")
                 

@@ -9,7 +9,6 @@ import json
 import logging
 from pathlib import Path
 
-from video_censor_personal.ui.video_player import VLCVideoPlayer
 from video_censor_personal.ui.segment_manager import SegmentManager
 from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
 from video_censor_personal.ui.segment_details_pane import SegmentDetailsPaneImpl
@@ -61,7 +60,6 @@ class PreviewEditorApp:
         self.root.title(title)
         
         self.segment_manager = SegmentManager()
-        self.video_player = VLCVideoPlayer()
         self.keyboard_manager = KeyboardShortcutManager()
         
         self.current_json_path: Optional[str] = None
@@ -186,7 +184,7 @@ class PreviewEditorApp:
         self.segment_list_pane = SegmentListPaneImpl(main_container)
         self.segment_list_pane.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=2, pady=2)
         
-        self.video_player_pane = VideoPlayerPaneImpl(main_container, self.video_player)
+        self.video_player_pane = VideoPlayerPaneImpl(main_container)
         self.video_player_pane.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
         self.segment_details_pane = SegmentDetailsPaneImpl(main_container)
