@@ -3,10 +3,21 @@ import tkinter as tk
 from typing import Optional, Callable, List
 import logging
 import traceback
+import sys
 from video_censor_personal.ui.video_player import VideoPlayer
 from video_censor_personal.ui.segment_manager import Segment
 
 logger = logging.getLogger("video_censor_personal.ui")
+
+# Try to use PyAVVideoPlayer, fall back to VLC if unavailable
+try:
+    from video_censor_personal.ui.pyav_video_player import PyAVVideoPlayer
+    DEFAULT_PLAYER_CLASS = PyAVVideoPlayer
+    logger.info("Using PyAVVideoPlayer")
+except (ImportError, RuntimeError) as e:
+    logger.warning(f"PyAVVideoPlayer not available ({e}), falling back to VLC")
+    from video_censor_personal.ui.video_player import VLCVideoPlayer
+    DEFAULT_PLAYER_CLASS = VLCVideoPlayer
 
 
 class TimelineCanvas(tk.Canvas):
@@ -101,6 +112,15 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
     def __init__(self, master, video_player: Optional[VideoPlayer] = None, **kwargs):
         super().__init__(master, **kwargs)
         
+        # Use default player if none provided
+        if video_player is None:
+            try:
+                video_player = DEFAULT_PLAYER_CLASS()
+                logger.info(f"Created default video player: {DEFAULT_PLAYER_CLASS.__name__}")
+            except Exception as e:
+                logger.error(f"Failed to create default video player: {e}")
+                raise
+        
         self.video_player = video_player
         self.is_loaded = False
         self.time_update_callback: Optional[Callable[[float], None]] = None
@@ -113,22 +133,12 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self.video_container = ctk.CTkFrame(self, fg_color="black")
         self.video_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         
-        self.video_canvas = tk.Frame(self.video_container, bg="black")
+        self.video_canvas = tk.Canvas(self.video_container, bg="black", highlightthickness=0)
         self.video_canvas.pack(fill="both", expand=True)
         
-        # Add audio-only mode indicator for macOS
-        import sys
-        if sys.platform == 'darwin':
-            self.audio_only_label = ctk.CTkLabel(
-                self.video_container,
-                text="Audio-only mode (video rendering not supported on macOS)",
-                text_color="orange",
-                font=("Arial", 11)
-            )
-            self.audio_only_label.pack(pady=20)
-        
-        if self.video_player:
-            self.video_player.video_widget = self.video_canvas
+        # Pass canvas to PyAV player if applicable
+        if hasattr(self.video_player, '_canvas'):
+            self.video_player._canvas = self.video_canvas
         
         self.timeline_frame = ctk.CTkFrame(self)
         self.timeline_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
