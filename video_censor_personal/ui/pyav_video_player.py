@@ -79,7 +79,18 @@ class PyAVVideoPlayer(VideoPlayer):
                 self._cleanup_playback()
             
             # Open container
-            self._container = av.open(video_path)
+            try:
+                self._container = av.open(video_path)
+            except av.error.FileNotFoundError:
+                logger.error(f"Video file not found: {video_path}")
+                raise ValueError(f"Video file not found: {video_path}")
+            except av.error.InvalidDataFound:
+                logger.error(f"Invalid video file format: {video_path}")
+                raise ValueError(f"Invalid video file format: {video_path}")
+            except Exception as e:
+                logger.error(f"Failed to open video file: {e}")
+                raise ValueError(f"Failed to open video file: {video_path}: {e}")
+            
             logger.info("Container opened")
             
             # Find streams
@@ -94,6 +105,12 @@ class PyAVVideoPlayer(VideoPlayer):
                     self._audio_stream = stream
                     logger.info(f"Audio stream found: {stream.codec_context.name}")
             
+            # Warn if video or audio missing
+            if self._video_stream is None:
+                logger.warning("No video stream found in file")
+            if self._audio_stream is None:
+                logger.warning("No audio stream found in file")
+            
             # Get duration
             if self._container.duration:
                 self._duration = float(self._container.duration) * av.time_base
@@ -104,6 +121,9 @@ class PyAVVideoPlayer(VideoPlayer):
             
         except Exception as e:
             logger.error(f"Failed to load video: {e}")
+            self._container = None
+            self._video_stream = None
+            self._audio_stream = None
             raise
     
     def play(self) -> None:
@@ -287,33 +307,48 @@ class PyAVVideoPlayer(VideoPlayer):
         """Decode frames from video stream."""
         if self._video_stream is None:
             logger.warning("No video stream")
+            self._is_playing = False
             return
         
         # Decode a few frames
-        for packet in self._container.demux(self._video_stream):
-            for frame in packet.decode():
+        try:
+            for packet in self._container.demux(self._video_stream):
                 if self._stop_event.is_set():
                     return
                 
-                # Extract frame info
-                frame_data = {
-                    'frame': frame,
-                    'pts': frame.pts,
-                    'time': frame.time if hasattr(frame, 'time') else 0.0,
-                }
-                
-                # Try to put in queue, skip if full
                 try:
-                    self._frame_queue.put(frame_data, block=False)
-                    self._frame_count += 1
-                except queue.Full:
-                    self._dropped_frames += 1
-                    logger.warning(f"Frame queue full, dropped frame {self._frame_count}")
+                    for frame in packet.decode():
+                        if self._stop_event.is_set():
+                            return
+                        
+                        # Extract frame info
+                        frame_data = {
+                            'frame': frame,
+                            'pts': frame.pts,
+                            'time': frame.time if hasattr(frame, 'time') else 0.0,
+                        }
+                        
+                        # Try to put in queue, skip if full
+                        try:
+                            self._frame_queue.put(frame_data, block=False)
+                            self._frame_count += 1
+                        except queue.Full:
+                            self._dropped_frames += 1
+                            if self._dropped_frames % 10 == 0:
+                                logger.debug(f"Frame queue full, dropped {self._dropped_frames} frames total")
+                        
+                        # Start render thread if not running
+                        if self._render_thread is None or not self._render_thread.is_alive():
+                            self._render_thread = threading.Thread(target=self._render_thread_main, daemon=True)
+                            self._render_thread.start()
                 
-                # Start render thread if not running
-                if self._render_thread is None or not self._render_thread.is_alive():
-                    self._render_thread = threading.Thread(target=self._render_thread_main, daemon=True)
-                    self._render_thread.start()
+                except (ValueError, RuntimeError) as e:
+                    logger.warning(f"Error decoding packet: {e}")
+                    continue
+        
+        except Exception as e:
+            logger.error(f"Error during frame decoding: {e}")
+            self._is_playing = False
     
     def _render_thread_main(self) -> None:
         """Main rendering thread."""
@@ -356,13 +391,23 @@ class PyAVVideoPlayer(VideoPlayer):
         """Render PyAV frame to tkinter Canvas."""
         try:
             # Convert frame to RGB
-            if frame.format.name in ['yuv420p', 'yuvj420p']:
-                rgb_frame = frame.to_rgb()
-            else:
-                rgb_frame = frame if frame.format.name == 'rgb24' else frame.to_rgb()
+            try:
+                if frame.format.name in ['yuv420p', 'yuvj420p']:
+                    rgb_frame = frame.to_rgb()
+                elif frame.format.name == 'rgb24':
+                    rgb_frame = frame
+                else:
+                    rgb_frame = frame.to_rgb()
+            except Exception as e:
+                logger.warning(f"Failed to convert frame format {frame.format.name}: {e}")
+                return
             
             # Convert to numpy array
-            image_array = rgb_frame.to_ndarray()
+            try:
+                image_array = rgb_frame.to_ndarray()
+            except Exception as e:
+                logger.warning(f"Failed to convert frame to ndarray: {e}")
+                return
             
             # Convert numpy array to PIL Image
             try:
@@ -371,24 +416,44 @@ class PyAVVideoPlayer(VideoPlayer):
                 pil_image = Image.fromarray(image_array, mode='RGB')
                 
                 # Resize if needed to fit canvas
-                canvas_width = self._canvas.winfo_width()
-                canvas_height = self._canvas.winfo_height()
-                
-                if canvas_width > 1 and canvas_height > 1:
-                    pil_image.thumbnail((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+                try:
+                    canvas_width = self._canvas.winfo_width()
+                    canvas_height = self._canvas.winfo_height()
+                    
+                    if canvas_width > 1 and canvas_height > 1:
+                        aspect_ratio = image_array.shape[1] / image_array.shape[0]
+                        
+                        # Fit within canvas
+                        if (canvas_width / canvas_height) > aspect_ratio:
+                            new_height = canvas_height
+                            new_width = int(new_height * aspect_ratio)
+                        else:
+                            new_width = canvas_width
+                            new_height = int(new_width / aspect_ratio)
+                        
+                        pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                except Exception as e:
+                    logger.warning(f"Failed to resize frame: {e}")
                 
                 # Convert to PhotoImage
                 self._canvas_photo_image = ImageTk.PhotoImage(pil_image)
                 
                 # Update canvas
-                self._canvas.create_image(
-                    canvas_width // 2,
-                    canvas_height // 2,
-                    image=self._canvas_photo_image
-                )
+                try:
+                    canvas_width = self._canvas.winfo_width()
+                    canvas_height = self._canvas.winfo_height()
+                    
+                    self._canvas.delete("all")
+                    self._canvas.create_image(
+                        canvas_width // 2,
+                        canvas_height // 2,
+                        image=self._canvas_photo_image
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update canvas: {e}")
                 
             except ImportError:
-                logger.warning("PIL/Pillow not available for image rendering")
+                logger.error("PIL/Pillow not available for image rendering")
         
         except Exception as e:
             logger.error(f"Error rendering frame: {e}")
