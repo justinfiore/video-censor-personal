@@ -16,3 +16,4 @@ video-censor-analysis-pass.yaml
 
 # Logs
 logs/
+crash-report.txt
