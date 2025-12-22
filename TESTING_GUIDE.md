@@ -21,6 +21,11 @@ python3 video_censor_personal.py
 
 Then navigate to the preview editor UI to load and test videos.
 
+**Available test videos:**
+- `tests/fixtures/sample.mp4` - Small sample video (H.264 + AAC)
+
+For testing with larger or different videos, add your own test files to a test directory.
+
 ## Testing Checklist
 
 ### Basic Functionality

@@ -191,6 +191,9 @@ python3 poc_pyav.py
 # Run integration tests
 python3 test_video_playback.py
 
+# Run real video tests (uses committed test fixture)
+python3 test_real_video.py
+
 # Run application
 python3 video_censor_personal.py
 ```

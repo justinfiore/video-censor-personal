@@ -34,9 +34,8 @@ test_video_playback.py: 5/5 PASSED
 
 ### Real Video Tests ✅
 ```
-test_real_video.py: 2/2 PASSED
+test_real_video.py: 1/1 PASSED
 - sample.mp4 (H.264 + AAC)
-- Psych1_1-clean.mp4 (H.264 + AAC, 1280x720)
 - Frame decoding working
 - Audio decoding working
 ```

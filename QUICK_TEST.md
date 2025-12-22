@@ -66,9 +66,10 @@ python3 video_censor_personal.py 2>&1 | grep -E "ERROR|WARNING|PyAV"
 
 ## Test Video Files
 
-These are already in your project:
-- `/tests/fixtures/sample.mp4` (small, fast)
-- `/output-video/Psych1_1-clean.mp4` (larger, realistic)
+Available in your project:
+- `/tests/fixtures/sample.mp4` (small, fast, for unit tests)
+
+For manual testing with larger videos, add your own test files to a test directory.
 
 ## Expected Console Output
 
