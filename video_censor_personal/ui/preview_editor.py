@@ -9,7 +9,7 @@ import json
 import logging
 from pathlib import Path
 
-from video_censor_personal.ui.video_player import VLCVideoPlayer
+from video_censor_personal.ui.video_player import get_preferred_video_player
 from video_censor_personal.ui.segment_manager import SegmentManager
 from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
 from video_censor_personal.ui.segment_details_pane import SegmentDetailsPaneImpl
@@ -61,7 +61,16 @@ class PreviewEditorApp:
         self.root.title(title)
         
         self.segment_manager = SegmentManager()
-        self.video_player = VLCVideoPlayer()
+        
+        # Get preferred video player for current platform
+        try:
+            VideoPlayerClass = get_preferred_video_player()
+            self.video_player = VideoPlayerClass()
+            logger.info(f"Initialized {VideoPlayerClass.__name__}")
+        except Exception as e:
+            logger.error(f"Failed to initialize video player: {str(e)}")
+            raise
+        
         self.keyboard_manager = KeyboardShortcutManager()
         
         self.current_json_path: Optional[str] = None

@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from typing import Callable, Optional, Type
 import logging
 import traceback
+import sys
 
 logger = logging.getLogger("video_censor_personal.ui")
 
@@ -235,3 +236,28 @@ class VLCVideoPlayer(VideoPlayer):
             logger.error(f"Error getting duration: {str(e)}")
             logger.error(traceback.format_exc())
             return 0.0
+
+
+def get_preferred_video_player() -> Type[VideoPlayer]:
+    """Get the preferred video player class for current platform.
+    
+    On macOS, returns SubprocessVLCPlayer to avoid VLC/tkinter rendering conflicts.
+    On other platforms, returns VLCVideoPlayer for better integration.
+    
+    Returns:
+        The VideoPlayer class to instantiate
+        
+    Raises:
+        RuntimeError: If no suitable player is available
+    """
+    if sys.platform == 'darwin':
+        # macOS: Use subprocess VLC to avoid OpenGL/tkinter conflicts
+        logger.info("Platform is macOS, using SubprocessVLCPlayer")
+        from video_censor_personal.ui.subprocess_vlc_player import SubprocessVLCPlayer
+        return SubprocessVLCPlayer
+    else:
+        # Windows/Linux: Use embedded VLC
+        logger.info(f"Platform is {sys.platform}, using VLCVideoPlayer")
+        if not VLC_AVAILABLE:
+            raise RuntimeError("VLC library not available. Install VLC and python-vlc.")
+        return VLCVideoPlayer

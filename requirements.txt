@@ -10,6 +10,7 @@ click>=8.1.0
 # Desktop UI
 customtkinter>=5.0.0
 python-vlc>=3.0.0
+requests>=2.28.0
 
 # Video processing (optional, for frame extraction)
 opencv-python>=4.8.0

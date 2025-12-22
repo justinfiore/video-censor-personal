@@ -116,18 +116,36 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self.video_canvas = tk.Frame(self.video_container, bg="black")
         self.video_canvas.pack(fill="both", expand=True)
         
-        # Add audio-only mode indicator for macOS
+        # Check if using subprocess player (external window)
         import sys
-        if sys.platform == 'darwin':
+        from video_censor_personal.ui.subprocess_vlc_player import SubprocessVLCPlayer
+        is_subprocess_player = isinstance(self.video_player, SubprocessVLCPlayer)
+        
+        # Add messaging based on player type
+        if is_subprocess_player:
+            self.info_label = ctk.CTkLabel(
+                self.video_container,
+                text="🎬 Video in External Window\n\nVLC will open in a separate window.\nClose it to return to the editor.\n\nAudio playback, timeline, and controls work normally.",
+                text_color="#4caf50",
+                font=("Arial", 11),
+                wraplength=350,
+                justify="center"
+            )
+            self.info_label.pack(pady=40)
+        elif sys.platform == 'darwin':
+            # Fallback audio-only mode for native embedding
             self.audio_only_label = ctk.CTkLabel(
                 self.video_container,
-                text="Audio-only mode (video rendering not supported on macOS)",
+                text="🔊 Audio-Only Mode on macOS\n\nVideo rendering is not supported on macOS due to\nVLC/tkinter compatibility limitations.\n\nAudio playback, timeline, and speed controls work normally.\nUse timeline to navigate segments.",
                 text_color="orange",
-                font=("Arial", 11)
+                font=("Arial", 11),
+                wraplength=350,
+                justify="center"
             )
-            self.audio_only_label.pack(pady=20)
+            self.audio_only_label.pack(pady=40)
         
-        if self.video_player:
+        # Only attach to widget if not subprocess player (subprocess uses native window)
+        if self.video_player and not is_subprocess_player:
             self.video_player.video_widget = self.video_canvas
         
         self.timeline_frame = ctk.CTkFrame(self)

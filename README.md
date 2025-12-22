@@ -939,6 +939,36 @@ video-censor-personal/
 └── video-censor.yaml.example       # Example configuration
 ```
 
+## Known Limitations
+
+### macOS Video Playback
+
+**Video Rendering in Preview Editor Not Supported on macOS**
+
+Due to compatibility issues between VLC's video rendering engine and tkinter's windowing system on macOS, the Preview Editor runs in audio-only mode on macOS.
+
+**What works:**
+- Audio playback and controls (play, pause, volume, speed)
+- Timeline navigation (click to seek)
+- Segment review by position + audio
+- All segment filtering and marking features
+
+**What doesn't work:**
+- Visual video display in the embedded player
+
+**Workarounds:**
+1. **Use external video player**: Open the video file in VLC, QuickTime, or your preferred player alongside the Preview Editor
+   ```bash
+   open video.mp4  # Opens in default macOS video player
+   ```
+
+2. **Use Linux or Windows**: The Preview Editor supports full video playback on both Linux and Windows
+
+3. **Listen while reviewing**: Use the timeline position indicator (blue line) to track where you are in the video while listening to audio
+
+**Technical Details**:
+See [MACOS_VIDEO_PLAYBACK_SOLUTIONS.md](MACOS_VIDEO_PLAYBACK_SOLUTIONS.md) for detailed technical analysis and potential solutions.
+
 ## Troubleshooting
 
 ### Common Issues
