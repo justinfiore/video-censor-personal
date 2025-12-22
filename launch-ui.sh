@@ -203,29 +203,10 @@ check_tkinter
 
 echo "Launching application with Python Version: $(python3 --version)"
 
-# On macOS, use the app bundle for proper menu bar integration
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    if [ ! -d "$SCRIPT_DIR/Video Censor Personal.app" ]; then
-        echo "Creating macOS app bundle..."
-        bash "$SCRIPT_DIR/create-macos-app.sh"
-    fi
-    # Pass JSON file to app bundle if provided
-    if [ -n "$JSON_FILE" ]; then
-        # Convert relative path to absolute
-        if [[ ! "$JSON_FILE" = /* ]]; then
-            JSON_FILE="$(cd "$(dirname "$JSON_FILE")" && pwd)/$(basename "$JSON_FILE")"
-        fi
-        # Note: Passing arguments to app bundle requires special handling via environment variable
-        export VIDEO_CENSOR_JSON_FILE="$JSON_FILE"
-        open -a "Video Censor Personal"
-    else
-        open -a "Video Censor Personal"
-    fi
+# On macOS and other platforms, launch directly with Python
+# (macOS app bundle mode can be added later if needed for menu integration)
+if [ -n "$JSON_FILE" ]; then
+    exec python3 -m video_censor_personal.ui.main "$JSON_FILE"
 else
-    # On Linux and other platforms, launch directly
-    if [ -n "$JSON_FILE" ]; then
-        exec python3 -m video_censor_personal.ui.main "$JSON_FILE"
-    else
-        exec python3 -m video_censor_personal.ui.main
-    fi
+    exec python3 -m video_censor_personal.ui.main
 fi

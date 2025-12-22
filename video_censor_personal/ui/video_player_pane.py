@@ -9,15 +9,9 @@ from video_censor_personal.ui.segment_manager import Segment
 
 logger = logging.getLogger("video_censor_personal.ui")
 
-# Try to use PyAVVideoPlayer, fall back to VLC if unavailable
-try:
-    from video_censor_personal.ui.pyav_video_player import PyAVVideoPlayer
-    DEFAULT_PLAYER_CLASS = PyAVVideoPlayer
-    logger.info("Using PyAVVideoPlayer")
-except (ImportError, RuntimeError) as e:
-    logger.warning(f"PyAVVideoPlayer not available ({e}), falling back to VLC")
-    from video_censor_personal.ui.video_player import VLCVideoPlayer
-    DEFAULT_PLAYER_CLASS = VLCVideoPlayer
+from video_censor_personal.ui.pyav_video_player import PyAVVideoPlayer
+DEFAULT_PLAYER_CLASS = PyAVVideoPlayer
+logger.info("Using PyAVVideoPlayer")
 
 
 class TimelineCanvas(tk.Canvas):
