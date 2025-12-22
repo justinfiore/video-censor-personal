@@ -11,9 +11,10 @@ click>=8.1.0
 customtkinter>=5.0.0
 
 # Video playback (PyAV replaces python-vlc)
-PyAV>=10.0.0
+# Note: PyAV package is named 'av' on PyPI
+av>=10.0.0
 pydub>=0.25.1
-simpleaudio>=1.1.20
+simpleaudio>=1.0.4
 
 # Video processing (optional, for frame extraction)
 opencv-python>=4.8.0
