@@ -95,9 +95,9 @@ def main():
     logger.info("Real Video File Playback Test")
     logger.info("=" * 60)
     
+    # Use test fixture video (small, committed to repo)
     test_videos = [
         Path("/Users/justinfiore/workspace/personal/video-censor-personal/tests/fixtures/sample.mp4"),
-        Path("/Users/justinfiore/workspace/personal/video-censor-personal/output-video/Psych1_1-clean.mp4"),
     ]
     
     results = {}
@@ -121,6 +121,8 @@ def main():
             status = "✓" if result else "✗"
             logger.info(f"{status} {filename}")
         
+        if passed == total:
+            logger.info("\n✓ All real video tests passed!")
         return 0 if passed == total else 1
     else:
         logger.error("No test videos found")
