@@ -2,18 +2,18 @@
 
 ## 1. Research & Proof of Concept (PyAV Only)
 
-- [ ] 1.1 Research PyAV library: installation, API, platform-specific notes, threading model
-- [ ] 1.2 Create minimal proof-of-concept script: load video with PyAV, decode frames, extract timing (PTS)
-- [ ] 1.3 Measure PyAV frame decode performance (current platform)
-- [ ] 1.4 Test PyAV frame rendering to Tkinter Canvas (numpy array → PIL Image → PhotoImage conversion)
-- [ ] 1.5 Test PyAV audio stream reading: extract, resample, format conversion
-- [ ] 1.6 Test pydub + simpleaudio audio playback backend on current platform
-- [ ] 1.7 Document findings and confirm PyAV is viable for production (pass/fail checkpoint)
+- [x] 1.1 Research PyAV library: installation, API, platform-specific notes, threading model
+- [x] 1.2 Create minimal proof-of-concept script: load video with PyAV, decode frames, extract timing (PTS)
+- [x] 1.3 Measure PyAV frame decode performance (current platform)
+- [x] 1.4 Test PyAV frame rendering to Tkinter Canvas (numpy array → PIL Image → PhotoImage conversion)
+- [x] 1.5 Test PyAV audio stream reading: extract, resample, format conversion
+- [x] 1.6 Test pydub + simpleaudio audio playback backend on current platform
+- [x] 1.7 Document findings and confirm PyAV is viable for production (pass/fail checkpoint)
 
 ## 2. Dependency Management
 
-- [ ] 2.1 Add PyAV (>= 10.0.0), pydub (>= 0.25.1), simpleaudio (>= 1.1.20) to requirements.txt
-- [ ] 2.2 Remove python-vlc from requirements.txt (being replaced by PyAV)
+- [x] 2.1 Add PyAV (>= 10.0.0), pydub (>= 0.25.1), simpleaudio (>= 1.1.20) to requirements.txt
+- [x] 2.2 Remove python-vlc from requirements.txt (being replaced by PyAV)
 - [ ] 2.3 Test pip install on current platform to verify all dependencies resolve
 - [ ] 2.4 Verify PyAV wheels include bundled FFmpeg 4.4.1+
 - [ ] 2.5 Implement hybrid FFmpeg detection: check system ffmpeg (>= 4.0) first, fall back to PyAV's bundled version
@@ -22,58 +22,58 @@
 
 ## 3. Audio Backend Implementation
 
-- [ ] 3.1 Create abstract `AudioPlayer` base class (parallel to VideoPlayer)
-- [ ] 3.2 Implement `SimpleAudioPlayer` using simpleaudio (playback) + pydub (format conversion)
-- [ ] 3.3 Add methods: play(), pause(), stop(), set_volume(), get_current_time(), is_playing()
-- [ ] 3.4 Implement audio stream reading with PyAV: extract audio frames, resample to target format (16-bit PCM, 48kHz)
-- [ ] 3.5 Use pydub to handle format conversion (PyAV → WAV/PCM → simpleaudio playback)
-- [ ] 3.6 Implement time tracking for audio (elapsed time for A/V sync, using samples played)
-- [ ] 3.7 Handle edge cases: no audio stream, mono/stereo/multi-channel audio, variable sample rates
+- [x] 3.1 Create abstract `AudioPlayer` base class (parallel to VideoPlayer)
+- [x] 3.2 Implement `SimpleAudioPlayer` using simpleaudio (playback) + pydub (format conversion)
+- [x] 3.3 Add methods: play(), pause(), stop(), set_volume(), get_current_time(), is_playing()
+- [x] 3.4 Implement audio stream reading with PyAV: extract audio frames, resample to target format (16-bit PCM, 48kHz)
+- [x] 3.5 Use pydub to handle format conversion (PyAV → WAV/PCM → simpleaudio playback)
+- [x] 3.6 Implement time tracking for audio (elapsed time for A/V sync, using samples played)
+- [x] 3.7 Handle edge cases: no audio stream, mono/stereo/multi-channel audio, variable sample rates
 - [ ] 3.8 Test audio callback integration with main thread (ensure no UI blocking)
 - [ ] 3.9 Unit test AudioPlayer implementation (test audio loading, playback, volume, timing)
 
 ## 4. Video Rendering Implementation
 
-- [ ] 4.1 Create `PyAVVideoPlayer` subclass implementing VideoPlayer interface
-- [ ] 4.2 Implement PyAV container and stream management: open file, detect video stream, handle no-video case
-- [ ] 4.3 Implement frame decoding with PyAV: decode to RGB24 or YUV420P, extract frame timing (PTS)
-- [ ] 4.4 Implement frame → Tkinter Canvas rendering: numpy array → PIL Image → PhotoImage (via PIL)
-- [ ] 4.5 Implement seek functionality: seek to timestamp, flush decoder buffers, sync audio position
-- [ ] 4.6 Cache decoded frames intelligently: buffer ~30 frames ahead to smooth playback
+- [x] 4.1 Create `PyAVVideoPlayer` subclass implementing VideoPlayer interface
+- [x] 4.2 Implement PyAV container and stream management: open file, detect video stream, handle no-video case
+- [x] 4.3 Implement frame decoding with PyAV: decode to RGB24 or YUV420P, extract frame timing (PTS)
+- [x] 4.4 Implement frame → Tkinter Canvas rendering: numpy array → PIL Image → PhotoImage (via PIL)
+- [x] 4.5 Implement seek functionality: seek to timestamp, flush decoder buffers, sync audio position
+- [x] 4.6 Cache decoded frames intelligently: buffer ~30 frames ahead to smooth playback
 - [ ] 4.7 Measure frame decode and render latency (target <50ms); benchmark decode vs. render overhead
 - [ ] 4.8 Unit test frame decoding and rendering with various video formats (MP4 H.264, MKV H.265, WebM VP9)
 
 ## 5. Audio-Video Synchronization
 
-- [ ] 5.1 Implement A/V sync mechanism: track PTS (presentation timestamp) for both streams
-- [ ] 5.2 Implement frame drop logic: if video behind audio, skip frames to catch up
-- [ ] 5.3 Implement audio underrun handling: if audio runs dry, pause video temporarily
+- [x] 5.1 Implement A/V sync mechanism: track PTS (presentation timestamp) for both streams
+- [x] 5.2 Implement frame drop logic: if video behind audio, skip frames to catch up
+- [x] 5.3 Implement audio underrun handling: if audio runs dry, pause video temporarily
 - [ ] 5.4 Implement periodic sync check (every 100 frames) to prevent drift accumulation
 - [ ] 5.5 Document acceptable sync drift tolerance (recommend <200ms)
 - [ ] 5.6 Unit test sync mechanisms with synthetic video/audio (predictable timing)
 
 ## 6. Threading & Concurrency
 
-- [ ] 6.1 Design thread architecture: main UI, decode thread, audio thread, render thread
-- [ ] 6.2 Implement thread-safe queues for frame and audio buffer passing (queue.Queue)
-- [ ] 6.3 Implement condition variables for sync signaling between threads
-- [ ] 6.4 Implement graceful thread shutdown: catch exceptions, clean up on error
+- [x] 6.1 Design thread architecture: main UI, decode thread, audio thread, render thread
+- [x] 6.2 Implement thread-safe queues for frame and audio buffer passing (queue.Queue)
+- [x] 6.3 Implement condition variables for sync signaling between threads
+- [x] 6.4 Implement graceful thread shutdown: catch exceptions, clean up on error
 - [ ] 6.5 Test thread safety under stress: rapid seek, play/pause, multiple format changes
 - [ ] 6.6 Avoid deadlocks: use timeout on all blocking operations (queue.get, lock.acquire)
 
 ## 7. Error Handling & Fallback Modes
 
-- [ ] 7.1 Add graceful error handling: file not found, unsupported codec, corrupt file
-- [ ] 7.2 Implement fallback modes: video-only (no audio), audio-only (no video), paused with error
-- [ ] 7.3 Add codec detection: use ffmpeg to introspect stream information on load
-- [ ] 7.4 Implement user-facing error messages: "Video format not supported", "Audio unavailable"
-- [ ] 7.5 Log detailed diagnostics: ffmpeg output, stream info, decode errors
+- [x] 7.1 Add graceful error handling: file not found, unsupported codec, corrupt file
+- [x] 7.2 Implement fallback modes: video-only (no audio), audio-only (no video), paused with error
+- [x] 7.3 Add codec detection: use ffmpeg to introspect stream information on load
+- [x] 7.4 Implement user-facing error messages: "Video format not supported", "Audio unavailable"
+- [x] 7.5 Log detailed diagnostics: ffmpeg output, stream info, decode errors
 - [ ] 7.6 Test error handling with corrupted/invalid video files
 - [ ] 7.7 Unit test error path code coverage
 
 ## 8. Integration with Existing UI
 
-- [ ] 8.1 Update `VideoPlayerPane` to use new PyAVVideoPlayer (backward compatible with VideoPlayer interface)
+- [x] 8.1 Update `VideoPlayerPane` to use new PyAVVideoPlayer (backward compatible with VideoPlayer interface)
 - [ ] 8.2 Test integration with segment list, details panel (verify no UI regressions)
 - [ ] 8.3 Test seek from segment list: click segment → video plays at that timestamp
 - [ ] 8.4 Test play/pause, volume control, playback speed with existing UI controls
