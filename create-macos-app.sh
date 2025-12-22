@@ -26,17 +26,33 @@ cat > "$MACOS_DIR/$APP_NAME" << 'WRAPPER'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_ROOT="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
 
+# Create logs directory if it doesn't exist
+mkdir -p "$APP_ROOT/logs"
+LOG_FILE="$APP_ROOT/logs/ui.log"
+ERROR_LOG="$APP_ROOT/logs/ui_error.log"
+
 # Activate virtual environment if it exists
 if [ -d "$APP_ROOT/venv" ]; then
-    source "$APP_ROOT/venv/bin/activate"
+    source "$APP_ROOT/venv/bin/activate" 2>> "$ERROR_LOG"
 elif [ -d "$APP_ROOT/.venv" ]; then
-    source "$APP_ROOT/.venv/bin/activate"
+    source "$APP_ROOT/.venv/bin/activate" 2>> "$ERROR_LOG"
 fi
 
-# Launch the Python application
+# Launch the Python application with error handling
 # Note: VIDEO_CENSOR_JSON_FILE is set by launch-ui.sh when launching with a JSON file argument
 cd "$APP_ROOT"
-exec python3 -m video_censor_personal.ui.main
+
+# Capture any startup errors
+{
+    echo "=== App Bundle Launch ===" >> "$ERROR_LOG"
+    echo "Time: $(date)" >> "$ERROR_LOG"
+    echo "PWD: $(pwd)" >> "$ERROR_LOG"
+    echo "JSON_FILE: ${VIDEO_CENSOR_JSON_FILE:-none}" >> "$ERROR_LOG"
+    echo "Args: $@" >> "$ERROR_LOG"
+    echo "---" >> "$ERROR_LOG"
+} 2>/dev/null
+
+exec python3 -m video_censor_personal.ui.main "$@" 2>> "$ERROR_LOG"
 WRAPPER
 
 chmod +x "$MACOS_DIR/$APP_NAME"
