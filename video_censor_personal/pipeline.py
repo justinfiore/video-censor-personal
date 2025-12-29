@@ -75,8 +75,6 @@ class AnalysisPipeline:
         self.debug_output = DebugOutput(enabled=self.trace_enabled)
         self.extractor: Optional[VideoExtractor] = None
         self.detection_pipeline: Optional[DetectionPipeline] = None
-        self.remediated_audio_path: Optional[str] = None
-        self.video_remediated_path: Optional[str] = None
         self._model_manager: Optional[ModelManager] = None
         self._models_verified = False
 
@@ -514,13 +512,28 @@ class AnalysisPipeline:
             ).get("merge_threshold", 2.0)
             merged_segments = merge_segments(all_results, threshold=merge_threshold)
             
-            self._apply_audio_remediation(
-                audio_data_original,
-                audio_sample_rate_original,
-                all_results
+            # Use unified remediation manager for consistent behavior with remediation-only mode
+            from video_censor_personal.remediation import RemediationManager
+            
+            remediation_manager = RemediationManager(
+                str(self.video_path),
+                self.config,
+                output_video_path=self.output_video_path,
+                log_level=self.log_level,
             )
-            self._apply_video_remediation(merged_segments)
-            self._mux_remediated_audio()
+            
+            try:
+                remediation_manager.apply_remediation(
+                    all_results,
+                    audio_data=audio_data_original,
+                    audio_sample_rate=audio_sample_rate_original,
+                    video_width=self.extractor.get_video_width() if self.extractor else None,
+                    video_height=self.extractor.get_video_height() if self.extractor else None,
+                    video_duration=self.extractor.get_duration_seconds() if self.extractor else None,
+                    merged_segments=merged_segments,
+                )
+            finally:
+                remediation_manager.cleanup()
         except Exception as e:
             logger.error(f"Post-processing failed: {e}", exc_info=True)
             self.debug_output.info(f"ERROR: Post-processing failed: {e}")
@@ -536,436 +549,6 @@ class AnalysisPipeline:
                 self.extractor = None
 
         return all_results
-
-    def _apply_video_remediation(
-        self,
-        segments: List[Dict[str, Any]],
-    ) -> None:
-        """Apply video remediation if enabled and output video path specified.
-
-        This is called AFTER audio remediation, so we can apply matching cuts to audio.
-        Video remediation modifies the output video file (or creates it if not yet existing).
-
-        Args:
-            segments: List of merged segment dictionaries to use for video remediation.
-        """
-        # Check if video remediation is enabled
-        video_config = self.config.get("remediation", {}).get("video", {})
-        if not video_config.get("enabled", False):
-            logger.debug("Video remediation disabled")
-            return
-
-        if not self.output_video_path:
-            logger.warning(
-                "Video remediation enabled but --output-video not specified. Skipping."
-            )
-            return
-
-        try:
-            from video_censor_personal.video_remediator import VideoRemediator
-            from video_censor_personal.frame import DetectionResult
-
-            # Get video dimensions
-            if not self.extractor:
-                logger.error("Video extractor not initialized for video remediation")
-                return
-
-            try:
-                video_width = self.extractor.get_video_width()
-                video_height = self.extractor.get_video_height()
-                video_duration = self.extractor.get_duration_seconds()
-            except Exception as e:
-                logger.error(f"Failed to get video metadata: {e}")
-                return
-
-            self.debug_output.subsection("Video Remediation")
-            self.debug_output.step(f"Applying video remediation...")
-            self.debug_output.detail("Mode", video_config.get("mode", "blank"))
-            self.debug_output.detail("Output video", self.output_video_path)
-
-            logger.info(f"Using {len(segments)} merged segments for video remediation")
-            self.debug_output.detail("Segments", len(segments))
-
-            # Convert merged segments (with float times) to remediator format (with string timecodes)
-            remediation_segments = self._format_segments_for_remediation(segments)
-
-            if not remediation_segments:
-                logger.info("No segments to remediate; copying input video to output")
-                import shutil
-                shutil.copy2(str(self.video_path), self.output_video_path)
-                self.debug_output.step("No segments to remediate; video copied")
-                return
-
-            # Initialize VideoRemediator
-            remediator = VideoRemediator(video_config)
-
-            import tempfile
-            from pathlib import Path
-
-            # Determine input video for video remediation
-            if self.remediated_audio_path:
-                # Audio was remediated; we need to apply video remediation to a video
-                # that will later have the remediated audio muxed into it
-                # Use a temp file to avoid modifying intermediate state
-                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-                    video_temp_path = tmp.name
-
-                self.video_remediated_path = video_temp_path
-                logger.debug(f"Using temp path for video remediation (after audio): {video_temp_path}")
-
-                # Apply video remediation to original video
-                # (audio was already extracted and remediated separately)
-                remediator.apply(
-                    str(self.video_path),
-                    video_temp_path,
-                    remediation_segments,
-                    video_duration,
-                    video_width,
-                    video_height,
-                )
-
-                logger.info(f"Video remediation saved to temporary file: {video_temp_path}")
-                self.debug_output.step(f"Video remediation complete (temporary file)")
-
-                # If video was cut, apply the same cuts to remediated audio to maintain sync
-                grouped = remediator.group_segments_by_mode(remediator.filter_allowed_segments(remediation_segments))
-                if len(grouped["cut"]) > 0:
-                    self.debug_output.step("Applying matching cuts to remediated audio...")
-                    self._apply_matching_cuts_to_audio(grouped["cut"], video_duration)
-
-            else:
-                # No audio remediation; write directly to output
-                remediator.apply(
-                    str(self.video_path),
-                    self.output_video_path,
-                    remediation_segments,
-                    video_duration,
-                    video_width,
-                    video_height,
-                )
-
-                logger.info(f"Video remediation saved to: {self.output_video_path}")
-                self.debug_output.step(f"Video remediation complete")
-
-        except Exception as e:
-            logger.error(f"Video remediation failed: {e}", exc_info=True)
-            self.debug_output.info(f"ERROR: Video remediation failed: {e}")
-            raise
-
-    def _apply_matching_cuts_to_audio(
-        self,
-        cut_segments: List[Dict[str, Any]],
-        video_duration: float,
-    ) -> None:
-        """Apply matching cuts to remediated audio to maintain video/audio sync.
-
-        When video is cut, the audio must be cut at the same points to avoid sync issues.
-
-        Args:
-            cut_segments: List of segments marked for cutting.
-            video_duration: Total video duration in seconds.
-        """
-        if not self.remediated_audio_path:
-            logger.debug("No remediated audio to cut")
-            return
-
-        if not Path(self.remediated_audio_path).exists():
-            logger.warning(f"Remediated audio file not found: {self.remediated_audio_path}")
-            return
-
-        try:
-            from video_censor_personal.video_remediator import VideoRemediator
-            import tempfile
-
-            # Create a temporary VideoRemediator just to use its segment extraction logic
-            remediator = VideoRemediator({"enabled": True, "mode": "cut"})
-
-            # Extract non-censored segments (keep segments)
-            keep_segments = remediator.extract_non_censored_segments(cut_segments, video_duration)
-
-            logger.info(f"Cutting audio at same points as video: keeping {len(keep_segments)} segments")
-            self.debug_output.detail("Audio segments to keep", len(keep_segments))
-
-            if not keep_segments:
-                logger.warning("No audio segments to keep; all audio will be removed")
-                return
-
-            # Create temp file for cut audio
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                cut_audio_path = tmp.name
-
-            # Extract and concatenate audio segments
-            segment_files = []
-
-            try:
-                for i, segment in enumerate(keep_segments):
-                    segment_file = Path(tempfile.gettempdir()) / f"audio_segment_{i}.wav"
-
-                    # Extract audio segment using ffmpeg
-                    cmd = [
-                        "ffmpeg",
-                        "-i", self.remediated_audio_path,
-                        "-ss", str(segment["start"]),
-                        "-to", str(segment["end"]),
-                        "-y",
-                        str(segment_file)
-                    ]
-
-                    logger.debug(f"Extracting audio segment {i}: {segment['start']}-{segment['end']}")
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=300
-                    )
-
-                    if result.returncode != 0:
-                        raise RuntimeError(f"Failed to extract audio segment {i}: {result.stderr}")
-
-                    segment_files.append(segment_file)
-
-                # Concatenate audio segments
-                concat_file = Path(tempfile.gettempdir()) / "audio_concat.txt"
-                with open(concat_file, "w") as f:
-                    for segment_file in segment_files:
-                        f.write(f"file '{segment_file}'\n")
-
-                cmd = [
-                    "ffmpeg",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-i", str(concat_file),
-                    "-c", "copy",
-                    "-y",
-                    cut_audio_path
-                ]
-
-                logger.debug(f"Concatenating {len(segment_files)} audio segments")
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-
-                if result.returncode != 0:
-                    raise RuntimeError(f"Failed to concatenate audio segments: {result.stderr}")
-
-                # Replace remediated audio with cut version
-                import shutil
-                shutil.move(cut_audio_path, self.remediated_audio_path)
-                logger.info(f"Updated remediated audio with cuts: {self.remediated_audio_path}")
-                self.debug_output.step(f"Audio cuts applied")
-
-            finally:
-                # Clean up temporary files
-                for segment_file in segment_files:
-                    try:
-                        segment_file.unlink(missing_ok=True)
-                    except Exception as e:
-                        logger.warning(f"Failed to clean up temp audio segment: {e}")
-
-                try:
-                    concat_file.unlink(missing_ok=True)
-                except Exception as e:
-                    logger.warning(f"Failed to clean up temp concat file: {e}")
-
-        except Exception as e:
-            logger.error(f"Failed to apply matching cuts to audio: {e}", exc_info=True)
-            self.debug_output.info(f"WARNING: Audio cuts failed (continuing): {e}")
-            # Don't raise - continue with mismatched audio/video rather than fail completely
-
-    def _format_segments_for_remediation(
-        self,
-        merged_segments: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """Format merged segments for video remediator.
-
-        The video remediator's _parse_timecode method handles both float seconds
-        and HH:MM:SS format, so we pass through the float seconds directly to preserve
-        precision for short segments (e.g., 0.033 seconds).
-
-        Args:
-            merged_segments: List of merged segment dicts with float times.
-
-        Returns:
-            List of segments with start_time/end_time as floats.
-        """
-        formatted = []
-        for segment in merged_segments:
-            formatted_segment = {
-                "start_time": segment["start_time"],  # Keep as float (seconds)
-                "end_time": segment["end_time"],      # Keep as float (seconds)
-                "labels": segment.get("labels", []),
-            }
-            
-            # Copy over other fields if present
-            if "confidence" in segment:
-                formatted_segment["confidence"] = segment["confidence"]
-            if "allow" in segment:
-                formatted_segment["allow"] = segment["allow"]
-            if "detections" in segment:
-                formatted_segment["detections"] = segment["detections"]
-                
-            formatted.append(formatted_segment)
-        
-        return formatted
-
-    def _detections_to_segments(
-        self,
-        detections: List[DetectionResult],
-    ) -> List[Dict[str, Any]]:
-        """Convert DetectionResult objects to segment dictionaries.
-
-        Args:
-            detections: List of DetectionResult objects from analysis.
-
-        Returns:
-            List of segment dictionaries with start_time, end_time, labels, etc.
-        """
-        segments = []
-
-        for detection in detections:
-            # Skip if timecode is invalid
-            if not hasattr(detection, 'timecode') or detection.timecode is None:
-                continue
-
-            segment = {
-                "start_time": detection.timecode,
-                "end_time": detection.timecode,  # Point detection; end == start
-                "labels": detection.categories if hasattr(detection, 'categories') else [],
-            }
-
-            # Add confidence if available
-            if hasattr(detection, 'confidence') and detection.confidence is not None:
-                segment["confidence"] = detection.confidence
-
-            # Add detector name if available
-            if hasattr(detection, 'detector_name') and detection.detector_name:
-                segment["detector"] = detection.detector_name
-
-            segments.append(segment)
-
-        return segments
-
-    def _apply_audio_remediation(
-        self,
-        audio_data_original: Optional[Any],
-        audio_sample_rate_original: Optional[int],
-        detections: List[DetectionResult],
-    ) -> None:
-        """Apply audio remediation if enabled and audio data is available.
-
-        This is called AFTER detection models are unloaded to minimize memory usage.
-
-        Args:
-            audio_data_original: Original audio data at native sample rate.
-            audio_sample_rate_original: Original sample rate of audio.
-            detections: List of detection results to use for remediation.
-        """
-        # Apply audio remediation if enabled
-        remediation_config = self.config.get("remediation", {}).get("audio", {})
-        if remediation_config.get("enabled", False) and audio_data_original is not None:
-            self.debug_output.subsection("Audio Remediation")
-            self.debug_output.step("Applying audio remediation...")
-            self.debug_output.detail("Method", remediation_config.get("method", "silence"))
-            self.debug_output.detail("Sample rate", f"{audio_sample_rate_original or 48000} Hz")
-            
-            try:
-                from video_censor_personal.audio_remediator import AudioRemediator
-                
-                remediator = AudioRemediator(remediation_config)
-                remediated_audio = remediator.remediate(
-                    audio_data_original,
-                    audio_sample_rate_original or 48000,
-                    detections
-                )
-                
-                # Write remediated audio at original sample rate
-                output_audio_path = remediation_config.get(
-                    "output_path",
-                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-                )
-                remediator.write_audio(
-                    remediated_audio,
-                    audio_sample_rate_original or 48000,
-                    output_audio_path
-                )
-                self.remediated_audio_path = output_audio_path
-                logger.info(
-                    f"Remediated audio saved to: {output_audio_path} "
-                    f"({audio_sample_rate_original or 48000} Hz)"
-                )
-                self.debug_output.step(f"Audio saved to: {output_audio_path}")
-                
-            except Exception as e:
-                logger.error(f"Audio remediation failed: {e}", exc_info=True)
-                self.debug_output.info(f"ERROR: Audio remediation failed: {e}")
-                raise
-
-    def _mux_remediated_audio(self) -> None:
-        """Mux remediated audio into video if enabled.
-
-        This is called AFTER detection models are unloaded to minimize memory usage.
-        
-        If video_remediated_path exists, uses that as the video source (video remediation was applied).
-        Otherwise, if output_video_path already exists (pre-created), uses that.
-        Otherwise uses the original video.
-        """
-        # Mux remediated audio into video if output path specified
-        if self.remediated_audio_path and self.output_video_path:
-            self.debug_output.subsection("Video Muxing")
-            self.debug_output.step("Muxing remediated audio into video...")
-            
-            try:
-                from video_censor_personal.video_muxer import VideoMuxer
-                from pathlib import Path
-                import tempfile
-                import shutil
-                
-                # Determine video source based on what's been applied:
-                # 1. If video was remediated, use that file
-                # 2. If output video pre-created (for skip chapters), use that
-                # 3. Otherwise use original
-                if self.video_remediated_path:
-                    video_source = self.video_remediated_path
-                    logger.debug("Using video-remediated file as source for audio muxing")
-                elif Path(self.output_video_path).exists():
-                    video_source = self.output_video_path
-                    logger.debug("Using pre-existing output video file as source for audio muxing")
-                else:
-                    video_source = str(self.video_path)
-                    logger.debug("Using original video as source for audio muxing")
-                
-                muxer = VideoMuxer(video_source, self.remediated_audio_path)
-                
-                # Always use a temp file to avoid ffmpeg's limitation of not being able
-                # to read and write the same file in-place
-                # Create temporary output
-                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
-                    temp_output = tmp.name
-                
-                muxer.mux_video(temp_output)
-                
-                # Replace the output file with the muxed version
-                shutil.move(temp_output, self.output_video_path)
-                logger.debug(f"Moved temp muxed video to: {self.output_video_path}")
-                
-                logger.info(f"Output video saved to: {self.output_video_path}")
-                self.debug_output.step(f"Output video saved to: {self.output_video_path}")
-                
-                # Clean up temporary video remediation file if it exists
-                if self.video_remediated_path:
-                    try:
-                        Path(self.video_remediated_path).unlink(missing_ok=True)
-                        logger.debug(f"Cleaned up temporary video remediation file")
-                    except Exception as e:
-                        logger.warning(f"Failed to clean up temp video file: {e}")
-                
-            except Exception as e:
-                logger.error(f"Video muxing failed: {e}", exc_info=True)
-                self.debug_output.info(f"ERROR: Video muxing failed: {e}")
-                raise
 
     def cleanup(self) -> None:
         """Clean up pipeline resources (extractor, detectors).
@@ -1168,6 +751,8 @@ class RemediationRunner:
         extractor = VideoExtractor(str(self.video_path))
         try:
             video_duration = extractor.get_duration_seconds()
+            video_width = extractor.get_video_width()
+            video_height = extractor.get_video_height()
         finally:
             extractor.close()
 
@@ -1190,216 +775,54 @@ class RemediationRunner:
 
         detections = segments_to_detections(segments)
 
-        self._apply_remediation(detections, segments)
-        self._apply_video_remediation(segments)
+        # Extract audio for remediation if needed
+        audio_data_original = None
+        audio_sample_rate_original = None
+        
+        audio_remediation_config = self.config.get("remediation", {}).get("audio", {})
+        if audio_remediation_config.get("enabled", False):
+            try:
+                extractor = VideoExtractor(str(self.video_path))
+                try:
+                    audio_segment = extractor.extract_audio()
+                    audio_data_original = audio_segment.data
+                    audio_sample_rate_original = audio_segment.sample_rate
+                    logger.debug(
+                        f"Extracted audio: {audio_segment.duration():.2f} seconds, "
+                        f"sample rate: {audio_sample_rate_original} Hz"
+                    )
+                finally:
+                    extractor.close()
+            except Exception as e:
+                logger.error(f"Failed to extract audio: {e}")
+                raise
+
+        # Use unified remediation manager for both audio and video
+        from video_censor_personal.remediation import RemediationManager
+        
+        remediation_manager = RemediationManager(
+            self.video_path,
+            self.config,
+            output_video_path=self.output_video_path,
+            log_level=self.log_level,
+        )
+        
+        try:
+            remediation_manager.apply_remediation(
+                detections,
+                segments_for_allow_check=segments,
+                audio_data=audio_data_original,
+                audio_sample_rate=audio_sample_rate_original,
+                video_width=video_width,
+                video_height=video_height,
+                video_duration=video_duration,
+                merged_segments=segments,
+            )
+        finally:
+            remediation_manager.cleanup()
 
         return {
             "segments": segments,
             "metadata": metadata,
             "_raw_merged_segments": segments,
         }
-
-    def _apply_video_remediation(
-        self,
-        segments: List[Dict[str, Any]],
-    ) -> None:
-        """Apply video remediation if enabled and output video path specified.
-
-        Args:
-            segments: List of segment dictionaries to use for video remediation.
-        """
-        # Check if video remediation is enabled
-        video_config = self.config.get("remediation", {}).get("video", {})
-        if not video_config.get("enabled", False):
-            logger.debug("Video remediation disabled")
-            return
-
-        if not self.output_video_path:
-            logger.debug("No output video path specified; skipping video remediation")
-            return
-
-        try:
-            from video_censor_personal.video_remediator import VideoRemediator
-            from video_censor_personal.video_extraction import VideoExtractor
-
-            # Open extractor to get video metadata
-            extractor = VideoExtractor(str(self.video_path))
-            try:
-                video_width = extractor.get_video_width()
-                video_height = extractor.get_video_height()
-                video_duration = extractor.get_duration_seconds()
-            finally:
-                extractor.close()
-
-            self.debug_output.subsection("Video Remediation")
-            self.debug_output.step("Applying video remediation...")
-            self.debug_output.detail("Mode", video_config.get("mode", "blank"))
-            self.debug_output.detail("Output video", self.output_video_path)
-            self.debug_output.detail("Segments", len(segments))
-
-            # Format segments for remediation
-            remediation_segments = self._format_segments_for_remediation(segments)
-
-            if not remediation_segments:
-                logger.info("No segments to remediate; copying input video to output")
-                import shutil
-                shutil.copy2(str(self.video_path), self.output_video_path)
-                self.debug_output.step("No segments to remediate; video copied")
-                return
-
-            # Initialize VideoRemediator and apply
-            remediator = VideoRemediator(video_config)
-            remediator.apply(
-                str(self.video_path),
-                self.output_video_path,
-                remediation_segments,
-                video_duration,
-                video_width,
-                video_height,
-            )
-
-            logger.info(f"Video remediation saved to: {self.output_video_path}")
-            self.debug_output.step("Video remediation complete")
-
-        except Exception as e:
-            logger.error(f"Video remediation failed: {e}")
-            raise
-
-    def _format_segments_for_remediation(
-        self,
-        merged_segments: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """Format merged segments for video remediator.
-
-        Args:
-            merged_segments: List of merged segment dicts with float times.
-
-        Returns:
-            List of segments with start_time/end_time as floats.
-        """
-        formatted = []
-        for segment in merged_segments:
-            formatted_segment = {
-                "start_time": segment["start_time"],
-                "end_time": segment["end_time"],
-                "labels": segment.get("labels", []),
-            }
-
-            # Copy over other fields if present
-            if "confidence" in segment:
-                formatted_segment["confidence"] = segment["confidence"]
-            if "allow" in segment:
-                formatted_segment["allow"] = segment["allow"]
-            if "detections" in segment:
-                formatted_segment["detections"] = segment["detections"]
-
-            formatted.append(formatted_segment)
-
-        return formatted
-
-    def _apply_remediation(
-        self,
-        detections: List[DetectionResult],
-        segments: List[Dict[str, Any]],
-    ) -> None:
-        """Apply audio remediation and mux video.
-
-        Args:
-            detections: Detection results for remediation.
-            segments: Original segments (for allow flag checking).
-        """
-        remediation_config = self.config.get("remediation", {}).get("audio", {})
-        if not remediation_config.get("enabled", False):
-            logger.info("Audio remediation is disabled in config")
-            if not self.output_video_path:
-                logger.warning("No output video path specified and remediation is disabled. Nothing to do.")
-                return
-
-        audio_data_original = None
-        audio_sample_rate_original = None
-        remediated_audio_path = None
-
-        if remediation_config.get("enabled", False):
-            self.debug_output.subsection("Audio Extraction")
-            extractor = VideoExtractor(str(self.video_path))
-            try:
-                audio_segment = extractor.extract_audio()
-                audio_data_original = audio_segment.data
-                audio_sample_rate_original = audio_segment.sample_rate
-                logger.debug(
-                    f"Extracted audio: {audio_segment.duration():.2f} seconds, "
-                    f"sample rate: {audio_sample_rate_original} Hz"
-                )
-            except Exception as e:
-                logger.error(f"Failed to extract audio: {e}")
-                raise
-            finally:
-                extractor.close()
-
-            if audio_data_original is not None:
-                import numpy as np
-                import soundfile as sf
-                import io
-
-                if isinstance(audio_data_original, bytes):
-                    audio_np, sr = sf.read(
-                        io.BytesIO(audio_data_original),
-                        dtype='float32'
-                    )
-                    audio_sample_rate_original = sr
-                else:
-                    audio_np = audio_data_original
-
-                audio_data_original = audio_np
-
-                self.debug_output.subsection("Audio Remediation")
-                self.debug_output.step("Applying audio remediation...")
-                self.debug_output.detail("Method", remediation_config.get("mode", "silence"))
-                self.debug_output.detail("Sample rate", f"{audio_sample_rate_original} Hz")
-
-                from video_censor_personal.audio_remediator import AudioRemediator
-
-                remediator = AudioRemediator(remediation_config)
-                remediated_audio = remediator.remediate(
-                    audio_np,
-                    audio_sample_rate_original,
-                    detections,
-                    segments=segments,
-                )
-
-                output_audio_path = remediation_config.get(
-                    "output_path",
-                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-                )
-                remediator.write_audio(
-                    remediated_audio,
-                    audio_sample_rate_original,
-                    output_audio_path
-                )
-                remediated_audio_path = output_audio_path
-                logger.info(f"Remediated audio saved to: {output_audio_path}")
-                self.debug_output.step(f"Audio saved to: {output_audio_path}")
-
-        if remediated_audio_path and self.output_video_path:
-            self._mux_video(remediated_audio_path)
-        elif self.output_video_path and not remediated_audio_path:
-            import shutil
-            shutil.copy2(self.video_path, self.output_video_path)
-            logger.info(f"Copied video to: {self.output_video_path} (no audio remediation)")
-
-    def _mux_video(self, remediated_audio_path: str) -> None:
-        """Mux remediated audio into output video.
-
-        Args:
-            remediated_audio_path: Path to remediated audio file.
-        """
-        self.debug_output.subsection("Video Muxing")
-        self.debug_output.step("Muxing remediated audio into video...")
-
-        from video_censor_personal.video_muxer import VideoMuxer
-
-        muxer = VideoMuxer(str(self.video_path), remediated_audio_path)
-        muxer.mux_video(self.output_video_path)
-
-        logger.info(f"Output video saved to: {self.output_video_path}")
-        self.debug_output.step(f"Output video saved to: {self.output_video_path}")
