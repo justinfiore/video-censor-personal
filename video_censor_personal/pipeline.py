@@ -6,6 +6,7 @@ and result aggregation.
 
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -883,7 +884,7 @@ class AnalysisPipeline:
                 # Write remediated audio at original sample rate
                 output_audio_path = remediation_config.get(
                     "output_path",
-                    "/tmp/remediated_audio.wav"
+                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
                 )
                 remediator.write_audio(
                     remediated_audio,
@@ -1269,7 +1270,7 @@ class RemediationRunner:
 
                 output_audio_path = remediation_config.get(
                     "output_path",
-                    "/tmp/remediated_audio.wav"
+                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
                 )
                 remediator.write_audio(
                     remediated_audio,
