@@ -49,6 +49,8 @@ class AnalysisPipeline:
         output_video_path: Optional[str] = None,
         skip_model_check: bool = False,
         log_level: str = "INFO",
+        config_file: Optional[str] = None,
+        segment_file: Optional[str] = None,
     ) -> None:
         """Initialize the analysis pipeline.
 
@@ -59,6 +61,8 @@ class AnalysisPipeline:
             output_video_path: Optional path for output video with remediated audio.
             skip_model_check: If True, skip model verification (legacy behavior).
             log_level: Logging level (INFO, DEBUG, TRACE).
+            config_file: Optional path to the config file being used (for metadata tracking).
+            segment_file: Optional path to the segment file being used (for metadata tracking).
 
         Raises:
             FileNotFoundError: If video file does not exist.
@@ -77,6 +81,10 @@ class AnalysisPipeline:
         self.detection_pipeline: Optional[DetectionPipeline] = None
         self._model_manager: Optional[ModelManager] = None
         self._models_verified = False
+        
+        # Metadata tracking for remediation
+        self.config_file = config_file
+        self.segment_file = segment_file
 
         # Prepare detector configuration
         detector_configs = detector_list or config.get("detectors")
@@ -514,12 +522,16 @@ class AnalysisPipeline:
             
             # Use unified remediation manager for consistent behavior with remediation-only mode
             from video_censor_personal.remediation import RemediationManager
+            from datetime import datetime
             
             remediation_manager = RemediationManager(
                 str(self.video_path),
                 self.config,
                 output_video_path=self.output_video_path,
                 log_level=self.log_level,
+                config_file=self.config_file,
+                segment_file=self.segment_file,
+                processed_timestamp=datetime.now(),
             )
             
             try:

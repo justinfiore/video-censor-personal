@@ -7,7 +7,7 @@ This module provides unified remediation (audio and video) logic that can be use
 The key design principle is that both modes follow the same remediation sequence:
 1. Apply audio remediation (using original timestamps)
 2. Apply video remediation (may shift timelines via cuts)
-3. Mux remediated audio back into video
+3. Mux remediated audio back into video (with optional metadata tags)
 
 This ensures consistent behavior regardless of whether segments came from detection or pre-loaded JSON.
 """
@@ -15,6 +15,7 @@ This ensures consistent behavior regardless of whether segments came from detect
 import logging
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -37,6 +38,9 @@ class RemediationManager:
         config: Dict[str, Any],
         output_video_path: Optional[str] = None,
         log_level: str = "INFO",
+        config_file: Optional[str] = None,
+        segment_file: Optional[str] = None,
+        processed_timestamp: Optional[datetime] = None,
     ) -> None:
         """Initialize remediation manager.
         
@@ -46,6 +50,9 @@ class RemediationManager:
             output_video_path: Optional path for final output video. If not specified,
                              no video output will be produced even if remediation is enabled.
             log_level: Logging level (INFO, DEBUG, TRACE).
+            config_file: Optional path to the config file used (for metadata).
+            segment_file: Optional path to the segment file used (for metadata).
+            processed_timestamp: Optional datetime when remediation started (for metadata).
         """
         self.input_video_path = Path(input_video_path)
         if not self.input_video_path.exists():
@@ -55,6 +62,11 @@ class RemediationManager:
         self.output_video_path = output_video_path
         self.log_level = log_level
         self.trace_enabled = log_level == "TRACE"
+        
+        # Metadata tracking for output video
+        self.config_file = config_file
+        self.segment_file = segment_file
+        self.processed_timestamp = processed_timestamp or datetime.now()
         
         # Track intermediate file states
         self.remediated_audio_path: Optional[str] = None
@@ -328,7 +340,7 @@ class RemediationManager:
 
     
     def _mux_remediated_audio(self) -> None:
-        """Mux remediated audio into video.
+        """Mux remediated audio into video with optional metadata.
         
         This runs BEFORE video remediation, so it simply muxes the remediated audio
         with the original video, creating the output file that will be used as input
@@ -336,6 +348,9 @@ class RemediationManager:
         
         When video remediation is not enabled, this output file is the final result.
         When video remediation is enabled, it will operate on this output file in-place.
+        
+        Adds metadata tags (config file, segment file, timestamp, remediation flags)
+        and updates the title with "(Censored)" suffix if configured.
         """
         if not self.remediated_audio_path or not self.output_video_path:
             logger.debug("No audio muxing needed (no remediated audio or no output path)")
@@ -346,7 +361,36 @@ class RemediationManager:
         
         try:
             from video_censor_personal.video_muxer import VideoMuxer
+            from video_censor_personal.video_metadata import (
+                extract_original_title,
+                create_censored_title,
+                build_remediation_metadata,
+            )
             import shutil
+            
+            # Extract original title and create censored version
+            original_title = extract_original_title(str(self.input_video_path))
+            censored_title = create_censored_title(original_title, str(self.input_video_path))
+            
+            # Build remediation metadata if we have the required info
+            metadata = {}
+            if self.config_file and self.segment_file:
+                audio_remediation_enabled = (
+                    self.config.get("remediation", {}).get("audio", {}).get("enabled", False)
+                )
+                video_remediation_enabled = (
+                    self.config.get("remediation", {}).get("video", {}).get("enabled", False)
+                )
+                metadata = build_remediation_metadata(
+                    self.config_file,
+                    self.segment_file,
+                    self.processed_timestamp,
+                    audio_remediation_enabled,
+                    video_remediation_enabled,
+                )
+                logger.debug(f"Built remediation metadata: {len(metadata)} tags")
+            else:
+                logger.debug("Skipping remediation metadata (config_file or segment_file not provided)")
             
             # Mux remediated audio with the original video
             # (or with pre-existing output if skip chapters already created it)
@@ -357,7 +401,12 @@ class RemediationManager:
                 video_source = str(self.input_video_path)
                 logger.debug("Muxing remediated audio with original video")
             
-            muxer = VideoMuxer(video_source, self.remediated_audio_path)
+            muxer = VideoMuxer(
+                video_source,
+                self.remediated_audio_path,
+                metadata=metadata,
+                title=censored_title,
+            )
             
             # Always use a temp file to avoid ffmpeg's limitation with moving files it's writing to
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
@@ -369,8 +418,8 @@ class RemediationManager:
             shutil.move(temp_output, self.output_video_path)
             logger.debug(f"Moved temp muxed video to: {self.output_video_path}")
             
-            logger.info(f"Audio muxed into video: {self.output_video_path}")
-            self.debug_output.step(f"Audio muxed into video: {self.output_video_path}")
+            logger.info(f"Audio muxed into video with metadata: {self.output_video_path}")
+            self.debug_output.step(f"Audio muxed into video with metadata: {self.output_video_path}")
         
         except Exception as e:
             logger.error(f"Video muxing failed: {e}", exc_info=True)
