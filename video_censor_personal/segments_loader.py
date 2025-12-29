@@ -94,25 +94,33 @@ def _validate_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not isinstance(segment, dict):
             raise SegmentsLoadError(f"Segment {i} must be an object")
         
-        start_time = segment.get("start_time_seconds")
-        end_time = segment.get("end_time_seconds")
+        # Prioritize time-string fields (easier to edit by humans)
+        start_time = None
+        end_time = None
         
-        if start_time is None:
-            if "start_time" in segment:
-                start_time = _parse_time_string(segment["start_time"], f"segment {i} start_time")
-            else:
-                raise SegmentsLoadError(f"Segment {i} missing start_time or start_time_seconds")
+        if "start_time" in segment:
+            start_time = _parse_time_string(segment["start_time"], f"segment {i} start_time")
+        elif "start_time_seconds" in segment:
+            start_time = segment.get("start_time_seconds")
+        else:
+            raise SegmentsLoadError(f"Segment {i} missing start_time or start_time_seconds")
         
-        if end_time is None:
-            if "end_time" in segment:
-                end_time = _parse_time_string(segment["end_time"], f"segment {i} end_time")
-            else:
-                raise SegmentsLoadError(f"Segment {i} missing end_time or end_time_seconds")
+        if "end_time" in segment:
+            end_time = _parse_time_string(segment["end_time"], f"segment {i} end_time")
+        elif "end_time_seconds" in segment:
+            end_time = segment.get("end_time_seconds")
+        else:
+            raise SegmentsLoadError(f"Segment {i} missing end_time or end_time_seconds")
+        
+        # Calculate duration from start_time and end_time (ignore any duration in input)
+        start_float = float(start_time)
+        end_float = float(end_time)
+        calculated_duration = end_float - start_float
         
         validated_segment = {
-            "start_time": float(start_time),
-            "end_time": float(end_time),
-            "duration_seconds": float(end_time) - float(start_time),
+            "start_time": start_float,
+            "end_time": end_float,
+            "duration_seconds": calculated_duration,
             "labels": segment.get("labels", []),
             "description": segment.get("description", ""),
             "confidence": segment.get("confidence", 0.0),
