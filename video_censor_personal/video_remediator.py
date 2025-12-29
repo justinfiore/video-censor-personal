@@ -10,15 +10,16 @@ logger = logging.getLogger(__name__)
 
 
 class VideoRemediator:
-    """Applies remediation (blank or cut) to detected video segments.
+    """Applies remediation (blank, cut, or none) to detected video segments.
     
     Takes video and detection results, then modifies video by either:
     - Blanking (replacing with solid color screen, keeping audio)
     - Cutting (removing segment entirely from timeline)
+    - Skipping (no remediation applied - mode "none")
     
     Attributes:
         enabled: Whether remediation is active.
-        mode: "blank" or "cut".
+        mode: "blank", "cut", or "none".
         blank_color: Hex color for blank mode (e.g., "#000000").
         category_modes: Per-category mode overrides.
     """
@@ -29,9 +30,9 @@ class VideoRemediator:
         Args:
             config: Configuration dict with:
                 - enabled: bool, whether remediation is active (default: False)
-                - mode: "blank" or "cut" (default: "blank")
+                - mode: "blank", "cut", or "none" (default: "blank")
                 - blank_color: Hex color string (default: "#000000")
-                - category_modes: Dict mapping categories to modes
+                - category_modes: Dict mapping categories to modes ("blank", "cut", or "none")
         
         Raises:
             ValueError: If config is invalid.
@@ -42,7 +43,7 @@ class VideoRemediator:
         self.category_modes = config.get("category_modes", {})
         
         # Validate mode
-        valid_modes = {"blank", "cut"}
+        valid_modes = {"blank", "cut", "none"}
         if self.mode not in valid_modes:
             raise ValueError(f"Invalid remediation mode: {self.mode}. Must be one of {valid_modes}")
         
@@ -383,19 +384,19 @@ class VideoRemediator:
         2. Category-based default: category_modes config per category
         3. Global default: self.mode
         
-        For segments with multiple labels, uses most restrictive mode (cut > blank).
+        For segments with multiple labels, uses most restrictive mode (cut > blank > none).
         
         Args:
             segment: Segment dict with optional video_remediation and labels fields.
         
         Returns:
-            Resolved mode ("blank" or "cut").
+            Resolved mode ("blank", "cut", or "none").
         """
         # Tier 1: Segment-level override
         segment_mode = segment.get("video_remediation")
         if segment_mode:
             # Validate segment mode
-            valid_modes = {"blank", "cut"}
+            valid_modes = {"blank", "cut", "none"}
             if segment_mode not in valid_modes:
                 logger.warning(
                     f"Invalid segment mode '{segment_mode}' at {segment.get('start_time')}, "
@@ -421,7 +422,7 @@ class VideoRemediator:
         """Resolve mode from multiple category labels.
         
         Uses most restrictive mode when multiple labels present.
-        "cut" is more restrictive than "blank".
+        Restrictiveness order: cut > blank > none.
         
         Args:
             labels: List of category labels.
@@ -440,11 +441,13 @@ class VideoRemediator:
         if not modes:
             return None
         
-        # "cut" is more restrictive than "blank"
+        # "cut" is most restrictive, then "blank", then "none"
         if "cut" in modes:
             return "cut"
-        
-        return "blank"
+        elif "blank" in modes:
+            return "blank"
+        else:
+            return "none"
     
     def filter_allowed_segments(
         self,
@@ -478,6 +481,7 @@ class VideoRemediator:
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Group segments by remediation mode.
         
+        Segments with mode "none" are excluded from the groups.
         Useful for combined remediation where different modes may be used.
         
         Args:
@@ -485,15 +489,24 @@ class VideoRemediator:
         
         Returns:
             Dict mapping mode ("blank" or "cut") to list of segments.
+            Segments with mode "none" are excluded.
         """
         groups = {"blank": [], "cut": []}
+        none_count = 0
         
         for segment in segments:
             mode = self.resolve_segment_mode(segment)
-            groups[mode].append(segment)
+            if mode == "none":
+                none_count += 1
+                logger.debug(
+                    f"Skipping segment at {segment.get('start_time')} (mode=none)"
+                )
+            else:
+                groups[mode].append(segment)
         
         logger.debug(
-            f"Grouped segments: {len(groups['blank'])} blank, {len(groups['cut'])} cut"
+            f"Grouped segments: {len(groups['blank'])} blank, {len(groups['cut'])} cut, "
+            f"{none_count} skipped (none)"
         )
         return groups
     

@@ -1,0 +1,123 @@
+# Video Censor Personal - Video Remediation with "none" Mode Example
+# Demonstrates the use of "none" mode in category_modes to skip certain categories
+#
+# This config enables video remediation where:
+# - Some categories are cut (removed entirely)
+# - Some categories are blanked (replaced with solid color)
+# - Some categories are skipped (set to "none") - no remediation applied
+#
+# Usage:
+#   python video_censor_personal.py \
+#     --input video.mp4 \
+#     --config video-censor-remediation-none-example.yaml \
+#     --output results.json \
+#     --output-video censored_video.mp4
+
+version: 1.0
+
+# Detection settings
+detections:
+  nudity:
+    enabled: true
+    sensitivity: 0.7
+    model: "local"
+  
+  profanity:
+    enabled: true
+    sensitivity: 0.8
+    model: "local"
+  
+  violence:
+    enabled: true
+    sensitivity: 0.6
+    model: "local"
+  
+  sexual_themes:
+    enabled: true
+    sensitivity: 0.75
+    model: "local"
+
+# Detector configuration
+detectors:
+  - type: "clip"
+    name: "clip-detector"
+    model_name: "openai/clip-vit-large-patch14-336"
+    
+    confidence_threshold: 0.6
+    categories:
+    - "Nudity"
+    - "Violence"
+    - "Sexual Theme"
+    prompts:
+    - category: "Nudity"
+      text: ["nude person", "naked body", "exposed genitals"]
+    - category: "Violence"
+      text: ["fight", "blood", "injury", "weapon"]
+    - category: "Sexual Theme"
+      text: ["sexual activity", "erotic content", "making out", "deep kissing"]
+  
+  - type: "speech-profanity"
+    name: "speech-detector"
+    enabled: true
+    model: "base"
+    categories:
+      - "Profanity"
+    languages:
+      - "en"
+      - "es"
+    confidence_threshold: 0.8
+
+video:
+  metadata_output:
+    skip_chapters:
+      enabled: false
+
+# Audio processing settings
+audio:
+  detection:
+    enabled: true
+
+# Remediation settings
+remediation:
+  # Audio remediation disabled for this example
+  audio:
+    enabled: false
+  
+  # Video remediation configuration
+  video:
+    enabled: true
+    
+    # Global default mode: "blank" or "cut"
+    # - blank: Replace video with solid color (keeps audio)
+    # - cut: Remove segment entirely from timeline
+    # - none: Skip remediation (no changes applied)
+    mode: "blank"
+    
+    # Blank color (hex format) - only used for blank mode
+    blank_color: "#000000"  # Black
+    
+    # Per-category mode overrides
+    # These take precedence over the global default
+    category_modes:
+      Nudity: "cut"         # Cut nudity segments (remove entirely)
+      Sexual Theme: "cut"   # Cut sexual theme segments
+      Violence: "blank"     # Blank violence (replace with color, keep audio)
+      Profanity: "none"     # Skip profanity (no video remediation)
+
+# Video processing settings
+processing:
+  frame_sampling:
+    strategy: "uniform"
+    sample_rate: 1.0
+  
+  segment_merge:
+    enabled: true
+    merge_threshold: 5.0
+  
+  max_workers: 4
+
+# Output settings
+output:
+  format: "json"
+  include_confidence: true
+  pretty_print: true

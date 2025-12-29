@@ -499,3 +499,183 @@ class TestAudioFileWriting:
         
         with pytest.raises(RuntimeError, match="Failed to write audio"):
             remediator.write_audio(audio, 16000, "/fake/path.wav")
+
+
+class TestAudioRemediationWithMixedCategories:
+    """Test audio remediation with segments containing multiple categories."""
+    
+    def test_remediate_segment_with_profanity_and_violence_only_profanity_enabled(self):
+        """Test that only enabled categories are remediated.
+        
+        Scenario: Segment has both "Profanity" and "Violence" labels.
+        Audio remediation is configured for "Profanity" only.
+        Result: Profanity segment should be remediated, Violence should be skipped.
+        """
+        config = {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Profanity"],  # Only Profanity enabled
+            "bleep_frequency": 1000,
+        }
+        
+        remediator = AudioRemediator(config)
+        
+        # Create audio data
+        audio = np.array([0.1, 0.2, 0.3, 0.4, 0.5] * 100, dtype=np.float32)
+        sample_rate = 16000
+        
+        # Create detection with multiple categories
+        detection = MagicMock()
+        detection.label = "Profanity"  # First label
+        detection.start_time = 0.0
+        detection.end_time = 1.0
+        
+        # Remediate with only this detection
+        remediated = remediator.remediate(audio, sample_rate, [detection])
+        
+        # Verify audio was modified (not silent)
+        # The bleeping should have introduced sine wave data
+        assert remediated is not None
+        assert len(remediated) == len(audio)
+        # At least part of the audio should be different (bleeping applied)
+        assert not np.allclose(remediated, audio)
+    
+    def test_remediate_mixed_categories_skip_violence(self):
+        """Test that segments with Violence label are skipped when not in categories.
+        
+        Scenario: Segment has both "Profanity" and "Violence" labels.
+        Audio remediation is configured for "Profanity" only.
+        Violence detection should be ignored (not in categories set).
+        """
+        config = {
+            "enabled": True,
+            "mode": "silence",
+            "categories": ["Profanity"],  # Violence not in list
+        }
+        
+        remediator = AudioRemediator(config)
+        
+        # Create audio with 2 seconds at 16kHz = 32000 samples
+        audio = np.array([0.1] * 32000, dtype=np.float32)
+        sample_rate = 16000
+        
+        # Create two detections
+        profanity_detection = MagicMock()
+        profanity_detection.label = "Profanity"
+        profanity_detection.start_time = 0.0
+        profanity_detection.end_time = 0.5
+        
+        violence_detection = MagicMock()
+        violence_detection.label = "Violence"
+        violence_detection.start_time = 1.0
+        violence_detection.end_time = 1.5
+        
+        detections = [profanity_detection, violence_detection]
+        
+        remediated = remediator.remediate(audio, sample_rate, detections)
+        
+        # Profanity should be silenced (0.0-0.5 seconds)
+        profanity_start = int(0.0 * sample_rate)
+        profanity_end = int(0.5 * sample_rate)
+        assert np.allclose(remediated[profanity_start:profanity_end], 0.0)
+        
+        # Violence should NOT be silenced (1.0-1.5 seconds) - not in categories
+        violence_start = int(1.0 * sample_rate)
+        violence_end = int(1.5 * sample_rate)
+        assert not np.allclose(remediated[violence_start:violence_end], 0.0)
+        assert np.allclose(remediated[violence_start:violence_end], 0.1)
+    
+    def test_remediate_profanity_violence_with_allow_override(self):
+        """Test allow flag overrides remediation for segments with multiple categories.
+        
+        Scenario: Segment with ["Profanity", "Violence"] is marked allow=true.
+        Result: No remediation should occur despite having enabled categories.
+        """
+        config = {
+            "enabled": True,
+            "mode": "silence",
+            "categories": ["Profanity", "Violence"],
+        }
+        
+        remediator = AudioRemediator(config)
+        
+        audio = np.array([0.5] * 100, dtype=np.float32)
+        sample_rate = 16000
+        
+        # Detection with multiple labels
+        detection = MagicMock()
+        detection.label = "Profanity"
+        detection.start_time = 0.0
+        detection.end_time = 1.0
+        
+        # Segment marked as allowed (should skip remediation)
+        segments = [{
+            "start_time": 0.0,
+            "end_time": 1.0,
+            "allow": True,  # Mark as allowed
+            "labels": ["Profanity", "Violence"]
+        }]
+        
+        remediated = remediator.remediate(audio, sample_rate, [detection], segments=segments)
+        
+        # Audio should be unchanged (allowed segment skipped)
+        assert np.allclose(remediated, audio)
+    
+    def test_remediate_multiple_mixed_detections(self):
+        """Test remediation of multiple segments with mixed categories.
+        
+        Scenario: 
+        - Segment 1: Profanity + Violence (allow=false)
+        - Segment 2: Profanity only (allow=false)
+        Config: Only Profanity enabled for remediation
+        Result: Both segments have Profanity remediated, Violence ignored
+        """
+        config = {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Profanity"],
+            "bleep_frequency": 1000,
+        }
+        
+        remediator = AudioRemediator(config)
+        
+        # Create audio (5 seconds at 16kHz = 80000 samples)
+        audio = np.array([0.2] * 80000, dtype=np.float32)
+        sample_rate = 16000
+        
+        # Segment 1: 0-1s with Profanity + Violence
+        detection1 = MagicMock()
+        detection1.label = "Profanity"
+        detection1.start_time = 0.0
+        detection1.end_time = 1.0
+        
+        # Segment 2: 2-3s with Profanity only
+        detection2 = MagicMock()
+        detection2.label = "Profanity"
+        detection2.start_time = 2.0
+        detection2.end_time = 3.0
+        
+        # Segment 3: 4-5s with Violence only (should be skipped)
+        detection3 = MagicMock()
+        detection3.label = "Violence"
+        detection3.start_time = 4.0
+        detection3.end_time = 5.0
+        
+        detections = [detection1, detection2, detection3]
+        
+        remediated = remediator.remediate(audio, sample_rate, detections)
+        
+        # Segment 1 (0-1s): Should be bleeping (modified)
+        seg1_start = int(0.0 * sample_rate)
+        seg1_end = int(1.0 * sample_rate)
+        assert not np.allclose(remediated[seg1_start:seg1_end], 0.2)  # Modified
+        
+        # Segment 2 (2-3s): Should be bleeping (modified)
+        seg2_start = int(2.0 * sample_rate)
+        seg2_end = int(3.0 * sample_rate)
+        assert not np.allclose(remediated[seg2_start:seg2_end], 0.2)  # Modified
+        
+        # Segment 3 (4-5s): Should NOT be modified (Violence not in categories)
+        seg3_start = int(4.0 * sample_rate)
+        seg3_end = int(5.0 * sample_rate)
+        assert np.allclose(remediated[seg3_start:seg3_end], 0.2)  # Unchanged

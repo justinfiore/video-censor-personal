@@ -648,7 +648,7 @@ remediation:
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `enabled` | boolean | No | `false` | Enable video remediation |
-| `mode` | string | No | `"blank"` | Global default mode: `"blank"` or `"cut"` |
+| `mode` | string | No | `"blank"` | Global default mode: `"blank"`, `"cut"`, or `"none"` |
 | `blank_color` | string | No | `"#000000"` | Hex color for blank mode (e.g., `#FF0000` for red) |
 | `category_modes` | dict | No | `{}` | Per-category mode overrides |
 
@@ -666,6 +666,11 @@ remediation:
 - Segments are extracted and concatenated using ffmpeg
 - All segments are re-encoded for consistency
 
+**None Mode** - Skip remediation (no video changes applied):
+- Useful when you want selective remediation per category
+- No performance impact for skipped categories
+- Allows audio-only remediation with video passthrough
+
 #### Three-Tier Mode Resolution
 
 Video remediation uses a three-tier hierarchy to determine the mode for each segment:
@@ -674,7 +679,7 @@ Video remediation uses a three-tier hierarchy to determine the mode for each seg
 2. **Category-based default** - `category_modes` config per detection category
 3. **Global default** - `mode` config setting (lowest priority)
 
-For segments with multiple labels (e.g., `["Nudity", "Violence"]`), the most restrictive mode wins (`cut` > `blank`).
+For segments with multiple labels (e.g., `["Nudity", "Violence"]`), the most restrictive mode wins: `cut` > `blank` > `none`.
 
 #### Per-Segment Mode Override
 
@@ -701,7 +706,43 @@ Setting `"allow": true` bypasses video remediation entirely for that segment.
 
 #### Example Usage
 
-Configuration (`video-censor-video-remediation.yaml`):
+**Example 1: Selective remediation with "none" mode**
+
+Configuration (`video-censor-selective.yaml`):
+```yaml
+remediation:
+  video:
+    enabled: true
+    mode: "none"              # Default: skip all
+    category_modes:
+      Nudity: "cut"           # Cut only nudity
+      Sexual Theme: "cut"     # Cut sexual content
+      # Violence, Profanity: not remediated
+```
+
+This only removes sensitive content, leaving other detections untouched.
+
+**Example 2: Audio-only remediation (no video changes)**
+
+Configuration (`video-censor-audio-only.yaml`):
+```yaml
+remediation:
+  audio:
+    enabled: true
+    mode: "bleep"
+    categories:
+      - "Profanity"
+  
+  video:
+    enabled: true
+    mode: "none"  # Don't modify video
+```
+
+This bleeps profanity in audio while leaving video unchanged.
+
+**Example 3: Mixed modes by category**
+
+Configuration (`video-censor-mixed.yaml`):
 ```yaml
 remediation:
   video:
@@ -709,15 +750,16 @@ remediation:
     mode: "blank"
     blank_color: "#000000"
     category_modes:
-      Nudity: "cut"      # Always cut nudity
-      Violence: "blank"  # Blank violence (preserves timing)
+      Nudity: "cut"           # Remove nudity entirely
+      Violence: "blank"       # Blank violence (preserves audio)
+      Weapons: "none"         # Don't remediate weapons
 ```
 
 Command line:
 ```bash
 python video_censor_personal.py \
   --input video.mp4 \
-  --config video-censor-video-remediation.yaml \
+  --config video-censor-mixed.yaml \
   --output results.json \
   --output-video censored.mp4
 ```
@@ -899,6 +941,17 @@ remediation:
     categories:
       - "Profanity"
     bleep_frequency: 1000
+  
+  # Video remediation
+  video:
+    enabled: true
+    mode: "blank"
+    blank_color: "#000000"
+    category_modes:
+      Nudity: "cut"        # Cut nudity
+      Sexual Theme: "cut"  # Cut sexual content
+      Violence: "blank"    # Blank violence (keep audio)
+      Profanity: "none"    # Don't remediate profanity video
 
 # Video processing
 processing:

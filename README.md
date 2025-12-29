@@ -17,7 +17,8 @@ The system detects:
 Output and Enhancement Options:
 - **JSON Detection Results** - Detailed analysis with confidence scores and timestamps
 - **Audio Remediation** - Automatically bleep or silence profanity
-- **Video Remediation** - Blank or cut visual content (blank mode preserves timing, cut mode removes segments)
+- **Video Remediation** - Blank, cut, or skip visual content (blank preserves timing, cut removes segments, none skips remediation)
+- **Selective Remediation** - Apply different remediation modes per content category
 - **Skip Chapter Markers** - Add chapter markers to video files (MKV or MP4) for easy navigation to flagged segments in media players (VLC, Plex, Kodi, etc.)
 
 ## System Requirements

@@ -578,7 +578,7 @@ def _validate_remediation_section(config: Dict[str, Any]) -> None:
                 raise ConfigError(
                     "'remediation.video.mode' must be a string"
                 )
-            valid_modes = {"blank", "cut"}
+            valid_modes = {"blank", "cut", "none"}
             if mode not in valid_modes:
                 raise ConfigError(
                     f"'remediation.video.mode' must be one of {valid_modes}, got '{mode}'"
@@ -611,7 +611,7 @@ def _validate_remediation_section(config: Dict[str, Any]) -> None:
                 raise ConfigError(
                     "'remediation.video.category_modes' must be a dictionary"
                 )
-            valid_modes = {"blank", "cut"}
+            valid_modes = {"blank", "cut", "none"}
             for category, mode in category_modes.items():
                 if not isinstance(mode, str):
                     raise ConfigError(
@@ -799,7 +799,7 @@ def get_video_remediation_mode(config: Dict[str, Any]) -> str:
         config: Configuration dictionary.
 
     Returns:
-        Video remediation mode ("blank" or "cut"). Default is "blank".
+        Video remediation mode ("blank", "cut", or "none"). Default is "blank".
     """
     return get_config_value(
         config, "remediation.video.mode", "blank"
@@ -827,7 +827,7 @@ def get_video_remediation_category_modes(config: Dict[str, Any]) -> Dict[str, st
         config: Configuration dictionary.
 
     Returns:
-        Dictionary mapping category names to modes ("blank" or "cut").
+        Dictionary mapping category names to modes ("blank", "cut", or "none").
         Empty dictionary if not configured.
     """
     return get_config_value(
