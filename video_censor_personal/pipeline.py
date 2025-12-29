@@ -1208,7 +1208,7 @@ class RemediationRunner:
             detections: Detection results for remediation.
             segments: Original segments (for allow flag checking).
         """
-        remediation_config = self.config.get("audio", {}).get("remediation", {})
+        remediation_config = self.config.get("remediation", {}).get("audio", {})
         if not remediation_config.get("enabled", False):
             logger.info("Audio remediation is disabled in config")
             if not self.output_video_path:
