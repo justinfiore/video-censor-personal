@@ -216,6 +216,103 @@ class TestLoadSegmentsFromJson:
 
         assert "duration mismatch" in caplog.text.lower()
 
+    def test_load_segments_sorts_by_start_time(self, tmp_path):
+        """Test that segments are sorted by start_time in chronological order."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time": "00:00:30",  # Third segment
+                    "end_time": "00:00:35",
+                    "labels": ["C"],
+                },
+                {
+                    "start_time": "00:00:10",  # First segment
+                    "end_time": "00:00:15",
+                    "labels": ["A"],
+                },
+                {
+                    "start_time": "00:00:20",  # Second segment
+                    "end_time": "00:00:25",
+                    "labels": ["B"],
+                },
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        segments = result["segments"]
+        assert len(segments) == 3
+        # Verify they're sorted
+        assert segments[0]["start_time"] == 10.0
+        assert segments[0]["labels"] == ["A"]
+        assert segments[1]["start_time"] == 20.0
+        assert segments[1]["labels"] == ["B"]
+        assert segments[2]["start_time"] == 30.0
+        assert segments[2]["labels"] == ["C"]
+
+    def test_load_segments_sorts_with_numeric_timestamps(self, tmp_path):
+        """Test sorting with numeric start_time_seconds."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time_seconds": 50.0,
+                    "end_time_seconds": 55.0,
+                    "labels": ["Third"],
+                },
+                {
+                    "start_time_seconds": 10.0,
+                    "end_time_seconds": 15.0,
+                    "labels": ["First"],
+                },
+                {
+                    "start_time_seconds": 30.0,
+                    "end_time_seconds": 35.0,
+                    "labels": ["Second"],
+                },
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        segments = result["segments"]
+        assert segments[0]["start_time"] == 10.0
+        assert segments[1]["start_time"] == 30.0
+        assert segments[2]["start_time"] == 50.0
+
+    def test_load_segments_sorts_with_float_precision(self, tmp_path):
+        """Test sorting with millisecond precision."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time": "00:00:10.500",
+                    "end_time": "00:00:11",
+                    "labels": ["Second"],
+                },
+                {
+                    "start_time": "00:00:10.100",
+                    "end_time": "00:00:10.500",
+                    "labels": ["First"],
+                },
+                {
+                    "start_time": "00:00:10.999",
+                    "end_time": "00:00:11.500",
+                    "labels": ["Third"],
+                },
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        segments = result["segments"]
+        assert segments[0]["start_time"] < segments[1]["start_time"]
+        assert segments[1]["start_time"] < segments[2]["start_time"]
+
 
 class TestSegmentsToDetections:
     """Test converting segments to DetectionResult objects."""
@@ -318,3 +415,34 @@ class TestSegmentsToDetections:
         assert len(detections) == 1
         assert detections[0].label == "Unknown"
         assert detections[0].confidence == 1.0
+
+    def test_detections_preserve_chronological_order(self):
+        """Test that detections maintain chronological order from sorted segments."""
+        segments = [
+            {
+                "start_time": 30.0,
+                "end_time": 35.0,
+                "labels": ["Profanity"],
+                "allow": False,
+            },
+            {
+                "start_time": 10.0,
+                "end_time": 15.0,
+                "labels": ["Violence"],
+                "allow": False,
+            },
+            {
+                "start_time": 20.0,
+                "end_time": 25.0,
+                "labels": ["Nudity"],
+                "allow": False,
+            },
+        ]
+
+        detections = segments_to_detections(segments)
+
+        # Detections should follow the segment order (already sorted)
+        assert len(detections) == 3
+        assert detections[0].start_time == 30.0
+        assert detections[1].start_time == 10.0
+        assert detections[2].start_time == 20.0
