@@ -16,6 +16,58 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 
+def extract_existing_metadata(video_path: str) -> Dict[str, str]:
+    """Extract all existing metadata tags from a video file.
+
+    Reads all metadata tags from the input video so they can be preserved
+    and merged with new remediation metadata in the output.
+
+    Args:
+        video_path: Path to the input video file.
+
+    Returns:
+        Dictionary of all existing metadata tags, or empty dict if none found.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "quiet",
+                "-print_format", "json",
+                "-show_format",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode != 0:
+            logger.debug(f"ffprobe failed extracting metadata for {video_path}")
+            return {}
+
+        import json
+        data = json.loads(result.stdout)
+        tags = data.get("format", {}).get("tags", {})
+
+        if tags:
+            logger.debug(f"Extracted {len(tags)} existing metadata tags from video")
+        else:
+            logger.debug(f"No existing metadata tags found in video")
+
+        return tags
+
+    except subprocess.TimeoutExpired:
+        logger.warning("ffprobe timed out extracting metadata")
+        return {}
+    except FileNotFoundError:
+        logger.warning("ffprobe not available, skipping existing metadata extraction")
+        return {}
+    except Exception as e:
+        logger.warning(f"Error extracting existing metadata: {e}")
+        return {}
+
+
 def extract_original_title(video_path: str) -> Optional[str]:
     """Extract the title metadata from input video.
     
