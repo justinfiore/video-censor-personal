@@ -49,6 +49,8 @@ class AnalysisPipeline:
         output_video_path: Optional[str] = None,
         skip_model_check: bool = False,
         log_level: str = "INFO",
+        config_file: Optional[str] = None,
+        segment_file: Optional[str] = None,
     ) -> None:
         """Initialize the analysis pipeline.
 
@@ -59,6 +61,8 @@ class AnalysisPipeline:
             output_video_path: Optional path for output video with remediated audio.
             skip_model_check: If True, skip model verification (legacy behavior).
             log_level: Logging level (INFO, DEBUG, TRACE).
+            config_file: Optional path to the config file being used (for metadata tracking).
+            segment_file: Optional path to the segment file being used (for metadata tracking).
 
         Raises:
             FileNotFoundError: If video file does not exist.
@@ -77,6 +81,10 @@ class AnalysisPipeline:
         self.detection_pipeline: Optional[DetectionPipeline] = None
         self._model_manager: Optional[ModelManager] = None
         self._models_verified = False
+        
+        # Metadata tracking for remediation
+        self.config_file = config_file
+        self.segment_file = segment_file
 
         # Prepare detector configuration
         detector_configs = detector_list or config.get("detectors")
@@ -514,12 +522,16 @@ class AnalysisPipeline:
             
             # Use unified remediation manager for consistent behavior with remediation-only mode
             from video_censor_personal.remediation import RemediationManager
+            from datetime import datetime
             
             remediation_manager = RemediationManager(
                 str(self.video_path),
                 self.config,
                 output_video_path=self.output_video_path,
                 log_level=self.log_level,
+                config_file=self.config_file,
+                segment_file=self.segment_file,
+                processed_timestamp=datetime.now(),
             )
             
             try:
@@ -602,6 +614,7 @@ class AnalysisRunner:
         output_video_path: Optional[str] = None,
         log_level: str = "INFO",
         allow_all_segments: bool = False,
+        config_file: Optional[str] = None,
     ) -> None:
         """Initialize analysis runner.
 
@@ -612,6 +625,7 @@ class AnalysisRunner:
             output_video_path: Optional path for output video with remediated audio.
             log_level: Logging level (INFO, DEBUG, TRACE).
             allow_all_segments: If True, mark all detected segments with 'allow: true' in output.
+            config_file: Path to config file being used (for metadata tracking).
         """
         self.video_path = video_path
         self.config = config
@@ -619,6 +633,7 @@ class AnalysisRunner:
         self.output_video_path = output_video_path
         self.log_level = log_level
         self.allow_all_segments = allow_all_segments
+        self.config_file = config_file
         self.trace_enabled = log_level == "TRACE"
         self.debug_output = DebugOutput(enabled=self.trace_enabled)
 
@@ -650,6 +665,7 @@ class AnalysisRunner:
             self.config,
             output_video_path=self.output_video_path,
             log_level=self.log_level,
+            config_file=self.config_file,
         ) as pipeline:
             # Run analysis
             detections = pipeline.analyze()
@@ -709,6 +725,8 @@ class RemediationRunner:
         config: Dict[str, Any],
         output_video_path: Optional[str] = None,
         log_level: str = "INFO",
+        config_file: Optional[str] = None,
+        segment_file: Optional[str] = None,
     ) -> None:
         """Initialize remediation runner.
 
@@ -718,12 +736,16 @@ class RemediationRunner:
             config: Configuration dictionary.
             output_video_path: Path for output video with remediated audio.
             log_level: Logging level (INFO, DEBUG, TRACE).
+            config_file: Optional path to config file being used (for metadata).
+            segment_file: Optional path to segment file being used (for metadata).
         """
         self.video_path = video_path
         self.segments_path = segments_path
         self.config = config
         self.output_video_path = output_video_path
         self.log_level = log_level
+        self.config_file = config_file
+        self.segment_file = segment_file
         self.trace_enabled = log_level == "TRACE"
         self.debug_output = DebugOutput(enabled=self.trace_enabled)
 
@@ -799,12 +821,16 @@ class RemediationRunner:
 
         # Use unified remediation manager for both audio and video
         from video_censor_personal.remediation import RemediationManager
+        from datetime import datetime
         
         remediation_manager = RemediationManager(
             self.video_path,
             self.config,
             output_video_path=self.output_video_path,
             log_level=self.log_level,
+            config_file=self.config_file,
+            segment_file=self.segment_file,
+            processed_timestamp=datetime.now(),
         )
         
         try:
@@ -818,6 +844,9 @@ class RemediationRunner:
                 video_duration=video_duration,
                 merged_segments=segments,
             )
+            
+            # Apply final metadata after all remediation is complete
+            remediation_manager._apply_final_metadata()
         finally:
             remediation_manager.cleanup()
 

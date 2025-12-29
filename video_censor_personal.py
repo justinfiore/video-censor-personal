@@ -141,6 +141,8 @@ def main() -> int:
                     config_dict,
                     output_video_path=args.output_video,
                     log_level=args.log_level,
+                    config_file=args.config,
+                    segment_file=input_segments_path,
                 )
                 output_dict = runner.run()
                 
@@ -195,6 +197,7 @@ def main() -> int:
                 output_video_path=args.output_video,
                 log_level=args.log_level,
                 allow_all_segments=args.allow_all_segments,
+                config_file=args.config,
             )
             output_dict = runner.run(args.output)
             

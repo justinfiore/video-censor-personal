@@ -569,6 +569,36 @@ Example: `skip: Nudity, Sexual Theme [89%]`
 
 See `video-censor-skip-chapters.yaml.example` for a complete skip chapters configuration.
 
+### Remediation Metadata Tags
+
+When a video is remediated, the following metadata tags are automatically added to the MP4 container to track the remediation process:
+
+**Metadata Tags:**
+- `title`: Updated with " (Censored)" suffix (e.g., "Family Video (Censored)")
+- `video_censor_personal_config_file`: Configuration file used for remediation (basename only, e.g., `config.yaml`)
+- `video_censor_personal_segment_file`: Segment/detection file used (basename only, e.g., `segments.json`)
+- `video_censor_personal_processed_date`: ISO8601 timestamp with timezone (e.g., `2025-12-29T14:30:45.123-08:00`)
+- `video_censor_personal_audio_remediation_enabled`: Boolean flag (`true` or `false`)
+- `video_censor_personal_video_remediation_enabled`: Boolean flag (`true` or `false`)
+
+**Example - Viewing Metadata:**
+```bash
+# View metadata with ffprobe
+ffprobe -v quiet -print_format json -show_format output.mp4 | jq '.format.tags'
+
+# Output:
+# {
+#   "title": "Family Video (Censored)",
+#   "video_censor_personal_config_file": "config.yaml",
+#   "video_censor_personal_segment_file": "segments.json",
+#   "video_censor_personal_processed_date": "2025-12-29T14:30:45.123-08:00",
+#   "video_censor_personal_audio_remediation_enabled": "true",
+#   "video_censor_personal_video_remediation_enabled": "false"
+# }
+```
+
+These tags provide traceability and auditing information about how the video was processed. They are visible in most media players' metadata viewers and help document the remediation workflow.
+
 ## Configuration
 
 Video Censor Personal uses YAML configuration files to control detection behavior.

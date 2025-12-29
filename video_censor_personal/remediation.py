@@ -7,7 +7,7 @@ This module provides unified remediation (audio and video) logic that can be use
 The key design principle is that both modes follow the same remediation sequence:
 1. Apply audio remediation (using original timestamps)
 2. Apply video remediation (may shift timelines via cuts)
-3. Mux remediated audio back into video
+3. Mux remediated audio back into video (with optional metadata tags)
 
 This ensures consistent behavior regardless of whether segments came from detection or pre-loaded JSON.
 """
@@ -15,6 +15,7 @@ This ensures consistent behavior regardless of whether segments came from detect
 import logging
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -37,6 +38,9 @@ class RemediationManager:
         config: Dict[str, Any],
         output_video_path: Optional[str] = None,
         log_level: str = "INFO",
+        config_file: Optional[str] = None,
+        segment_file: Optional[str] = None,
+        processed_timestamp: Optional[datetime] = None,
     ) -> None:
         """Initialize remediation manager.
         
@@ -46,6 +50,9 @@ class RemediationManager:
             output_video_path: Optional path for final output video. If not specified,
                              no video output will be produced even if remediation is enabled.
             log_level: Logging level (INFO, DEBUG, TRACE).
+            config_file: Optional path to the config file used (for metadata).
+            segment_file: Optional path to the segment file used (for metadata).
+            processed_timestamp: Optional datetime when remediation started (for metadata).
         """
         self.input_video_path = Path(input_video_path)
         if not self.input_video_path.exists():
@@ -55,6 +62,11 @@ class RemediationManager:
         self.output_video_path = output_video_path
         self.log_level = log_level
         self.trace_enabled = log_level == "TRACE"
+        
+        # Metadata tracking for output video
+        self.config_file = config_file
+        self.segment_file = segment_file
+        self.processed_timestamp = processed_timestamp or datetime.now()
         
         # Track intermediate file states
         self.remediated_audio_path: Optional[str] = None
@@ -328,14 +340,18 @@ class RemediationManager:
 
     
     def _mux_remediated_audio(self) -> None:
-        """Mux remediated audio into video.
+        """Mux remediated audio into video (without metadata).
         
         This runs BEFORE video remediation, so it simply muxes the remediated audio
         with the original video, creating the output file that will be used as input
         for video remediation (if enabled).
         
-        When video remediation is not enabled, this output file is the final result.
-        When video remediation is enabled, it will operate on this output file in-place.
+        When video remediation is not enabled, _apply_final_metadata() adds metadata.
+        When video remediation is enabled, _apply_final_metadata() runs after video
+        remediation completes to add metadata to the final output.
+        
+        This separation ensures metadata is only added to the final output file,
+        after ALL remediation (audio and video) is complete.
         """
         if not self.remediated_audio_path or not self.output_video_path:
             logger.debug("No audio muxing needed (no remediated audio or no output path)")
@@ -408,6 +424,126 @@ class RemediationManager:
             formatted.append(formatted_segment)
         
         return formatted
+    
+    def _apply_final_metadata(self) -> None:
+        """Apply metadata to final output video AFTER all remediation is complete.
+        
+        This method:
+        1. Extracts existing metadata from the input video (to preserve chapters, etc.)
+        2. Adds remediation-specific metadata (config, segment file, timestamp, flags)
+        3. Updates title with "(Censored)" suffix
+        4. Writes all metadata to the output video using ffmpeg
+        
+        This runs AFTER both audio and video remediation are done, ensuring
+        metadata is applied to the final output file only.
+        """
+        if not self.output_video_path:
+            logger.debug("No output video path, skipping metadata")
+            return
+        
+        output_path = Path(self.output_video_path)
+        if not output_path.exists():
+            logger.debug(f"Output video doesn't exist: {self.output_video_path}")
+            return
+        
+        logger.info("Applying final metadata to output video")
+        self.debug_output.step("Applying final metadata...")
+        
+        try:
+            from video_censor_personal.video_metadata import (
+                extract_original_title,
+                create_censored_title,
+                build_remediation_metadata,
+                extract_existing_metadata,
+                log_metadata,
+            )
+            import shutil
+            import subprocess
+            
+            # Extract existing metadata from input video (to preserve chapters, subtitles, etc.)
+            existing_metadata = extract_existing_metadata(str(self.input_video_path))
+            logger.debug(f"Extracted {len(existing_metadata)} existing metadata tags from input")
+            
+            # Extract original title and create censored version
+            original_title = extract_original_title(str(self.input_video_path))
+            censored_title = create_censored_title(original_title, str(self.input_video_path))
+            
+            # Build remediation metadata
+            remediation_metadata = {}
+            if self.config_file and self.segment_file:
+                audio_remediation_enabled = (
+                    self.config.get("remediation", {}).get("audio", {}).get("enabled", False)
+                )
+                video_remediation_enabled = (
+                    self.config.get("remediation", {}).get("video", {}).get("enabled", False)
+                )
+                remediation_metadata = build_remediation_metadata(
+                    self.config_file,
+                    self.segment_file,
+                    self.processed_timestamp,
+                    audio_remediation_enabled,
+                    video_remediation_enabled,
+                )
+                logger.debug(f"Built remediation metadata: {len(remediation_metadata)} tags")
+            else:
+                logger.debug("Skipping remediation metadata (config_file or segment_file not provided)")
+            
+            # Merge: start with existing metadata, then override/add remediation metadata
+            # This preserves chapters, subtitles, etc. from input while adding new tags
+            all_metadata = {**existing_metadata, **remediation_metadata}
+            
+            # Always set title to censored version (overrides any existing title)
+            all_metadata["title"] = censored_title
+            
+            logger.debug(f"Total metadata to write: {len(all_metadata)} tags")
+            log_metadata(remediation_metadata, censored_title)
+            
+            # Build ffmpeg command to write metadata
+            # Use -c copy to avoid re-encoding, just update metadata container
+            temp_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+            
+            cmd = [
+                "ffmpeg",
+                "-i", str(self.output_video_path),
+                "-c", "copy",  # Copy all streams without re-encoding
+            ]
+            
+            # Add all metadata tags
+            for key, value in all_metadata.items():
+                cmd.extend(["-metadata", f"{key}={value}"])
+            
+            # Enable metadata in MP4 container
+            cmd.extend(["-movflags", "+use_metadata_tags"])
+            
+            cmd.extend([
+                "-y",  # Overwrite temp file
+                temp_file,
+            ])
+            
+            logger.debug(f"Running metadata update with ffmpeg")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                stdin=subprocess.DEVNULL,  # Prevent ffmpeg from waiting for input
+            )
+            
+            if result.returncode != 0:
+                error_msg = result.stderr if result.stderr else "Unknown error"
+                raise RuntimeError(f"ffmpeg metadata update failed: {error_msg}")
+            
+            # Replace output file with metadata-updated version
+            shutil.move(temp_file, self.output_video_path)
+            logger.debug(f"Replaced output file with metadata-updated version")
+            
+            logger.info(f"Metadata applied to final output: {self.output_video_path}")
+            self.debug_output.step("Metadata successfully applied")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply metadata: {e}", exc_info=True)
+            self.debug_output.info(f"WARNING: Metadata application failed: {e}")
+            # Don't raise - continue without metadata rather than failing the whole remediation
     
     def cleanup(self) -> None:
         """Clean up temporary files created during remediation."""
