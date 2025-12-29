@@ -6,6 +6,7 @@ and result aggregation.
 
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -883,7 +884,7 @@ class AnalysisPipeline:
                 # Write remediated audio at original sample rate
                 output_audio_path = remediation_config.get(
                     "output_path",
-                    "/tmp/remediated_audio.wav"
+                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
                 )
                 remediator.write_audio(
                     remediated_audio,
@@ -1190,12 +1191,111 @@ class RemediationRunner:
         detections = segments_to_detections(segments)
 
         self._apply_remediation(detections, segments)
+        self._apply_video_remediation(segments)
 
         return {
             "segments": segments,
             "metadata": metadata,
             "_raw_merged_segments": segments,
         }
+
+    def _apply_video_remediation(
+        self,
+        segments: List[Dict[str, Any]],
+    ) -> None:
+        """Apply video remediation if enabled and output video path specified.
+
+        Args:
+            segments: List of segment dictionaries to use for video remediation.
+        """
+        # Check if video remediation is enabled
+        video_config = self.config.get("remediation", {}).get("video", {})
+        if not video_config.get("enabled", False):
+            logger.debug("Video remediation disabled")
+            return
+
+        if not self.output_video_path:
+            logger.debug("No output video path specified; skipping video remediation")
+            return
+
+        try:
+            from video_censor_personal.video_remediator import VideoRemediator
+            from video_censor_personal.video_extraction import VideoExtractor
+
+            # Open extractor to get video metadata
+            extractor = VideoExtractor(str(self.video_path))
+            try:
+                video_width = extractor.get_video_width()
+                video_height = extractor.get_video_height()
+                video_duration = extractor.get_duration_seconds()
+            finally:
+                extractor.close()
+
+            self.debug_output.subsection("Video Remediation")
+            self.debug_output.step("Applying video remediation...")
+            self.debug_output.detail("Mode", video_config.get("mode", "blank"))
+            self.debug_output.detail("Output video", self.output_video_path)
+            self.debug_output.detail("Segments", len(segments))
+
+            # Format segments for remediation
+            remediation_segments = self._format_segments_for_remediation(segments)
+
+            if not remediation_segments:
+                logger.info("No segments to remediate; copying input video to output")
+                import shutil
+                shutil.copy2(str(self.video_path), self.output_video_path)
+                self.debug_output.step("No segments to remediate; video copied")
+                return
+
+            # Initialize VideoRemediator and apply
+            remediator = VideoRemediator(video_config)
+            remediator.apply(
+                str(self.video_path),
+                self.output_video_path,
+                remediation_segments,
+                video_duration,
+                video_width,
+                video_height,
+            )
+
+            logger.info(f"Video remediation saved to: {self.output_video_path}")
+            self.debug_output.step("Video remediation complete")
+
+        except Exception as e:
+            logger.error(f"Video remediation failed: {e}")
+            raise
+
+    def _format_segments_for_remediation(
+        self,
+        merged_segments: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Format merged segments for video remediator.
+
+        Args:
+            merged_segments: List of merged segment dicts with float times.
+
+        Returns:
+            List of segments with start_time/end_time as floats.
+        """
+        formatted = []
+        for segment in merged_segments:
+            formatted_segment = {
+                "start_time": segment["start_time"],
+                "end_time": segment["end_time"],
+                "labels": segment.get("labels", []),
+            }
+
+            # Copy over other fields if present
+            if "confidence" in segment:
+                formatted_segment["confidence"] = segment["confidence"]
+            if "allow" in segment:
+                formatted_segment["allow"] = segment["allow"]
+            if "detections" in segment:
+                formatted_segment["detections"] = segment["detections"]
+
+            formatted.append(formatted_segment)
+
+        return formatted
 
     def _apply_remediation(
         self,
@@ -1269,7 +1369,7 @@ class RemediationRunner:
 
                 output_audio_path = remediation_config.get(
                     "output_path",
-                    "/tmp/remediated_audio.wav"
+                    tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
                 )
                 remediator.write_audio(
                     remediated_audio,

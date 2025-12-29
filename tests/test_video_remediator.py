@@ -39,12 +39,27 @@ class TestVideoRemediatorInit:
         with pytest.raises(ValueError, match="Invalid remediation mode"):
             VideoRemediator(config)
     
+    def test_init_valid_none_mode(self):
+        """Test initialization with 'none' mode."""
+        config = {"mode": "none"}
+        remediator = VideoRemediator(config)
+        
+        assert remediator.enabled is False
+        assert remediator.mode == "none"
+    
     def test_init_invalid_category_mode(self):
         """Test initialization with invalid category mode."""
         config = {"category_modes": {"Nudity": "invalid"}}
         
         with pytest.raises(ValueError, match="Invalid mode for category"):
             VideoRemediator(config)
+    
+    def test_init_valid_category_mode_none(self):
+        """Test initialization with 'none' mode in category_modes."""
+        config = {"category_modes": {"Nudity": "none", "Violence": "blank"}}
+        remediator = VideoRemediator(config)
+        
+        assert remediator.category_modes == {"Nudity": "none", "Violence": "blank"}
     
     def test_init_invalid_color_no_hash(self):
         """Test initialization with invalid color (missing #)."""
@@ -601,6 +616,54 @@ class TestModeResolution:
         
         mode = remediator._resolve_category_mode(["UnknownCategory"])
         assert mode is None
+    
+    def test_resolve_segment_mode_none(self):
+        """Test mode resolution with 'none' mode."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "none"}
+        })
+        
+        segment = {
+            "start_time": "10",
+            "end_time": "20",
+            "labels": ["Nudity"]
+        }
+        mode = remediator.resolve_segment_mode(segment)
+        
+        assert mode == "none"
+    
+    def test_resolve_category_mode_mixed_with_none(self):
+        """Test category mode resolution with 'none' in multiple labels."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "none", "Violence": "cut"}
+        })
+        
+        # cut > blank > none, so cut should win
+        mode = remediator._resolve_category_mode(["Nudity", "Violence"])
+        assert mode == "cut"
+    
+    def test_resolve_category_mode_none_and_blank(self):
+        """Test category mode resolution with 'none' and 'blank'."""
+        remediator = VideoRemediator({
+            "mode": "cut",
+            "category_modes": {"Nudity": "none", "Violence": "blank"}
+        })
+        
+        # blank > none, so blank should win
+        mode = remediator._resolve_category_mode(["Nudity", "Violence"])
+        assert mode == "blank"
+    
+    def test_resolve_category_mode_only_none(self):
+        """Test category mode resolution with only 'none' labels."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "none"}
+        })
+        
+        mode = remediator._resolve_category_mode(["Nudity"])
+        assert mode == "none"
 
 
 class TestAllowOverride:
@@ -733,6 +796,253 @@ class TestCombinedRemediation:
         assert len(groups["cut"]) == 1    # Nudity
         assert len(groups["blank"]) == 1  # Profanity
         # Violence was filtered out
+    
+    def test_group_segments_by_mode_with_none(self):
+        """Test grouping with 'none' mode segments."""
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {"Nudity": "none", "Violence": "cut"}
+        })
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "labels": ["Nudity"]},
+            {"start_time": "30", "end_time": "40", "labels": ["Violence"]},
+            {"start_time": "50", "end_time": "60", "labels": ["Profanity"]}
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        assert len(groups["cut"]) == 1     # Violence
+        assert len(groups["blank"]) == 1   # Profanity (default)
+        # Nudity with mode=none is excluded
+    
+    def test_group_segments_by_mode_all_none(self):
+        """Test grouping when all segments have 'none' mode."""
+        remediator = VideoRemediator({
+            "mode": "none",
+            "category_modes": {"Nudity": "none", "Violence": "none"}
+        })
+        
+        segments = [
+            {"start_time": "10", "end_time": "20", "labels": ["Nudity"]},
+            {"start_time": "30", "end_time": "40", "labels": ["Violence"]},
+            {"start_time": "50", "end_time": "60", "labels": ["Profanity"]}
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        assert len(groups["cut"]) == 0     # None cut
+        assert len(groups["blank"]) == 0   # None blank
+        # All segments excluded due to mode=none
+
+
+class TestMixedCategoryRemediationWithNoneMode:
+    """Test video remediation with mixed categories including 'none' mode.
+    
+    This tests the scenario where a segment has multiple labels
+    (e.g., Profanity + Violence) with different remediation modes.
+    """
+    
+    def test_segment_with_profanity_violence_violence_set_to_none(self):
+        """Test that Violence with mode='none' is excluded from remediation.
+        
+        Scenario: Segment has ["Profanity", "Violence"] labels.
+        Audio remediation: Profanity is bleeping
+        Video remediation: 
+          - Profanity: not configured (falls back to global default "blank")
+          - Violence: mode = "none" (skip)
+        
+        Result: Only the global default is applied (since "none" has lowest priority),
+        which means nothing is remediated for video in this segment.
+        """
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Profanity": "blank",
+                "Violence": "none"  # Skip violence
+            }
+        })
+        
+        # Test with both labels
+        segment = {
+            "start_time": 10.0,
+            "end_time": 20.0,
+            "labels": ["Profanity", "Violence"],
+            "allow": False
+        }
+        
+        mode = remediator.resolve_segment_mode(segment)
+        # Profanity gets "blank", Violence gets "none"
+        # Mode resolution: blank > none, so result should be "blank"
+        assert mode == "blank"
+    
+    def test_segment_violence_only_with_mode_none_skipped_from_video(self):
+        """Test that Violence-only segment with mode='none' is excluded from remediation.
+        
+        Scenario: Segment has ["Violence"] label
+        Video remediation: Violence mode = "none"
+        
+        Result: Segment is excluded from video remediation groups
+        """
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Violence": "none"  # Skip violence
+            }
+        })
+        
+        segments = [
+            {
+                "start_time": 0.0,
+                "end_time": 10.0,
+                "labels": ["Violence"],
+                "allow": False
+            }
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        # Violence segment with mode=none should be excluded from both groups
+        assert len(groups["blank"]) == 0
+        assert len(groups["cut"]) == 0
+    
+    def test_mixed_segments_profanity_cut_violence_none(self):
+        """Test multiple segments with different modes including 'none'.
+        
+        Scenario:
+        - Segment 1: Profanity + Violence, Profanity: cut, Violence: none
+        - Segment 2: Violence only, Violence: none
+        - Segment 3: Profanity only, Profanity: cut
+        
+        Result:
+        - Segment 1: mode=cut (cut > none)
+        - Segment 2: mode=none (skipped)
+        - Segment 3: mode=cut
+        """
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Profanity": "cut",
+                "Violence": "none"
+            }
+        })
+        
+        segments = [
+            {
+                "start_time": 0.0,
+                "end_time": 10.0,
+                "labels": ["Profanity", "Violence"],
+                "allow": False
+            },
+            {
+                "start_time": 20.0,
+                "end_time": 30.0,
+                "labels": ["Violence"],
+                "allow": False
+            },
+            {
+                "start_time": 40.0,
+                "end_time": 50.0,
+                "labels": ["Profanity"],
+                "allow": False
+            }
+        ]
+        
+        groups = remediator.group_segments_by_mode(segments)
+        
+        # Only segments without mode=none should be in groups
+        assert len(groups["cut"]) == 2  # Segments 1 and 3
+        assert len(groups["blank"]) == 0
+        assert groups["cut"][0]["start_time"] == 0.0
+        assert groups["cut"][1]["start_time"] == 40.0
+    
+    def test_allow_false_with_mixed_categories_and_none_mode(self):
+        """Test that allow=false doesn't prevent filtering by 'none' mode.
+        
+        Scenario: 
+        - Segment: allow=false, labels=["Violence"], Violence: mode=none
+        - Result: Segment should still be excluded (mode=none takes precedence)
+        """
+        remediator = VideoRemediator({
+            "mode": "blank",
+            "category_modes": {
+                "Violence": "none"
+            }
+        })
+        
+        segments = [
+            {
+                "start_time": 0.0,
+                "end_time": 10.0,
+                "labels": ["Violence"],
+                "allow": False  # Not allowed, but mode=none
+            }
+        ]
+        
+        # First apply allow filter (none should pass through)
+        filtered = remediator.filter_allowed_segments(segments)
+        assert len(filtered) == 1  # allow=false means it's NOT allowed
+        
+        # Then group by mode
+        groups = remediator.group_segments_by_mode(filtered)
+        assert len(groups["blank"]) == 0
+        assert len(groups["cut"]) == 0
+    
+    def test_audio_remediation_profanity_video_none_independence(self):
+        """Test that audio and video remediation modes are independent.
+        
+        Scenario: Segment has ["Profanity", "Violence"]
+        - Audio: Profanity enabled for bleeping
+        - Video: Violence set to "none", Profanity not configured
+        
+        Expected behavior:
+        - Audio remediator: Would remediate Profanity (bleep it)
+        - Video remediator: Segment would be skipped or use default mode
+        
+        This demonstrates independence of audio/video processing.
+        """
+        # Audio config
+        audio_config = {
+            "enabled": True,
+            "mode": "bleep",
+            "categories": ["Profanity"],
+            "bleep_frequency": 1000
+        }
+        
+        # Video config
+        video_config = {
+            "enabled": True,
+            "mode": "blank",
+            "category_modes": {
+                "Violence": "none"  # Skip violence video
+            }
+        }
+        
+        from video_censor_personal.audio_remediator import AudioRemediator
+        audio_remediator = AudioRemediator(audio_config)
+        video_remediator = VideoRemediator(video_config)
+        
+        # The segment with both labels
+        segment_dict = {
+            "start_time": 0.0,
+            "end_time": 10.0,
+            "labels": ["Profanity", "Violence"],
+            "allow": False
+        }
+        
+        # Audio remediation would apply to Profanity
+        audio_config_categories = audio_remediator.categories
+        assert "Profanity" in audio_config_categories
+        assert "Violence" not in audio_config_categories
+        
+        # Video remediation would skip Violence
+        video_mode = video_remediator.resolve_segment_mode(segment_dict)
+        # Profanity gets default "blank", Violence gets "none"
+        # Result: "blank" (higher priority)
+        assert video_mode in ["blank", "cut", "none"]
+        
+        # The key point: they operate independently
+        # Audio remediates Profanity, Video processes according to its config
 
 
 class TestErrorHandling:

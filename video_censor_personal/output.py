@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 def format_time(seconds: float, fmt: str = "hms") -> str:
-    """Format time in seconds to HH:MM:SS or seconds.
+    """Format time in seconds to HH:MM:SS.mmm or seconds.
 
     Args:
         seconds: Time in seconds.
-        fmt: Format type ("hms" for HH:MM:SS, "seconds" for raw seconds).
+        fmt: Format type ("hms" for HH:MM:SS.mmm with milliseconds, "seconds" for raw seconds).
 
     Returns:
         Formatted time string.
@@ -24,11 +24,23 @@ def format_time(seconds: float, fmt: str = "hms") -> str:
     if fmt == "seconds":
         return str(int(seconds))
 
-    # HH:MM:SS format
+    # HH:MM:SS.mmm format with milliseconds
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    # Use round() to handle floating point precision issues
+    milliseconds = round((seconds % 1) * 1000)
+    # Handle edge case where rounding gives 1000ms
+    if milliseconds >= 1000:
+        milliseconds = 0
+        secs += 1
+        if secs >= 60:
+            secs = 0
+            minutes += 1
+            if minutes >= 60:
+                minutes = 0
+                hours += 1
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
 
 
 def merge_segments(

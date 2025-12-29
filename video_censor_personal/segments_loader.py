@@ -135,29 +135,63 @@ def _validate_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _parse_time_string(time_str: str, field_name: str) -> float:
-    """Parse HH:MM:SS time string to seconds.
+    """Parse HH:MM:SS or HH:MM:SS.mmm time string to seconds.
+
+    Accepts both formats with and without milliseconds:
+    - HH:MM:SS.mmm (with milliseconds, e.g., "00:01:23.456")
+    - HH:MM:SS (without milliseconds, e.g., "00:01:23")
+    - MM:SS (minutes and seconds)
 
     Args:
-        time_str: Time string in HH:MM:SS format.
+        time_str: Time string in HH:MM:SS[.mmm] or MM:SS format.
         field_name: Name of field for error messages.
 
     Returns:
-        Time in seconds.
+        Time in seconds (float).
 
     Raises:
         SegmentsLoadError: If time string is invalid.
     """
     try:
         parts = time_str.split(":")
+        milliseconds = 0
+        
         if len(parts) == 3:
-            hours, minutes, seconds = parts
-            return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+            # HH:MM:SS or HH:MM:SS.mmm format
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds_str = parts[2]
+            
+            # Check if seconds part contains milliseconds
+            if "." in seconds_str:
+                sec_parts = seconds_str.split(".")
+                seconds = int(sec_parts[0])
+                # Parse milliseconds (pad or truncate to 3 digits)
+                ms_str = sec_parts[1].ljust(3, "0")[:3]
+                milliseconds = int(ms_str)
+            else:
+                seconds = int(seconds_str)
+            
+            return hours * 3600 + minutes * 60 + seconds + (milliseconds / 1000.0)
         elif len(parts) == 2:
-            minutes, seconds = parts
-            return int(minutes) * 60 + int(seconds)
+            # MM:SS format
+            minutes = int(parts[0])
+            seconds_str = parts[1]
+            
+            # Check if seconds part contains milliseconds
+            if "." in seconds_str:
+                sec_parts = seconds_str.split(".")
+                seconds = int(sec_parts[0])
+                # Parse milliseconds (pad or truncate to 3 digits)
+                ms_str = sec_parts[1].ljust(3, "0")[:3]
+                milliseconds = int(ms_str)
+            else:
+                seconds = int(seconds_str)
+            
+            return minutes * 60 + seconds + (milliseconds / 1000.0)
         else:
             raise SegmentsLoadError(f"Invalid time format in {field_name}: {time_str}")
-    except ValueError:
+    except ValueError as e:
         raise SegmentsLoadError(f"Invalid time format in {field_name}: {time_str}")
 
 

@@ -21,16 +21,38 @@ class TestFormatTime:
     """Test time formatting utility."""
 
     def test_format_time_hms_basic(self):
-        """Format seconds to HH:MM:SS."""
-        assert format_time(3661.0, "hms") == "01:01:01"
+        """Format seconds to HH:MM:SS.mmm with milliseconds."""
+        assert format_time(3661.0, "hms") == "01:01:01.000"
+
+    def test_format_time_hms_with_milliseconds(self):
+        """Format seconds with milliseconds."""
+        assert format_time(3661.456, "hms") == "01:01:01.456"
 
     def test_format_time_hms_zero(self):
         """Format 0 seconds."""
-        assert format_time(0.0, "hms") == "00:00:00"
+        assert format_time(0.0, "hms") == "00:00:00.000"
+
+    def test_format_time_hms_zero_milliseconds(self):
+        """Format with zero milliseconds."""
+        assert format_time(1.0, "hms") == "00:00:01.000"
+
+    def test_format_time_hms_non_zero_milliseconds(self):
+        """Format with non-zero milliseconds."""
+        assert format_time(1.123, "hms") == "00:00:01.123"
+
+    def test_format_time_hms_small_milliseconds(self):
+        """Format with small millisecond values."""
+        assert format_time(1.001, "hms") == "00:00:01.001"
+        assert format_time(1.010, "hms") == "00:00:01.010"
+        assert format_time(1.100, "hms") == "00:00:01.100"
 
     def test_format_time_hms_large(self):
         """Format large time value."""
-        assert format_time(36000.0, "hms") == "10:00:00"
+        assert format_time(36000.0, "hms") == "10:00:00.000"
+
+    def test_format_time_hms_large_with_milliseconds(self):
+        """Format large time with milliseconds."""
+        assert format_time(36000.789, "hms") == "10:00:00.789"
 
     def test_format_time_seconds_basic(self):
         """Format to seconds string."""
@@ -41,8 +63,12 @@ class TestFormatTime:
         assert format_time(0.0, "seconds") == "0"
 
     def test_format_time_default_hms(self):
-        """Default format is HH:MM:SS."""
-        assert format_time(3661.0) == "01:01:01"
+        """Default format is HH:MM:SS.mmm with milliseconds."""
+        assert format_time(3661.0) == "01:01:01.000"
+
+    def test_format_time_default_hms_with_milliseconds(self):
+        """Default format includes milliseconds."""
+        assert format_time(3661.456) == "01:01:01.456"
 
 
 class TestDetectionResultCreation:
@@ -371,12 +397,12 @@ class TestGenerateJsonOutput:
         )
         metadata = output["metadata"]
         assert metadata["file"] == "test.mp4"
-        assert metadata["duration"] == "01:01:01"
+        assert metadata["duration"] == "01:01:01.000"
         assert metadata["config"] == "config.yaml"
         assert "processed_at" in metadata
 
     def test_generate_output_segment_time_formats(self):
-        """Segments should include both HH:MM:SS and seconds."""
+        """Segments should include both HH:MM:SS.mmm and seconds."""
         segment = {
             "start_time": 10.0,
             "end_time": 15.0,
@@ -390,10 +416,30 @@ class TestGenerateJsonOutput:
         config = {"output": {}}
         output = generate_json_output([segment], "test.mp4", 100.0, "config.yaml", config)
         seg = output["segments"][0]
-        assert seg["start_time"] == "00:00:10"
+        assert seg["start_time"] == "00:00:10.000"
         assert seg["start_time_seconds"] == 10.0
-        assert seg["end_time"] == "00:00:15"
+        assert seg["end_time"] == "00:00:15.000"
         assert seg["end_time_seconds"] == 15.0
+
+    def test_generate_output_segment_time_formats_with_milliseconds(self):
+        """Segments should include milliseconds in HH:MM:SS.mmm format."""
+        segment = {
+            "start_time": 10.456,
+            "end_time": 15.789,
+            "duration_seconds": 5.333,
+            "labels": ["Test"],
+            "description": "Test",
+            "confidence": 0.9,
+            "detections": [],
+            "frame_data": None,
+        }
+        config = {"output": {}}
+        output = generate_json_output([segment], "test.mp4", 100.0, "config.yaml", config)
+        seg = output["segments"][0]
+        assert seg["start_time"] == "00:00:10.456"
+        assert seg["start_time_seconds"] == 10.456
+        assert seg["end_time"] == "00:00:15.789"
+        assert seg["end_time_seconds"] == 15.789
 
     def test_generate_output_exclude_confidence(self):
         """Confidence should be excluded when configured."""
