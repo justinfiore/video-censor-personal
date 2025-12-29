@@ -1220,7 +1220,7 @@ class RemediationRunner:
 
         try:
             from video_censor_personal.video_remediator import VideoRemediator
-            from video_censor_personal.video_extractor import VideoExtractor
+            from video_censor_personal.video_extraction import VideoExtractor
 
             # Open extractor to get video metadata
             extractor = VideoExtractor(str(self.video_path))
