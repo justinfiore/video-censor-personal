@@ -167,9 +167,10 @@ class SimpleAudioPlayer(AudioPlayer):
                 logger.warning("No audio data loaded")
                 return
             
-            # Calculate frame position
+            # Calculate frame position (account for 1D vs 2D arrays)
+            total_samples = len(self._audio_frames) if self._audio_frames.ndim == 1 else self._audio_frames.shape[0]
             frame_position = int(time_seconds * self._sample_rate)
-            frame_position = max(0, min(frame_position, len(self._audio_frames) - 1))
+            frame_position = max(0, min(frame_position, total_samples - 1))
             
             logger.info(f"Seeking to {time_seconds:.2f}s (frame {frame_position})")
             self._current_frame = frame_position
@@ -204,7 +205,9 @@ class SimpleAudioPlayer(AudioPlayer):
             if self._audio_frames is None or self._sample_rate == 0:
                 return 0.0
             
-            return len(self._audio_frames) / self._sample_rate
+            # Handle both 1D and 2D arrays
+            total_samples = len(self._audio_frames) if self._audio_frames.ndim == 1 else self._audio_frames.shape[0]
+            return total_samples / self._sample_rate
     
     def is_playing(self) -> bool:
         """Check if audio is currently playing."""
@@ -250,9 +253,13 @@ class SimpleAudioPlayer(AudioPlayer):
                             self._sample_rate
                         )
                         
-                        # Update current frame based on duration of playback
-                        duration = len(frames_to_play) / (self._sample_rate * self._channels)
-                        self._current_frame += len(frames_to_play)
+                        # Update current frame based on number of samples played
+                        # (frames = samples per channel, not per sample rate)
+                        if self._channels > 1:
+                            samples_played = len(frames_to_play) // self._channels
+                        else:
+                            samples_played = len(frames_to_play)
+                        self._current_frame += samples_played
                         
                         # Wait for playback to complete or pause signal
                         self._play_obj.wait_done()

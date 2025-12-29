@@ -4,6 +4,7 @@ from typing import Optional, Callable, List
 import logging
 import traceback
 import sys
+import queue
 from video_censor_personal.ui.video_player import VideoPlayer
 from video_censor_personal.ui.segment_manager import Segment
 
@@ -382,7 +383,16 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         """Start periodic update timer."""
         try:
             self._update_timecode()
-            self._update_timer_id = self.after(100, self._start_update_timer)
+            
+            # Check for pending canvas updates (non-blocking queue poll)
+            if hasattr(self.video_player, '_canvas_update_queue'):
+                try:
+                    self.video_player._canvas_update_queue.get_nowait()
+                    self.video_player._update_canvas_on_main_thread()
+                except:
+                    pass  # Queue empty, no update pending
+            
+            self._update_timer_id = self.after(50, self._start_update_timer)
         except Exception as e:
             logger.error(f"Error in _start_update_timer: {str(e)}")
             logger.error(traceback.format_exc())

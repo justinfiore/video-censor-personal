@@ -58,6 +58,7 @@ class PyAVVideoPlayer(VideoPlayer):
         # Frame queue for decoded frames (thread-safe)
         self._frame_queue: queue.Queue = queue.Queue(maxsize=30)
         self._audio_queue: queue.Queue = queue.Queue(maxsize=30)
+        self._canvas_update_queue: queue.Queue = queue.Queue(maxsize=1)
         
         # Synchronization
         self._frame_lock = threading.RLock()
@@ -66,6 +67,7 @@ class PyAVVideoPlayer(VideoPlayer):
         self._sync_offset = 0.0  # Offset between audio and video
         self._frame_count = 0
         self._dropped_frames = 0
+        self._canvas_update_scheduled = False
         
         logger.info("PyAVVideoPlayer initialized")
     
@@ -119,13 +121,21 @@ class PyAVVideoPlayer(VideoPlayer):
             
             logger.info(f"Video loaded: duration={self._duration:.2f}s")
             
-            # Render first frame to canvas (on next tick to ensure canvas is realized)
-            if self._video_stream is not None:
+            # Decode audio in background (non-blocking)
+            if self._audio_stream is not None:
+                try:
+                    logger.info("Scheduling audio decoding")
+                    audio_thread = threading.Thread(target=self._initialize_audio_player, daemon=True)
+                    audio_thread.start()
+                except Exception as e:
+                    logger.warning(f"Failed to schedule audio decoding: {e}")
+            
+            # Render first frame to canvas in background thread
+            if self._video_stream is not None and self._canvas is not None:
                 try:
                     logger.info("Scheduling first frame render")
-                    # Schedule for next iteration to ensure canvas has dimensions
-                    if self._canvas is not None:
-                        self._canvas.after(10, self._render_first_frame)
+                    first_frame_thread = threading.Thread(target=self._render_first_frame_bg, daemon=True)
+                    first_frame_thread.start()
                 except Exception as e:
                     logger.warning(f"Failed to schedule first frame: {e}")
             
@@ -152,25 +162,10 @@ class PyAVVideoPlayer(VideoPlayer):
             self._pause_event.clear()
             self._stop_event.clear()
             
-            # Initialize audio player if needed
-            if self._audio_stream is not None and self._audio_player is None:
-                try:
-                    self._initialize_audio_player()
-                except Exception as e:
-                    logger.warning(f"Failed to initialize audio player: {e}")
-                    self._audio_player = None
-            
-            # Start decode thread
+            # Start decode thread (will initialize audio in background)
             if self._decode_thread is None or not self._decode_thread.is_alive():
                 self._decode_thread = threading.Thread(target=self._decode_thread_main, daemon=True)
                 self._decode_thread.start()
-            
-            # Start audio playback if audio stream exists
-            if self._audio_stream is not None and self._audio_player is not None:
-                try:
-                    self._audio_player.play()
-                except Exception as e:
-                    logger.error(f"Error starting audio playback: {e}")
     
     def pause(self) -> None:
         """Pause playback."""
@@ -278,6 +273,13 @@ class PyAVVideoPlayer(VideoPlayer):
     def _decode_thread_main(self) -> None:
         """Main decoding thread."""
         try:
+            # Start audio playback if initialized
+            if self._audio_stream is not None and self._audio_player is not None:
+                try:
+                    self._audio_player.play()
+                except Exception as e:
+                    logger.warning(f"Failed to start audio player: {e}")
+            
             while not self._stop_event.is_set():
                 # Handle pause
                 if self._pause_event.is_set():
@@ -302,14 +304,21 @@ class PyAVVideoPlayer(VideoPlayer):
             logger.error(f"Decode thread error: {e}")
             self._is_playing = False
     
-    def _render_first_frame(self) -> None:
-        """Decode and render the first frame of the video."""
+    def _render_first_frame_bg(self) -> None:
+        """Decode and render the first frame of the video (background thread)."""
         if self._video_stream is None or self._canvas is None:
             logger.debug(f"Cannot render first frame: video_stream={self._video_stream is not None}, canvas={self._canvas is not None}")
             return
         
         try:
             logger.debug("Rendering first frame...")
+            # Wait for canvas to be realized
+            start_time = time.time()
+            while time.time() - start_time < 5.0:
+                if self._canvas.winfo_width() > 0 and self._canvas.winfo_height() > 0:
+                    break
+                time.sleep(0.05)
+            
             # Seek to beginning
             self._container.seek(0)
             
@@ -352,13 +361,16 @@ class PyAVVideoPlayer(VideoPlayer):
             logger.error(f"Seek failed: {e}")
     
     def _decode_frames(self) -> None:
-        """Decode frames from video stream."""
+        """Decode frames from video stream (yielding to other threads)."""
         if self._video_stream is None:
             logger.warning("No video stream")
             self._is_playing = False
             return
         
-        # Decode a few frames
+        # Decode just a few frames at a time and yield control
+        frames_decoded = 0
+        max_frames_per_batch = 3
+        
         try:
             for packet in self._container.demux(self._video_stream):
                 if self._stop_event.is_set():
@@ -380,6 +392,7 @@ class PyAVVideoPlayer(VideoPlayer):
                         try:
                             self._frame_queue.put(frame_data, block=False)
                             self._frame_count += 1
+                            frames_decoded += 1
                         except queue.Full:
                             self._dropped_frames += 1
                             if self._dropped_frames % 10 == 0:
@@ -389,6 +402,11 @@ class PyAVVideoPlayer(VideoPlayer):
                         if self._render_thread is None or not self._render_thread.is_alive():
                             self._render_thread = threading.Thread(target=self._render_thread_main, daemon=True)
                             self._render_thread.start()
+                        
+                        # Yield control every few frames to prevent thread starvation
+                        if frames_decoded >= max_frames_per_batch:
+                            time.sleep(0.001)  # Tiny sleep to yield to other threads
+                            frames_decoded = 0
                 
                 except (ValueError, RuntimeError) as e:
                     logger.warning(f"Error decoding packet: {e}")
@@ -434,6 +452,26 @@ class PyAVVideoPlayer(VideoPlayer):
         
         except Exception as e:
             logger.error(f"Render thread error: {e}")
+    
+    def _update_canvas_on_main_thread(self) -> None:
+        """Update canvas with current frame (runs on main thread via after)."""
+        if self._canvas is None or self._canvas_photo_image is None:
+            return
+        
+        try:
+            canvas_width = self._canvas.winfo_width()
+            canvas_height = self._canvas.winfo_height()
+            
+            if canvas_width > 0 and canvas_height > 0:
+                self._canvas.delete("all")
+                self._canvas.create_image(
+                    canvas_width // 2,
+                    canvas_height // 2,
+                    image=self._canvas_photo_image
+                )
+                logger.debug(f"Frame rendered to canvas")
+        except Exception as e:
+            logger.warning(f"Error updating canvas: {e}")
     
     def _render_frame_to_canvas(self, frame) -> None:
         """Render PyAV frame to tkinter Canvas."""
@@ -503,22 +541,11 @@ class PyAVVideoPlayer(VideoPlayer):
                 # Convert to PhotoImage and keep reference
                 self._canvas_photo_image = ImageTk.PhotoImage(pil_image)
                 
-                # Update canvas on main thread
+                # Queue canvas update (non-blocking, thread-safe)
                 try:
-                    canvas_width = self._canvas.winfo_width()
-                    canvas_height = self._canvas.winfo_height()
-                    
-                    if canvas_width > 0 and canvas_height > 0:
-                        self._canvas.delete("all")
-                        self._canvas.create_image(
-                            canvas_width // 2,
-                            canvas_height // 2,
-                            image=self._canvas_photo_image
-                        )
-                        self._canvas.update_idletasks()
-                        logger.debug(f"Frame rendered to canvas")
-                except Exception as e:
-                    logger.warning(f"Failed to update canvas: {e}")
+                    self._canvas_update_queue.put(True, block=False)
+                except queue.Full:
+                    pass  # Skip if queue is full
                 
             except ImportError:
                 logger.error("PIL/Pillow not available for image rendering")
