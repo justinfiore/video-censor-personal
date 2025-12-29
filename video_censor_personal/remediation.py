@@ -460,6 +460,10 @@ class RemediationManager:
             import shutil
             import subprocess
             
+            # Extract existing metadata from input video (to preserve chapters, subtitles, etc.)
+            existing_metadata = extract_existing_metadata(str(self.input_video_path))
+            logger.debug(f"Extracted {len(existing_metadata)} existing metadata tags from input")
+            
             # Extract original title and create censored version
             original_title = extract_original_title(str(self.input_video_path))
             censored_title = create_censored_title(original_title, str(self.input_video_path))
@@ -484,11 +488,11 @@ class RemediationManager:
             else:
                 logger.debug("Skipping remediation metadata (config_file or segment_file not provided)")
             
-            # For now, just use remediation metadata (not extracting/merging existing)
-            # TODO: Add extraction of existing metadata to preserve chapters
-            all_metadata = remediation_metadata
+            # Merge: start with existing metadata, then override/add remediation metadata
+            # This preserves chapters, subtitles, etc. from input while adding new tags
+            all_metadata = {**existing_metadata, **remediation_metadata}
             
-            # Always set title to censored version
+            # Always set title to censored version (overrides any existing title)
             all_metadata["title"] = censored_title
             
             logger.debug(f"Total metadata to write: {len(all_metadata)} tags")

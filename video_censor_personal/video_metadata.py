@@ -190,6 +190,11 @@ def build_remediation_metadata(
     segment_basename = Path(segment_file).name
     
     # Format timestamp as ISO8601 with timezone
+    # If timestamp doesn't have timezone info, assume UTC
+    if processed_timestamp.tzinfo is None:
+        from datetime import timezone as tz_module
+        processed_timestamp = processed_timestamp.replace(tzinfo=tz_module.utc)
+    
     timestamp_iso = processed_timestamp.isoformat()
     
     # Format boolean flags as lowercase strings
