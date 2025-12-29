@@ -68,8 +68,15 @@ def load_segments_from_json(
     validated_segments = _validate_segments(segments)
     _validate_metadata(metadata, video_path, video_duration)
     
+    # Sort segments by start_time to ensure chronological order
+    sorted_segments = sorted(validated_segments, key=lambda s: s["start_time"])
+    
+    # Log if segments were reordered
+    if len(validated_segments) > 1 and validated_segments != sorted_segments:
+        logger.debug("Segments were reordered by start_time for chronological processing")
+    
     return {
-        "segments": validated_segments,
+        "segments": sorted_segments,
         "metadata": metadata,
     }
 
