@@ -86,6 +86,75 @@ class TestLoadSegmentsFromJson:
         assert result["segments"][0]["start_time"] == 5445.0  # 1*3600 + 30*60 + 45
         assert result["segments"][0]["end_time"] == 5460.0    # 1*3600 + 31*60 + 0
 
+    def test_load_segments_parses_time_string_with_milliseconds(self, tmp_path):
+        """Test parsing HH:MM:SS.mmm time strings with milliseconds."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time": "01:30:45.456",
+                    "end_time": "01:31:00.789",
+                    "labels": ["Nudity"],
+                }
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        # 1*3600 + 30*60 + 45 + 0.456
+        assert abs(result["segments"][0]["start_time"] - 5445.456) < 0.001
+        # 1*3600 + 31*60 + 0 + 0.789
+        assert abs(result["segments"][0]["end_time"] - 5460.789) < 0.001
+
+    def test_load_segments_parses_mixed_millisecond_formats(self, tmp_path):
+        """Test parsing time strings with varying millisecond precision."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time": "00:00:01.1",    # Single digit
+                    "end_time": "00:00:02.12",     # Two digits
+                    "labels": ["Test"],
+                },
+                {
+                    "start_time": "00:00:03.123",  # Three digits
+                    "end_time": "00:00:04.0",      # Single zero
+                    "labels": ["Test"],
+                }
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        # First segment: 0.1 -> 0.100, 0.12 -> 0.120
+        assert abs(result["segments"][0]["start_time"] - 1.1) < 0.001
+        assert abs(result["segments"][0]["end_time"] - 2.12) < 0.001
+        # Second segment: 0.123, 0.0 -> 0.000
+        assert abs(result["segments"][1]["start_time"] - 3.123) < 0.001
+        assert abs(result["segments"][1]["end_time"] - 4.0) < 0.001
+
+    def test_load_segments_backward_compat_without_milliseconds(self, tmp_path):
+        """Test backward compatibility with HH:MM:SS format (no milliseconds)."""
+        json_file = tmp_path / "segments.json"
+        json_file.write_text(json.dumps({
+            "metadata": {"file": "test.mp4"},
+            "segments": [
+                {
+                    "start_time": "00:01:23",  # Without milliseconds
+                    "end_time": "00:01:45",
+                    "labels": ["Violence"],
+                }
+            ],
+        }))
+
+        result = load_segments_from_json(str(json_file))
+
+        # Should parse as integer seconds: 1*60 + 23 = 83, 1*60 + 45 = 105
+        assert result["segments"][0]["start_time"] == 83.0
+        assert result["segments"][0]["end_time"] == 105.0
+
     def test_load_segments_file_not_found(self):
         """Test error when file does not exist."""
         with pytest.raises(SegmentsLoadError, match="not found"):
