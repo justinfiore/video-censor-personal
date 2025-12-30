@@ -90,9 +90,15 @@ class SimpleAudioPlayer(AudioPlayer):
         logger.info("SimpleAudioPlayer initialized")
     
     def load_audio_data(self, audio_frames: np.ndarray, sample_rate: int, channels: int) -> None:
-        """Load audio data for playback."""
+        """Load audio data for playback.
+        
+        Args:
+            audio_frames: Numpy array - either (samples,) for mono or (samples, channels) for stereo
+            sample_rate: Sample rate in Hz
+            channels: Number of channels
+        """
         with self._lock:
-            logger.info(f"Loading audio: {len(audio_frames)} frames, {sample_rate}Hz, {channels} channels")
+            logger.info(f"Loading audio: shape={audio_frames.shape}, {sample_rate}Hz, {channels} channels")
             
             # Ensure audio is in the correct format (int16)
             if audio_frames.dtype != np.int16:
@@ -101,6 +107,13 @@ class SimpleAudioPlayer(AudioPlayer):
                     audio_frames = (audio_frames * 32767).astype(np.int16)
                 else:
                     audio_frames = audio_frames.astype(np.int16)
+            
+            # If multichannel and not already interleaved, flatten to interleaved format
+            # PyAV returns (samples, channels), but simpleaudio.play_buffer expects interleaved bytes
+            if audio_frames.ndim == 2:
+                # Shape is (samples, channels) - need to keep it as-is for .tobytes()
+                # which will interleave when flattened
+                logger.info(f"Audio is multichannel: {audio_frames.shape}")
             
             self._audio_frames = audio_frames
             self._sample_rate = sample_rate
@@ -232,9 +245,15 @@ class SimpleAudioPlayer(AudioPlayer):
                         continue
                     
                     # Get audio segment for playback
-                    frames_to_play = self._audio_frames[self._current_frame:]
+                    # For 2D arrays (samples, channels), slice along first axis (samples)
+                    if self._audio_frames.ndim == 2:
+                        frames_to_play = self._audio_frames[self._current_frame:]
+                        num_samples = frames_to_play.shape[0]
+                    else:
+                        frames_to_play = self._audio_frames[self._current_frame:]
+                        num_samples = len(frames_to_play)
                     
-                    if len(frames_to_play) == 0:
+                    if num_samples == 0:
                         # Reached end of audio
                         logger.info("Audio playback finished")
                         self._is_playing = False
@@ -253,13 +272,9 @@ class SimpleAudioPlayer(AudioPlayer):
                             self._sample_rate
                         )
                         
-                        # Update current frame based on number of samples played
-                        # (frames = samples per channel, not per sample rate)
-                        if self._channels > 1:
-                            samples_played = len(frames_to_play) // self._channels
-                        else:
-                            samples_played = len(frames_to_play)
-                        self._current_frame += samples_played
+                        # Update current frame: for both mono and stereo, increment by number of samples
+                        # (each "sample" is a time point, regardless of channels)
+                        self._current_frame += num_samples
                         
                         # Wait for playback to complete or pause signal
                         self._play_obj.wait_done()

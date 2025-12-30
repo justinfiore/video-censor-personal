@@ -134,6 +134,16 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         # Pass canvas to PyAV player if applicable
         if hasattr(self.video_player, '_canvas'):
             self.video_player._canvas = self.video_canvas
+            # Schedule first frame render once window is realized
+            self.after(100, self._schedule_first_frame_render)
+    
+    def _schedule_first_frame_render(self) -> None:
+        """Schedule rendering of the first frame after canvas is ready."""
+        if hasattr(self.video_player, 'render_first_frame'):
+            try:
+                self.video_player.render_first_frame()
+            except Exception as e:
+                logger.warning(f"Error scheduling first frame render: {e}")
         
         self.timeline_frame = ctk.CTkFrame(self)
         self.timeline_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
@@ -384,13 +394,8 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         try:
             self._update_timecode()
             
-            # Check for pending canvas updates (non-blocking queue poll)
-            if hasattr(self.video_player, '_canvas_update_queue'):
-                try:
-                    self.video_player._canvas_update_queue.get_nowait()
-                    self.video_player._update_canvas_on_main_thread()
-                except:
-                    pass  # Queue empty, no update pending
+            # Let the video player handle canvas updates via its scheduled callback
+            # (it calls _update_canvas_on_main_thread directly via canvas.after())
             
             self._update_timer_id = self.after(50, self._start_update_timer)
         except Exception as e:

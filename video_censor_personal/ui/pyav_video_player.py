@@ -113,9 +113,10 @@ class PyAVVideoPlayer(VideoPlayer):
             if self._audio_stream is None:
                 logger.warning("No audio stream found in file")
             
-            # Get duration
+            # Get duration (convert from AV_TIME_BASE units to seconds)
+            # av.time_base is 1/1000000, so duration is in microseconds
             if self._container.duration:
-                self._duration = float(self._container.duration) * av.time_base
+                self._duration = float(self._container.duration) / av.time_base
             else:
                 self._duration = 0.0
             
@@ -130,14 +131,8 @@ class PyAVVideoPlayer(VideoPlayer):
                 except Exception as e:
                     logger.warning(f"Failed to schedule audio decoding: {e}")
             
-            # Render first frame to canvas in background thread
-            if self._video_stream is not None and self._canvas is not None:
-                try:
-                    logger.info("Scheduling first frame render")
-                    first_frame_thread = threading.Thread(target=self._render_first_frame_bg, daemon=True)
-                    first_frame_thread.start()
-                except Exception as e:
-                    logger.warning(f"Failed to schedule first frame: {e}")
+            # First frame render is deferred until canvas is assigned and ready
+            # (done in a separate call to avoid blocking load())
             
         except Exception as e:
             logger.error(f"Failed to load video: {e}")
@@ -247,6 +242,19 @@ class PyAVVideoPlayer(VideoPlayer):
         """Get total duration of loaded video in seconds."""
         return self._duration
     
+    def render_first_frame(self) -> None:
+        """Render the first frame to canvas (call after canvas is assigned and ready)."""
+        if self._video_stream is None or self._canvas is None:
+            logger.warning("Cannot render first frame: video_stream or canvas not available")
+            return
+        
+        try:
+            logger.info("Rendering first frame in background")
+            first_frame_thread = threading.Thread(target=self._render_first_frame_bg, daemon=True)
+            first_frame_thread.start()
+        except Exception as e:
+            logger.warning(f"Failed to render first frame: {e}")
+    
     def _cleanup_playback(self) -> None:
         """Stop playback threads and clear state."""
         logger.info("Stopping playback")
@@ -305,46 +313,67 @@ class PyAVVideoPlayer(VideoPlayer):
             self._is_playing = False
     
     def _render_first_frame_bg(self) -> None:
-        """Decode and render the first frame of the video (background thread)."""
+        """Decode and prepare the first frame of the video (background thread).
+        
+        Note: First frame is displayed when playback starts or on demand.
+        This method decodes it to ensure video is valid and shows a frame preview.
+        """
         if self._video_stream is None or self._canvas is None:
             logger.debug(f"Cannot render first frame: video_stream={self._video_stream is not None}, canvas={self._canvas is not None}")
             return
         
         try:
-            logger.debug("Rendering first frame...")
-            # Wait for canvas to be realized
+            logger.debug("Decoding first frame...")
+            # Wait for canvas to be realized (with timeout)
             start_time = time.time()
-            while time.time() - start_time < 5.0:
-                if self._canvas.winfo_width() > 0 and self._canvas.winfo_height() > 0:
-                    break
+            canvas_ready = False
+            while time.time() - start_time < 2.0:  # Reduced timeout from 5s to 2s
+                try:
+                    w = self._canvas.winfo_width()
+                    h = self._canvas.winfo_height()
+                    if w > 0 and h > 0:
+                        canvas_ready = True
+                        break
+                except:
+                    pass  # Canvas might not be accessible
                 time.sleep(0.05)
+            
+            if not canvas_ready:
+                logger.warning("Canvas not ready after 2s timeout, proceeding anyway")
             
             # Seek to beginning
             self._container.seek(0)
             
-            # Decode first frame
-            frame_rendered = False
+            # Decode first frame and queue it
+            frame_queued = False
             for packet in self._container.demux(self._video_stream):
                 for frame in packet.decode():
-                    self._render_frame_to_canvas(frame)
-                    logger.info("First frame rendered successfully")
-                    frame_rendered = True
-                    return
+                    # Queue frame for rendering (will be displayed on play or demand)
+                    try:
+                        self._frame_queue.put({
+                            'frame': frame,
+                            'pts': frame.pts,
+                            'time': frame.time if hasattr(frame, 'time') else 0.0,
+                        }, block=False)
+                        logger.info("First frame queued for display")
+                        frame_queued = True
+                        return
+                    except queue.Full:
+                        logger.debug("Frame queue full, skipping first frame")
+                        return
             
-            if not frame_rendered:
-                logger.warning("No frames available to render")
+            if not frame_queued:
+                logger.warning("No frames available to decode")
         except Exception as e:
-            logger.warning(f"Failed to render first frame: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Failed to decode first frame: {e}")
     
     def _perform_seek(self) -> None:
         """Perform seek operation."""
         try:
             logger.info(f"Performing seek to {self._seek_target:.2f}s")
             
-            # Convert seconds to stream time base
-            target_timestamp = int(self._seek_target / av.time_base)
+            # Convert seconds to container timestamp (in AV_TIME_BASE units, which is microseconds)
+            target_timestamp = int(self._seek_target * av.time_base)
             
             # Seek in container
             self._container.seek(target_timestamp)
@@ -388,12 +417,16 @@ class PyAVVideoPlayer(VideoPlayer):
                             'time': frame.time if hasattr(frame, 'time') else 0.0,
                         }
                         
-                        # Try to put in queue, skip if full
+                        # Put in queue - BLOCK if full to throttle decode speed
+                        # This prevents buffer overflow by letting render thread keep pace
                         try:
-                            self._frame_queue.put(frame_data, block=False)
+                            self._frame_queue.put(frame_data, block=True, timeout=0.1)
                             self._frame_count += 1
                             frames_decoded += 1
+                            if frames_decoded == 1:
+                                logger.info(f"First frame enqueued: pts={frame.pts}, time={frame.time if hasattr(frame, 'time') else 'N/A'}")
                         except queue.Full:
+                            # Queue still full after timeout - skip this frame to keep decoding
                             self._dropped_frames += 1
                             if self._dropped_frames % 10 == 0:
                                 logger.debug(f"Frame queue full, dropped {self._dropped_frames} frames total")
@@ -417,12 +450,25 @@ class PyAVVideoPlayer(VideoPlayer):
             self._is_playing = False
     
     def _render_thread_main(self) -> None:
-        """Main rendering thread."""
+        """Main rendering thread - decode, convert, and resize frames for display."""
         try:
+            from PIL import Image, ImageTk
+
+            logger.info("Render thread started")
+            # Initialize to -infinity so the first frame always passes the throttle check
+            last_canvas_update = -float('inf')
+            target_fps = 24  # Limit rendering to 24fps (more realistic for Tkinter)
+            min_frame_interval = 1.0 / target_fps
+            frames_skipped_total = 0
+            frames_rendered = 0
+            
             while not self._stop_event.is_set():
                 try:
-                    # Get frame from queue with timeout
-                    frame_data = self._frame_queue.get(timeout=0.5)
+                    # Get frame from queue with SHORT timeout to allow other work
+                    frame_data = self._frame_queue.get(timeout=0.05)
+                    
+                    if frames_rendered == 0:
+                        logger.info("Render thread received first frame from queue")
                     
                     if frame_data is None:
                         continue
@@ -433,126 +479,167 @@ class PyAVVideoPlayer(VideoPlayer):
                     if self._pause_event.is_set():
                         continue
                     
-                    # Update current time
+                    # Always update current time from the latest frame
                     with self._frame_lock:
                         if hasattr(frame, 'pts') and frame.pts is not None:
-                            self._current_time = float(frame.pts) * av.time_base
-                        
+                            # Frame PTS is in stream time base, need to convert to seconds
+                            # Using video stream's time_base to convert to seconds
+                            if self._video_stream is not None:
+                                self._current_time = float(frame.pts) * float(self._video_stream.time_base)
+                            else:
+                                self._current_time = float(frame.pts) / av.time_base
+
                         if self._time_callback is not None:
                             self._time_callback(self.get_current_time())
                     
-                    # Render frame to canvas if available
+                    # Check if it's time to display (throttle rendering to target FPS)
+                    now = time.time()
+                    time_since_last = now - last_canvas_update
+                    should_render = time_since_last >= min_frame_interval
+                    
+                    if not should_render:
+                        frames_skipped_total += 1
+                        if frames_skipped_total % 100 == 0:
+                            logger.debug(f"Throttle skip: {time_since_last*1000:.1f}ms < {min_frame_interval*1000:.1f}ms, skipped {frames_skipped_total} total")
+                        continue  # Skip rendering this frame, will render next time interval
+                    
+                    if frames_rendered == 1:
+                        logger.info(f"Ready to render first frame: {time_since_last*1000:.1f}ms since last update")
+                    
+                    # Convert frame to RGB and prepare for display
                     if self._canvas is not None:
-                        self._render_frame_to_canvas(frame)
+                        try:
+                            # Get canvas dimensions (check if valid)
+                            canvas_width = self._canvas.winfo_width()
+                            canvas_height = self._canvas.winfo_height()
+                            
+                            if frames_rendered == 1:
+                                logger.debug(f"Attempting to render frame: canvas size={canvas_width}x{canvas_height}")
+                            
+                            if canvas_width < 1 or canvas_height < 1:
+                                logger.debug(f"Canvas dimensions invalid: {canvas_width}x{canvas_height}, skipping frame")
+                                continue  # Canvas not ready yet
+                            
+                            # Convert frame to RGB
+                            if frame.format.name in ['yuv420p', 'yuvj420p']:
+                                rgb_frame = frame.to_rgb()
+                            elif frame.format.name == 'rgb24':
+                                rgb_frame = frame
+                            else:
+                                rgb_frame = frame.to_rgb()
+                            
+                            image_array = rgb_frame.to_ndarray()
+                            
+                            # Convert to PIL and resize (this is the slow part, OK on render thread)
+                            pil_image = Image.fromarray(image_array, mode='RGB')
+                            
+                            # Calculate aspect-preserving resize
+                            frame_height, frame_width = image_array.shape[0], image_array.shape[1]
+                            aspect_ratio = frame_width / frame_height
+                            
+                            if (canvas_width / canvas_height) > aspect_ratio:
+                                new_height = canvas_height
+                                new_width = int(new_height * aspect_ratio)
+                            else:
+                                new_width = canvas_width
+                                new_height = int(new_width / aspect_ratio)
+                            
+                            if new_width > 0 and new_height > 0:
+                                if frames_rendered == 1:
+                                    logger.debug(f"Resizing frame to {new_width}x{new_height}")
+                                pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                            
+                            # Convert to PhotoImage (this is fast since image is already resized)
+                            if frames_rendered == 1:
+                                logger.debug("Creating PhotoImage...")
+                            photo_image = ImageTk.PhotoImage(pil_image)
+                            if frames_rendered == 1:
+                                logger.debug("PhotoImage created")
+                            
+                            # Queue for main thread canvas update (just swap the reference)
+                            try:
+                                self._canvas_update_queue.put({
+                                    'photo_image': photo_image,
+                                    'canvas_width': canvas_width,
+                                    'canvas_height': canvas_height
+                                }, block=False)
+                                
+                                last_canvas_update = now
+                                frames_rendered += 1
+                                
+                                if frames_rendered == 1:
+                                    logger.info("First frame queued for canvas update")
+                                
+                                # Schedule UI update on main thread
+                                if not self._canvas_update_scheduled:
+                                    try:
+                                        self._canvas.after(0, self._update_canvas_on_main_thread)
+                                        self._canvas_update_scheduled = True
+                                        if frames_rendered == 1:
+                                            logger.debug("Scheduled canvas update on main thread")
+                                    except Exception as e:
+                                        logger.debug(f"Failed to schedule canvas update: {e}")  # Canvas might not exist
+                            
+                            except queue.Full:
+                                pass  # Skip if UI thread is too slow
+                        
+                        except Exception as e:
+                            logger.debug(f"Error preparing frame for rendering: {e}")
                 
                 except queue.Empty:
                     continue
                 except Exception as e:
-                    logger.error(f"Error rendering frame: {e}")
+                    logger.error(f"Error in render thread: {e}")
         
+        except ImportError:
+            logger.error("PIL/Pillow not available for rendering")
         except Exception as e:
             logger.error(f"Render thread error: {e}")
     
     def _update_canvas_on_main_thread(self) -> None:
-        """Update canvas with current frame (runs on main thread via after)."""
-        if self._canvas is None or self._canvas_photo_image is None:
+        """Update canvas with queued PhotoImage (runs on main thread via after).
+        
+        The render thread prepares PhotoImage objects, this method just displays them.
+        This keeps heavy PIL work off the main thread while ensuring canvas updates
+        happen on the correct thread.
+        """
+        self._canvas_update_scheduled = False
+        
+        if self._canvas is None:
+            logger.debug("Canvas is None in _update_canvas_on_main_thread")
             return
         
         try:
-            canvas_width = self._canvas.winfo_width()
-            canvas_height = self._canvas.winfo_height()
+            # Get queued image data (non-blocking)
+            try:
+                frame_data = self._canvas_update_queue.get_nowait()
+                logger.debug(f"Canvas update: received queued frame, queue size now {self._canvas_update_queue.qsize()}")
+            except queue.Empty:
+                # logger.debug("Canvas update queue is empty")
+                return  # No work to do
             
-            if canvas_width > 0 and canvas_height > 0:
-                self._canvas.delete("all")
-                self._canvas.create_image(
-                    canvas_width // 2,
-                    canvas_height // 2,
-                    image=self._canvas_photo_image
-                )
-                logger.debug(f"Frame rendered to canvas")
-        except Exception as e:
-            logger.warning(f"Error updating canvas: {e}")
-    
-    def _render_frame_to_canvas(self, frame) -> None:
-        """Render PyAV frame to tkinter Canvas."""
-        try:
-            # Ensure canvas exists
-            if self._canvas is None:
-                logger.warning("Canvas not available for rendering")
-                return
-            
-            # Check canvas dimensions
-            canvas_width = self._canvas.winfo_width()
-            canvas_height = self._canvas.winfo_height()
+            photo_image = frame_data['photo_image']
+            canvas_width = frame_data['canvas_width']
+            canvas_height = frame_data['canvas_height']
             
             if canvas_width < 1 or canvas_height < 1:
-                logger.debug(f"Canvas not ready: {canvas_width}x{canvas_height}, skipping frame")
                 return
             
-            # Convert frame to RGB
-            try:
-                if frame.format.name in ['yuv420p', 'yuvj420p']:
-                    rgb_frame = frame.to_rgb()
-                elif frame.format.name == 'rgb24':
-                    rgb_frame = frame
-                else:
-                    rgb_frame = frame.to_rgb()
-            except Exception as e:
-                logger.warning(f"Failed to convert frame format {frame.format.name}: {e}")
-                return
+            # Store reference to prevent garbage collection
+            self._canvas_photo_image = photo_image
             
-            # Convert to numpy array
-            try:
-                image_array = rgb_frame.to_ndarray()
-            except Exception as e:
-                logger.warning(f"Failed to convert frame to ndarray: {e}")
-                return
-            
-            # Validate array shape
-            if image_array.size == 0 or len(image_array.shape) < 2:
-                logger.warning(f"Invalid frame array shape: {image_array.shape}")
-                return
-            
-            # Convert numpy array to PIL Image
-            try:
-                from PIL import Image, ImageTk
-                
-                pil_image = Image.fromarray(image_array, mode='RGB')
-                
-                # Calculate aspect-preserving resize
-                try:
-                    frame_height, frame_width = image_array.shape[0], image_array.shape[1]
-                    aspect_ratio = frame_width / frame_height
-                    
-                    # Fit within canvas preserving aspect
-                    if (canvas_width / canvas_height) > aspect_ratio:
-                        new_height = canvas_height
-                        new_width = int(new_height * aspect_ratio)
-                    else:
-                        new_width = canvas_width
-                        new_height = int(new_width / aspect_ratio)
-                    
-                    if new_width > 0 and new_height > 0:
-                        pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                        logger.debug(f"Resized frame to {new_width}x{new_height}")
-                except Exception as e:
-                    logger.warning(f"Failed to resize frame: {e}")
-                
-                # Convert to PhotoImage and keep reference
-                self._canvas_photo_image = ImageTk.PhotoImage(pil_image)
-                
-                # Queue canvas update (non-blocking, thread-safe)
-                try:
-                    self._canvas_update_queue.put(True, block=False)
-                except queue.Full:
-                    pass  # Skip if queue is full
-                
-            except ImportError:
-                logger.error("PIL/Pillow not available for image rendering")
+            # Update canvas (very fast, just swapping image reference)
+            self._canvas.delete("all")
+            self._canvas.create_image(
+                canvas_width // 2,
+                canvas_height // 2,
+                image=self._canvas_photo_image
+            )
         
         except Exception as e:
-            logger.error(f"Error rendering frame: {e}")
+            logger.debug(f"Error updating canvas: {e}")
     
+
     def _initialize_audio_player(self) -> None:
         """Initialize audio player and load audio stream."""
         if self._audio_stream is None or self._audio_player is not None:
@@ -571,8 +658,11 @@ class PyAVVideoPlayer(VideoPlayer):
         try:
             for frame in self._container.decode(self._audio_stream):
                 try:
-                    # Convert to numpy array (shape: (samples, channels) for multichannel or (samples,) for mono)
+                    # Convert to numpy array
+                    # PyAV returns shape (samples, channels) for multichannel or (samples,) for mono
                     array = frame.to_ndarray()
+                    
+                    logger.debug(f"Audio frame shape before conversion: {array.shape}, dtype: {array.dtype}")
                     
                     # Ensure int16 format
                     if array.dtype != np.int16:
@@ -597,15 +687,19 @@ class PyAVVideoPlayer(VideoPlayer):
             return
         
         try:
-            # Concatenate all frames
-            if audio_frames_list[0].ndim == 2:
-                # Multichannel audio: concatenate along samples axis
-                audio_data = np.concatenate(audio_frames_list, axis=0)
+            # PyAV returns frames with shape (channels, frame_size)
+            # We need to concatenate along axis 1 (the frame_size axis) to get (channels, total_samples)
+            if len(audio_frames_list) > 0 and audio_frames_list[0].ndim == 2:
+                # Multichannel: concatenate along the samples axis (axis 1)
+                audio_data = np.concatenate(audio_frames_list, axis=1)
+                # Transpose to (total_samples, channels) for simpleaudio
+                audio_data = audio_data.T
             else:
-                # Mono audio
+                # Mono: concatenate along axis 0
                 audio_data = np.concatenate(audio_frames_list, axis=0)
             
-            logger.info(f"Loaded {len(audio_data)} audio samples")
+            logger.info(f"Audio concatenated: shape={audio_data.shape}, dtype={audio_data.dtype}")
+            logger.info(f"Loaded {audio_data.shape[0]} audio samples")
             
             # Load into audio player
             self._audio_player.load_audio_data(audio_data, sample_rate, channels)

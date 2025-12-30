@@ -1,0 +1,1 @@
+<frozen runpy>:128: RuntimeWarning: 'video_censor_personal.ui.main' found in sys.modules after import of package 'video_censor_personal.ui', but prior to execution of 'video_censor_personal.ui.main'; this may result in unpredictable behaviour
