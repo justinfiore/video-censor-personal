@@ -228,6 +228,33 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         )
         self.speed_menu.pack(side="left")
         
+        # A/V Sync offset control
+        av_frame = ctk.CTkFrame(self.controls_frame, fg_color="transparent")
+        av_frame.grid(row=1, column=0, columnspan=5, padx=5, pady=5, sticky="ew")
+        av_frame.grid_columnconfigure(2, weight=1)
+        
+        ctk.CTkLabel(av_frame, text="A/V Sync (ms):", font=("Arial", 10)).pack(side="left", padx=(0, 5))
+        self.av_sync_var = ctk.StringVar(value="1500")
+        self.av_sync_entry = ctk.CTkEntry(
+            av_frame,
+            textvariable=self.av_sync_var,
+            width=80,
+            placeholder_text="1500"
+        )
+        self.av_sync_entry.pack(side="left", padx=(0, 5))
+        self.av_sync_entry.bind("<Return>", self._on_av_sync_changed)
+        
+        self.av_sync_button = ctk.CTkButton(
+            av_frame,
+            text="Apply",
+            width=60,
+            height=28,
+            command=self._on_av_sync_changed
+        )
+        self.av_sync_button.pack(side="left", padx=(0, 10))
+        
+        ctk.CTkLabel(av_frame, text="(positive = delay video)", font=("Arial", 8), text_color="gray").pack(side="left")
+        
         self.timecode_label = ctk.CTkLabel(
             self.controls_frame,
             text="00:00:00.000 / 00:00:00.000",
@@ -330,6 +357,20 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         
         speed = float(value.replace('x', ''))
         self.video_player.set_playback_rate(speed)
+    
+    def _on_av_sync_changed(self, event=None) -> None:
+        """Handle A/V sync offset change."""
+        if not self.is_loaded or self.video_player is None:
+            return
+        
+        try:
+            offset_ms = float(self.av_sync_var.get())
+            if hasattr(self.video_player, 'set_av_sync_offset'):
+                self.video_player.set_av_sync_offset(offset_ms)
+                logger.info(f"A/V sync offset changed to {offset_ms:.0f}ms")
+        except ValueError:
+            logger.warning(f"Invalid A/V sync offset: {self.av_sync_var.get()}")
+            self.av_sync_var.set("-500")
     
     def _on_timeline_seek(self, time: float) -> None:
         """Handle timeline click to seek."""

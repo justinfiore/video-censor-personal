@@ -22,11 +22,13 @@ except ImportError:
 class PyAVVideoPlayer(VideoPlayer):
     """PyAV-based video player with cross-platform support."""
     
-    def __init__(self, canvas_widget=None):
+    def __init__(self, canvas_widget=None, av_sync_offset_ms: float = 1500.0):
         """Initialize PyAV video player.
         
         Args:
             canvas_widget: Optional tkinter Canvas to render video frames
+            av_sync_offset_ms: A/V sync offset in milliseconds. Positive means delay video relative to audio.
+                             This accounts for presentation latency differences. Default 1500ms (typical latency mismatch).
             
         Raises:
             RuntimeError: If PyAV is not available
@@ -78,7 +80,13 @@ class PyAVVideoPlayer(VideoPlayer):
         self._drift_samples: List[float] = []  # Track last 100 drift values
         self._max_drift_buffer_size = 100
         
-        logger.info("PyAVVideoPlayer initialized")
+        # Presentation latency offset (in seconds)
+        # This accounts for the difference in buffering between audio and video pipelines
+        # Negative offset means video is advanced (played earlier) relative to audio
+        # This is useful when audio output has less latency than video display
+        self._av_latency_offset = av_sync_offset_ms / 1000.0
+        
+        logger.info(f"PyAVVideoPlayer initialized with A/V sync offset={av_sync_offset_ms:.0f}ms")
     
     def load(self, video_path: str) -> None:
         """Load a video file for playback."""
@@ -157,12 +165,21 @@ class PyAVVideoPlayer(VideoPlayer):
             self._is_playing = True
             self._stop_event.clear()
             
-            # Sync audio to current video position before starting
-            # This ensures audio starts from the timeline marker, not the beginning
-            current_pos = self._current_time
+            # Determine playback start position:
+            # - If a seek was pending (_seek_event set), use _seek_target
+            # - Otherwise use _current_time
+            # This ensures audio and video start from the same position
+            if self._seek_event.is_set():
+                playback_start_pos = self._seek_target
+                logger.info(f"Play starting from pending seek target: {playback_start_pos:.2f}s")
+            else:
+                playback_start_pos = self._current_time
+                logger.info(f"Play starting from current position: {playback_start_pos:.2f}s")
+            
+            # Sync audio to the playback start position
             if self._audio_player is not None:
-                logger.info(f"Syncing audio to video position: {current_pos:.2f}s")
-                self._audio_player.seek(current_pos)
+                logger.info(f"Syncing audio to playback position: {playback_start_pos:.2f}s")
+                self._audio_player.seek(playback_start_pos)
             
             # Check if we're resuming from pause (decode thread still alive)
             is_resuming = self._decode_thread is not None and self._decode_thread.is_alive()
@@ -171,8 +188,8 @@ class PyAVVideoPlayer(VideoPlayer):
                 # Trigger a seek to current position before resuming
                 # This is needed because the container may have advanced while paused
                 # (render thread was consuming frames from queue)
-                logger.info(f"Resuming playback - triggering seek to {current_pos:.2f}s")
-                self._seek_target = current_pos
+                logger.info(f"Resuming playback - triggering seek to {playback_start_pos:.2f}s")
+                self._seek_target = playback_start_pos
                 self._seek_event.set()
                 
                 # Restart audio playback (was paused)
@@ -183,14 +200,34 @@ class PyAVVideoPlayer(VideoPlayer):
             # Clear pause event AFTER setting up seek (so decode thread handles seek first)
             self._pause_event.clear()
             
-            # Ensure audio is initialized before starting playback
-            if self._audio_stream is not None and self._audio_player is None:
-                logger.info("Initializing audio before playback")
-                audio_thread = threading.Thread(target=self._initialize_audio_player, daemon=True)
-                audio_thread.start()
+            # Clear any stale frames in queue from first frame render
+            # (first frame might have been queued before a seek was requested)
+            while not self._frame_queue.empty():
+                try:
+                    self._frame_queue.get_nowait()
+                except queue.Empty:
+                    break
             
+            # Initialize and start audio SYNCHRONOUSLY before starting video threads
+            # This ensures audio is ready when render thread checks is_playing()
+            if self._audio_stream is not None and self._audio_player is None:
+                logger.info("Initializing audio BEFORE video playback (synchronous)")
+                self._initialize_audio_player()
+                if self._audio_player is not None:
+                    logger.info("Audio initialized, starting playback")
+                    self._audio_player.play()
+                    # Verify audio is actually playing
+                    if not self._audio_player.is_playing():
+                        logger.warning("Audio start failed, but continuing with video playback")
+            elif self._audio_player is not None and not self._audio_player.is_playing():
+                # Audio was paused, resume it
+                logger.info("Resuming audio playback")
+                self._audio_player.play()
+            
+            # NOW start video decode/render threads (audio is ready and playing)
             # Start decode thread if not already running
             if not is_resuming:
+                logger.info(f"Starting decode thread with seek_target={self._seek_target:.2f}s")
                 self._decode_thread = threading.Thread(target=self._decode_thread_main, daemon=True)
                 self._decode_thread.start()
     
@@ -274,6 +311,15 @@ class PyAVVideoPlayer(VideoPlayer):
         """Get total duration of loaded video in seconds."""
         return self._duration
     
+    def set_av_sync_offset(self, offset_ms: float) -> None:
+        """Set A/V sync offset in milliseconds.
+        
+        Negative offset advances video (plays it earlier).
+        Positive offset delays video (plays it later).
+        """
+        self._av_latency_offset = offset_ms / 1000.0
+        logger.info(f"A/V sync offset changed to {offset_ms:.0f}ms")
+    
     def render_first_frame(self) -> None:
         """Render the first frame to canvas (call after canvas is assigned and ready)."""
         if self._video_stream is None or self._canvas is None:
@@ -313,21 +359,37 @@ class PyAVVideoPlayer(VideoPlayer):
     def _decode_thread_main(self) -> None:
         """Main decoding thread."""
         try:
-            # Seek video to current position before starting decode
-            # This ensures video starts from the same position as audio
-            # Also clear any pending seek event since we're handling it now
+            # Check if there's a pending seek event from the main thread
+            # This can happen if seek() was called before play()
+            seek_target = None
             with self._frame_lock:
-                start_time = self._current_time
-                # Clear seek event - we're about to seek to the current position
-                self._seek_event.clear()
+                if self._seek_event.is_set():
+                    seek_target = self._seek_target
+                    self._seek_event.clear()
+                else:
+                    seek_target = self._current_time
             
             # Always seek to start position to ensure we're at the right place
             # (container may be at a different position from previous playback)
-            logger.info(f"Seeking video to start position: {start_time:.2f}s")
-            target_timestamp = int(start_time * av.time_base)
+            logger.info(f"Seeking video to start position: {seek_target:.2f}s")
+            target_timestamp = int(seek_target * av.time_base)
             with self._container_lock:
                 self._container.seek(target_timestamp)
-            # Clear any stale frames
+                # CRITICAL: Flush decoder buffers after seeking to discard pre-seek frames
+                # PyAV keeps internal buffers that may contain frames from before the seek
+                for _ in self._container.demux(self._video_stream):
+                    # Just consume packets to flush buffers
+                    try:
+                        for frame in _.decode():
+                            # Discard flushed frames
+                            pass
+                    except:
+                        # Ignore decode errors during flush
+                        pass
+                    # Only flush a few packets worth
+                    break
+            
+            # Clear any stale frames in queues
             while not self._frame_queue.empty():
                 try:
                     self._frame_queue.get_nowait()
@@ -353,16 +415,8 @@ class PyAVVideoPlayer(VideoPlayer):
                     return
                 time.sleep(0.1)
             
-            # Start audio playback if initialized
-            if self._audio_stream is not None and self._audio_player is not None:
-                try:
-                    logger.info("Starting audio playback")
-                    self._audio_player.play()
-                except Exception as e:
-                    logger.warning(f"Failed to start audio player: {e}")
-            
-            # Track whether we've started audio (for late-start case)
-            audio_started = self._audio_player is not None and self._audio_player.is_playing()
+            # Audio should already be initialized and playing from play() method
+            # No need to start it here
             
             while not self._stop_event.is_set():
                 # Handle pause
@@ -375,19 +429,6 @@ class PyAVVideoPlayer(VideoPlayer):
                     self._seek_event.clear()
                     self._perform_seek()
                     continue
-                
-                # Late-start audio if it became available after we started
-                if not audio_started and self._audio_player is not None:
-                    try:
-                        logger.info("Late-starting audio playback (audio init completed during decode)")
-                        # Sync audio to current video position
-                        with self._frame_lock:
-                            current_pos = self._current_time
-                        self._audio_player.seek(current_pos)
-                        self._audio_player.play()
-                        audio_started = True
-                    except Exception as e:
-                        logger.warning(f"Failed to late-start audio: {e}")
                 
                 # Decode frames
                 try:
@@ -516,10 +557,23 @@ class PyAVVideoPlayer(VideoPlayer):
         # Decode just a few frames at a time and yield control
         frames_decoded = 0
         max_frames_per_batch = 3
+        seek_target_time = None
+        frames_skipped_for_seek = 0
+        
+        # If we just did a seek, we may need to skip frames until we reach the target time
+        with self._frame_lock:
+            if self._seek_target > 0:
+                seek_target_time = self._seek_target
+                current = self._current_time
+                logger.info(f"[FRAME_SKIP] Decode starting - _seek_target={self._seek_target:.3f}s, _current_time={self._current_time:.3f}s, will skip pre-seek frames")
+            else:
+                logger.info(f"[FRAME_SKIP] Decode starting - _seek_target={self._seek_target:.3f}s (no skipping needed)")
         
         try:
             # Protect container access with lock
             with self._container_lock:
+                # Create demux iterator AFTER seeking has been handled in _decode_thread_main
+                # This is critical: the iterator must be created after any seeks to respect the new position
                 demux_iter = self._container.demux(self._video_stream)
             
             for packet in demux_iter:
@@ -538,6 +592,21 @@ class PyAVVideoPlayer(VideoPlayer):
                         # Check pause/seek inside inner loop too for responsiveness
                         if self._pause_event.is_set() or self._seek_event.is_set():
                             return
+                        
+                        # Skip frames if we're catching up from a seek
+                        if seek_target_time is not None:
+                            frame_time = float(frame.pts) * float(self._video_stream.time_base)
+                            skip_threshold = seek_target_time - 0.033  # 33ms = 1 frame at 30fps
+                            if frame_time < skip_threshold:
+                                frames_skipped_for_seek += 1
+                                if frames_skipped_for_seek <= 5:  # Log first few skips
+                                    logger.info(f"[FRAME_SKIP] Skip #{frames_skipped_for_seek}: frame_time={frame_time:.3f}s < threshold={skip_threshold:.3f}s (target={seek_target_time:.3f}s)")
+                                continue
+                            else:
+                                # Reached target time, stop skipping
+                                if frames_skipped_for_seek > 0:
+                                    logger.info(f"[FRAME_SKIP] Caught up: skipped {frames_skipped_for_seek} total frames, first frame at {frame_time:.3f}s (target was {seek_target_time:.3f}s)")
+                                seek_target_time = None  # Clear seek target to stop skipping
                         
                         # Extract frame info and convert to numpy immediately
                         # (PyAV frames become invalid after they go out of scope)
@@ -601,9 +670,9 @@ class PyAVVideoPlayer(VideoPlayer):
             frames_skipped_total = 0
             frames_rendered = 0
             canvas_ready_warned = False
-            # Maximum allowed drift before we drop frames (100ms)
+            # Maximum allowed drift before we drop frames (100ms - audio can be max 100ms ahead)
             max_drift_behind = 0.1
-            # How far ahead we allow video to be before waiting (30ms)
+            # How far ahead we allow video to be before waiting (30ms - video can be max 30ms ahead)
             max_drift_ahead = 0.03
             
             while not self._stop_event.is_set():
@@ -655,8 +724,11 @@ class PyAVVideoPlayer(VideoPlayer):
                     audio_player = self._audio_player
                     if audio_player is not None and audio_player.is_playing():
                         audio_time = audio_player.get_current_time()
-                        drift = frame_time - audio_time  # Positive = video ahead, negative = video behind
-                        drift_ms = drift * 1000
+                        # Apply presentation latency offsets: audio has ~50ms latency, video has ~100ms latency
+                        # So we adjust: effective_audio = audio_time - 50ms, effective_video = frame_time - 100ms
+                        # drift = effective_audio - effective_video = (audio - 50ms) - (frame - 100ms) = audio - frame + 50ms
+                        adjusted_drift = audio_time - frame_time + self._av_latency_offset
+                        drift_ms = adjusted_drift * 1000
                         
                         # Track drift statistics
                         self._drift_samples.append(drift_ms)
@@ -668,17 +740,17 @@ class PyAVVideoPlayer(VideoPlayer):
                             avg_drift = np.mean(self._drift_samples) if self._drift_samples else 0
                             logger.info(f"A/V DRIFT: frame#{frames_rendered+1} video={frame_time:.3f}s audio={audio_time:.3f}s drift={drift_ms:+.1f}ms (avg={avg_drift:+.1f}ms)")
                         
-                        if drift < -max_drift_behind:
-                            # Video is too far behind audio - drop this frame
+                        if adjusted_drift > max_drift_behind:
+                            # Audio is too far ahead - drop this frame to catch up
                             frames_skipped_total += 1
                             if frames_skipped_total % 10 == 0:
-                                logger.info(f"A/V sync: dropped {frames_skipped_total} frames (video behind by {-drift_ms:.0f}ms)")
+                                logger.info(f"A/V sync: dropped {frames_skipped_total} frames (audio ahead by {drift_ms:.0f}ms, adjusted={adjusted_drift*1000:.0f}ms)")
                             continue
-                        elif drift > max_drift_ahead:
+                        elif adjusted_drift < -max_drift_ahead:
                             # Video is ahead of audio - wait for audio to catch up
                             # BUT cap wait time and check for seek/pause/stop events
-                            # If drift is huge (>1s), it means a seek happened and this frame is stale
-                            wait_time = drift - max_drift_ahead
+                            # If drift is huge (<-1s), it means a seek happened and this frame is stale
+                            wait_time = -adjusted_drift - max_drift_ahead
                             if wait_time > 1.0:
                                 # Drift too large - likely a seek happened, discard this frame
                                 logger.info(f"A/V sync: discarding stale frame (drift={drift_ms:.0f}ms, likely seek)")
@@ -749,10 +821,10 @@ class PyAVVideoPlayer(VideoPlayer):
                                 if frames_rendered == 0:
                                     logger.debug(f"Resizing frame to {new_width}x{new_height}")
                                 resize_start = time.time()
-                                pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                                pil_image = pil_image.resize((new_width, new_height), Image.Resampling.BILINEAR)
                                 resize_duration = time.time() - resize_start
                                 if frames_rendered < 5 or resize_duration > 0.05:  # Log first 5 frames or slow resizes
-                                    logger.info(f"Frame #{frames_rendered + 1}: LANCZOS resize took {resize_duration*1000:.1f}ms")
+                                    logger.info(f"Frame #{frames_rendered + 1}: BILINEAR resize took {resize_duration*1000:.1f}ms")
                             
                             # Queue PIL Image for main thread (main thread will create PhotoImage)
                             # A/V sync timing is handled above - no wall-clock throttling needed here
