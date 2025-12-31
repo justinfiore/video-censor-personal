@@ -263,7 +263,18 @@ class SoundDeviceAudioPlayer(AudioPlayer):
         with self._lock:
             if self._sample_rate == 0:
                 return 0.0
-            return self._current_frame / self._sample_rate
+            current_time = self._current_frame / self._sample_rate
+            # Log audio position periodically to debug A/V drift
+            if hasattr(self, '_last_logged_time'):
+                time_delta = current_time - self._last_logged_time
+                # Log every second approximately (accounting for varying sample rates)
+                if time_delta > 0.5:
+                    logger.debug(f"Audio position: {current_time:.3f}s (frame {self._current_frame})")
+                    self._last_logged_time = current_time
+            else:
+                self._last_logged_time = current_time
+                logger.debug(f"Audio position: {current_time:.3f}s (frame {self._current_frame})")
+            return current_time
     
     def get_duration(self) -> float:
         """Get total audio duration in seconds."""

@@ -74,6 +74,10 @@ class PyAVVideoPlayer(VideoPlayer):
         self._cached_canvas_width = 0
         self._cached_canvas_height = 0
         
+        # A/V drift statistics for debugging
+        self._drift_samples: List[float] = []  # Track last 100 drift values
+        self._max_drift_buffer_size = 100
+        
         logger.info("PyAVVideoPlayer initialized")
     
     def load(self, video_path: str) -> None:
@@ -652,12 +656,23 @@ class PyAVVideoPlayer(VideoPlayer):
                     if audio_player is not None and audio_player.is_playing():
                         audio_time = audio_player.get_current_time()
                         drift = frame_time - audio_time  # Positive = video ahead, negative = video behind
+                        drift_ms = drift * 1000
+                        
+                        # Track drift statistics
+                        self._drift_samples.append(drift_ms)
+                        if len(self._drift_samples) > self._max_drift_buffer_size:
+                            self._drift_samples.pop(0)
+                        
+                        # Log drift info frequently to understand sync issues
+                        if frames_rendered < 10 or frames_rendered % 24 == 0 or abs(drift_ms) > 100:
+                            avg_drift = np.mean(self._drift_samples) if self._drift_samples else 0
+                            logger.info(f"A/V DRIFT: frame#{frames_rendered+1} video={frame_time:.3f}s audio={audio_time:.3f}s drift={drift_ms:+.1f}ms (avg={avg_drift:+.1f}ms)")
                         
                         if drift < -max_drift_behind:
                             # Video is too far behind audio - drop this frame
                             frames_skipped_total += 1
                             if frames_skipped_total % 10 == 0:
-                                logger.info(f"A/V sync: dropped {frames_skipped_total} frames (video behind by {-drift*1000:.0f}ms)")
+                                logger.info(f"A/V sync: dropped {frames_skipped_total} frames (video behind by {-drift_ms:.0f}ms)")
                             continue
                         elif drift > max_drift_ahead:
                             # Video is ahead of audio - wait for audio to catch up
@@ -666,7 +681,7 @@ class PyAVVideoPlayer(VideoPlayer):
                             wait_time = drift - max_drift_ahead
                             if wait_time > 1.0:
                                 # Drift too large - likely a seek happened, discard this frame
-                                logger.info(f"A/V sync: discarding stale frame (drift={drift*1000:.0f}ms, likely seek)")
+                                logger.info(f"A/V sync: discarding stale frame (drift={drift_ms:.0f}ms, likely seek)")
                                 continue
                             if wait_time > 0.001:  # Only sleep if > 1ms
                                 logger.debug(f"A/V sync: waiting {wait_time*1000:.0f}ms (video ahead)")
