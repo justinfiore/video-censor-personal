@@ -29,11 +29,6 @@ class VideoPlayer(ABC):
         pass
     
     @abstractmethod
-    def set_volume(self, level: float) -> None:
-        """Set volume level (0.0 to 1.0)."""
-        pass
-    
-    @abstractmethod
     def get_current_time(self) -> float:
         """Get current playback position in seconds."""
         pass

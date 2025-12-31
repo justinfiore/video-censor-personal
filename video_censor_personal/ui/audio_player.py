@@ -45,11 +45,6 @@ class AudioPlayer(ABC):
         pass
     
     @abstractmethod
-    def set_volume(self, level: float) -> None:
-        """Set volume level (0.0 to 1.0)."""
-        pass
-    
-    @abstractmethod
     def get_current_time(self) -> float:
         """Get current playback position in seconds."""
         pass
@@ -81,7 +76,6 @@ class SimpleAudioPlayer(AudioPlayer):
         self._channels: int = 0
         self._play_obj: Optional[object] = None
         self._is_playing: bool = False
-        self._volume: float = 1.0
         self._current_frame: int = 0
         self._playback_thread: Optional[threading.Thread] = None
         self._stop_event: threading.Event = threading.Event()
@@ -197,13 +191,6 @@ class SimpleAudioPlayer(AudioPlayer):
                         logger.warning(f"Error stopping playback: {e}")
                     self._play_obj = None
     
-    def set_volume(self, level: float) -> None:
-        """Set volume level (0.0 to 1.0)."""
-        with self._lock:
-            level = max(0.0, min(1.0, level))
-            logger.info(f"Setting volume to {level * 100:.0f}%")
-            self._volume = level
-    
     def get_current_time(self) -> float:
         """Get current playback position in seconds."""
         with self._lock:
@@ -258,10 +245,6 @@ class SimpleAudioPlayer(AudioPlayer):
                         logger.info("Audio playback finished")
                         self._is_playing = False
                         continue
-                    
-                    # Apply volume
-                    if self._volume < 1.0:
-                        frames_to_play = (frames_to_play * self._volume).astype(np.int16)
                     
                     # Play audio
                     try:

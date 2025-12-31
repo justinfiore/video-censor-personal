@@ -131,20 +131,7 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self.video_canvas = tk.Canvas(self.video_container, bg="black", highlightthickness=0)
         self.video_canvas.pack(fill="both", expand=True)
         
-        # Pass canvas to PyAV player if applicable
-        if hasattr(self.video_player, '_canvas'):
-            self.video_player._canvas = self.video_canvas
-            # Schedule first frame render once window is realized
-            self.after(100, self._schedule_first_frame_render)
-    
-    def _schedule_first_frame_render(self) -> None:
-        """Schedule rendering of the first frame after canvas is ready."""
-        if hasattr(self.video_player, 'render_first_frame'):
-            try:
-                self.video_player.render_first_frame()
-            except Exception as e:
-                logger.warning(f"Error scheduling first frame render: {e}")
-        
+        # Create timeline frame
         self.timeline_frame = ctk.CTkFrame(self)
         self.timeline_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
         self.timeline_frame.grid_columnconfigure(0, weight=1)
@@ -153,6 +140,7 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self.timeline.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         self.timeline.set_seek_callback(self._on_timeline_seek)
         
+        # Create controls frame
         self.controls_frame = ctk.CTkFrame(self)
         self.controls_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.controls_frame.grid_columnconfigure(0, weight=0)
@@ -160,8 +148,6 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self.controls_frame.grid_columnconfigure(2, weight=0)
         self.controls_frame.grid_columnconfigure(3, weight=0)
         self.controls_frame.grid_columnconfigure(4, weight=1)
-        self.controls_frame.grid_columnconfigure(5, weight=0)
-        self.controls_frame.grid_columnconfigure(6, weight=0)
         
         self.play_pause_button = ctk.CTkButton(
             self.controls_frame,
@@ -212,26 +198,20 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         )
         self.timecode_label.grid(row=0, column=4, padx=10, pady=5)
         
-        volume_frame = ctk.CTkFrame(self.controls_frame, fg_color="transparent")
-        volume_frame.grid(row=0, column=5, padx=5, pady=5)
-        
-        ctk.CTkLabel(volume_frame, text="🔊", font=("Arial", 12)).pack(side="left", padx=(0, 5))
-        self.volume_slider = ctk.CTkSlider(
-            volume_frame,
-            from_=0,
-            to=100,
-            number_of_steps=100,
-            width=100,
-            command=self._on_volume_changed
-        )
-        self.volume_slider.set(100)
-        self.volume_slider.pack(side="left")
-        
-        self.volume_label = ctk.CTkLabel(volume_frame, text="100%", width=40, font=("Arial", 10))
-        self.volume_label.pack(side="left", padx=(5, 0))
+        # Pass canvas to PyAV player if applicable
+        if hasattr(self.video_player, '_canvas'):
+            self.video_player._canvas = self.video_canvas
         
         self._update_timer_id = None
         self._start_update_timer()
+    
+    def _schedule_first_frame_render(self) -> None:
+        """Schedule rendering of the first frame after canvas is ready."""
+        if hasattr(self.video_player, 'render_first_frame'):
+            try:
+                self.video_player.render_first_frame()
+            except Exception as e:
+                logger.warning(f"Error scheduling first frame render: {e}")
     
     def load_video(self, video_path: str, segments: List[Segment]) -> None:
         """Load video file and segments."""
@@ -259,6 +239,9 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
             
             self._update_timecode()
             logger.info("Timecode updated")
+            
+            # Schedule first frame render after video is loaded
+            self._schedule_first_frame_render()
             
         except Exception as e:
             logger.error(f"Failed to load video: {str(e)}")
@@ -310,15 +293,6 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         
         speed = float(value.replace('x', ''))
         self.video_player.set_playback_rate(speed)
-    
-    def _on_volume_changed(self, value: float) -> None:
-        """Handle volume slider change."""
-        if self.video_player is None:
-            return
-        
-        volume = value / 100.0
-        self.video_player.set_volume(volume)
-        self.volume_label.configure(text=f"{int(value)}%")
     
     def _on_timeline_seek(self, time: float) -> None:
         """Handle timeline click to seek."""
@@ -394,8 +368,12 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         try:
             self._update_timecode()
             
-            # Let the video player handle canvas updates via its scheduled callback
-            # (it calls _update_canvas_on_main_thread directly via canvas.after())
+            # Update canvas from queued frames (must be done on main thread for Tkinter safety)
+            if hasattr(self.video_player, '_update_canvas_on_main_thread'):
+                try:
+                    self.video_player._update_canvas_on_main_thread()
+                except Exception as e:
+                    logger.warning(f"Error in canvas update: {e}")
             
             self._update_timer_id = self.after(50, self._start_update_timer)
         except Exception as e:
