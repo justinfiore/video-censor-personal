@@ -448,4 +448,33 @@ def _playback_thread_main(self) -> None:
 - [x] **Chunk audio playback** - Play audio in 500ms chunks instead of all remaining audio at once
 - [x] **Replace simpleaudio with sounddevice** - simpleaudio's destroy_audio_blob callback caused use-after-free crashes. Switched to sounddevice which uses a callback-based streaming model that's more compatible with Python's memory management.
 - [ ] **Consider using Tkinter's native video capabilities** or PyGame for rendering instead of Canvas
-- [ ] **Implement proper A/V sync** - Currently audio and video are essentially independent; implement clock-based synchronization
+- [x] **Implement proper A/V sync** - Audio is now the master clock; render thread syncs video frames to audio time by dropping frames if behind or waiting if ahead
+
+---
+
+## New Findings (2025-12-31 16:14)
+
+### A/V Sync Sleep Blocks Render Thread During Seek
+
+After seeking while playing, the render thread gets stuck in a 43+ second sleep:
+
+```
+16:13:59,599 - A/V sync: waiting 43779ms (video ahead)
+```
+
+**Root Cause**: When user seeks backward during playback:
+1. Audio player seeks to new position (e.g., 135s)
+2. Render thread is processing a frame from the old position (e.g., 180s)  
+3. A/V sync calculates drift: `180 - 135 = 45 seconds`
+4. Render thread sleeps for 43+ seconds waiting for audio to "catch up"
+5. No frames are rendered during this time
+
+### Fixes Applied
+
+1. **Clear canvas update queue on seek** - `_perform_seek()` now also clears `_canvas_update_queue` so stale frames aren't displayed
+
+2. **Cap A/V sync wait time** - If drift > 1 second, the frame is considered stale (likely due to seek) and discarded rather than waiting
+
+3. **Interruptible sleep** - A/V sync wait is broken into 20ms chunks that check for stop/seek/pause events, allowing quick response to user actions
+
+4. **Seek event checks in render loop** - Render thread now checks `_seek_event` before getting frames and after getting frames, discarding any frame if a seek is pending

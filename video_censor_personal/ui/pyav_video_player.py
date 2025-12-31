@@ -491,6 +491,13 @@ class PyAVVideoPlayer(VideoPlayer):
                 except queue.Empty:
                     break
             
+            # Clear canvas update queue too - stale frames should not be displayed
+            while not self._canvas_update_queue.empty():
+                try:
+                    self._canvas_update_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
             logger.info(f"Seek complete")
         except Exception as e:
             logger.error(f"Seek failed: {e}")
@@ -603,10 +610,22 @@ class PyAVVideoPlayer(VideoPlayer):
                         time.sleep(0.05)
                         continue
                     
+                    # Check for seek event - if seek is pending, skip processing and let decode handle it
+                    # The decode thread will clear the frame queue after seek
+                    if self._seek_event.is_set():
+                        time.sleep(0.01)  # Brief sleep to let decode thread handle seek
+                        continue
+                    
                     # Get frame from queue with SHORT timeout to allow other work
                     logger.debug(f"[RENDER_LOOP] Attempting to get frame from queue (frames_rendered={frames_rendered})")
                     frame_data = self._frame_queue.get(timeout=0.05)
                     logger.debug(f"[RENDER_LOOP] Got frame from queue")
+                    
+                    # After getting frame, check again if a seek happened
+                    # (seek can occur between queue.get and now)
+                    if self._seek_event.is_set():
+                        logger.debug("Discarding frame - seek event pending")
+                        continue
                     
                     if frames_rendered == 0:
                         logger.info("Render thread received first frame from queue")
@@ -642,10 +661,25 @@ class PyAVVideoPlayer(VideoPlayer):
                             continue
                         elif drift > max_drift_ahead:
                             # Video is ahead of audio - wait for audio to catch up
+                            # BUT cap wait time and check for seek/pause/stop events
+                            # If drift is huge (>1s), it means a seek happened and this frame is stale
                             wait_time = drift - max_drift_ahead
+                            if wait_time > 1.0:
+                                # Drift too large - likely a seek happened, discard this frame
+                                logger.info(f"A/V sync: discarding stale frame (drift={drift*1000:.0f}ms, likely seek)")
+                                continue
                             if wait_time > 0.001:  # Only sleep if > 1ms
                                 logger.debug(f"A/V sync: waiting {wait_time*1000:.0f}ms (video ahead)")
-                                time.sleep(wait_time)
+                                # Break sleep into small chunks to check for events
+                                sleep_chunk = 0.02  # 20ms chunks
+                                slept = 0.0
+                                while slept < wait_time:
+                                    if self._stop_event.is_set() or self._seek_event.is_set() or self._pause_event.is_set():
+                                        logger.debug("A/V sync wait interrupted by event")
+                                        break
+                                    chunk = min(sleep_chunk, wait_time - slept)
+                                    time.sleep(chunk)
+                                    slept += chunk
                     
                     logger.debug(f"Frame #{frames_rendered + 1}: frame_time={frame_time:.3f}s")
                     
