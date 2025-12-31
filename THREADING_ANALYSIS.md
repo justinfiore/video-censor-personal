@@ -392,8 +392,8 @@ Since `last_canvas_update` starts at `-float('inf')`, the first frame should pas
 
 ### Immediate Fixes
 
-- [ ] **Add more logging** - Log when frames are actually put into `_canvas_update_queue` vs skipped
-- [ ] **Fix timeline redraw** - Only redraw the playhead marker, not all segments every frame
+- [x] **Add more logging** - Log when frames are actually put into `_canvas_update_queue` vs skipped
+- [x] **Fix timeline redraw** - Only redraw the playhead marker, not all segments every frame
 - [ ] **Increase canvas update queue size** - From 1 to 3-5 to buffer more frames
 - [ ] **Remove or simplify LANCZOS resize** - Use `Image.Resampling.BILINEAR` or `NEAREST` instead
 

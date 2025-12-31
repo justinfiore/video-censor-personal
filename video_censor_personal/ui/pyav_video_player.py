@@ -510,8 +510,11 @@ class PyAVVideoPlayer(VideoPlayer):
                         continue
                     
                     # Always update current time from the latest frame
+                    # NOTE: Do NOT call callbacks while holding the lock to avoid deadlocks
+                    logger.debug(f"Frame #{frames_rendered + 1}: Acquiring frame lock for time update")
+                    pts = frame_data.get('pts')
+                    current_time_for_callback = None
                     with self._frame_lock:
-                        pts = frame_data.get('pts')
                         if pts is not None:
                             # Frame PTS is in stream time base, need to convert to seconds
                             # Using video stream's time_base to convert to seconds
@@ -519,9 +522,11 @@ class PyAVVideoPlayer(VideoPlayer):
                                 self._current_time = float(pts) * float(self._video_stream.time_base)
                             else:
                                 self._current_time = float(pts) / av.time_base
-
-                        if self._time_callback is not None:
-                            self._time_callback(self.get_current_time())
+                        current_time_for_callback = self._current_time
+                    logger.debug(f"Frame #{frames_rendered + 1}: Frame lock released, current_time={current_time_for_callback:.3f}")
+                    
+                    # Call time callback OUTSIDE the lock to prevent deadlocks
+                    # The callback might try to acquire locks or interact with UI
                     
                     # Convert frame to RGB and prepare for display
                     canvas_status = "None" if self._canvas is None else "NOT None"

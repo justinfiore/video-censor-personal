@@ -18,12 +18,15 @@ logger.info("Using PyAVVideoPlayer")
 class TimelineCanvas(tk.Canvas):
     """Canvas for drawing timeline with segment markers."""
     
+    PLAYHEAD_TAG = "playhead"  # Tag for the playhead line so we can update it efficiently
+    
     def __init__(self, master, **kwargs):
         super().__init__(master, height=40, bg="#2b2b2b", highlightthickness=0, **kwargs)
         
         self.segments: List[Segment] = []
         self.duration: float = 0.0
         self.current_time: float = 0.0
+        self._playhead_id: Optional[int] = None  # Canvas item ID for playhead
         
         self.bind("<Configure>", self._on_resize)
         self.bind("<Button-1>", self._on_click)
@@ -34,12 +37,12 @@ class TimelineCanvas(tk.Canvas):
         """Set segments and video duration for timeline."""
         self.segments = segments
         self.duration = duration if duration > 0 else 100.0
-        self._redraw()
+        self._redraw_full()
     
     def set_current_time(self, current_time: float) -> None:
-        """Update current playback position."""
+        """Update current playback position - only redraws playhead for efficiency."""
         self.current_time = current_time
-        self._redraw()
+        self._update_playhead_only()
     
     def set_seek_callback(self, callback: Callable[[float], None]) -> None:
         """Set callback for timeline clicks."""
@@ -47,7 +50,7 @@ class TimelineCanvas(tk.Canvas):
     
     def _on_resize(self, event):
         """Handle canvas resize."""
-        self._redraw()
+        self._redraw_full()
     
     def _on_click(self, event):
         """Handle timeline click to seek."""
@@ -64,8 +67,34 @@ class TimelineCanvas(tk.Canvas):
         if self.seek_callback:
             self.seek_callback(seek_time)
     
-    def _redraw(self) -> None:
-        """Redraw timeline."""
+    def _update_playhead_only(self) -> None:
+        """Update only the playhead position without redrawing everything.
+        
+        This is called frequently during playback and must be fast.
+        """
+        width = self.winfo_width()
+        height = self.winfo_height()
+        
+        if width <= 0 or height <= 0 or self.duration <= 0:
+            return
+        
+        # Delete old playhead
+        self.delete(self.PLAYHEAD_TAG)
+        
+        # Draw new playhead
+        if self.current_time >= 0:
+            x_pos = (self.current_time / self.duration) * width
+            self._playhead_id = self.create_line(
+                x_pos, 0, x_pos, height, 
+                fill="#1f6aa5", width=2,
+                tags=self.PLAYHEAD_TAG
+            )
+    
+    def _redraw_full(self) -> None:
+        """Full redraw of timeline including segments and playhead.
+        
+        This is called when segments change or canvas resizes.
+        """
         self.delete("all")
         
         width = self.winfo_width()
@@ -74,10 +103,13 @@ class TimelineCanvas(tk.Canvas):
         if width <= 0 or height <= 0 or self.duration <= 0:
             return
         
+        # Background
         self.create_rectangle(0, 0, width, height, fill="#2b2b2b", outline="")
         
+        # Center line
         self.create_line(0, height // 2, width, height // 2, fill="#4a4a4a", width=2)
         
+        # Segment markers
         for segment in self.segments:
             x_start = (segment.start_time / self.duration) * width
             x_end = (segment.end_time / self.duration) * width
@@ -96,9 +128,14 @@ class TimelineCanvas(tk.Canvas):
                 width=1
             )
         
-        if self.current_time > 0:
+        # Playhead (drawn last so it's on top)
+        if self.current_time >= 0:
             x_pos = (self.current_time / self.duration) * width
-            self.create_line(x_pos, 0, x_pos, height, fill="#1f6aa5", width=2)
+            self._playhead_id = self.create_line(
+                x_pos, 0, x_pos, height, 
+                fill="#1f6aa5", width=2,
+                tags=self.PLAYHEAD_TAG
+            )
 
 
 class VideoPlayerPaneImpl(ctk.CTkFrame):
