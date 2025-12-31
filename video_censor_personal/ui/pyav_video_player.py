@@ -57,7 +57,8 @@ class PyAVVideoPlayer(VideoPlayer):
         # Frame queue for decoded frames (thread-safe)
         self._frame_queue: queue.Queue = queue.Queue(maxsize=30)
         self._audio_queue: queue.Queue = queue.Queue(maxsize=30)
-        self._canvas_update_queue: queue.Queue = queue.Queue(maxsize=1)
+        # Canvas update queue size of 3 gives render thread some buffer while main thread polls
+        self._canvas_update_queue: queue.Queue = queue.Queue(maxsize=3)
         
         # Synchronization
         self._frame_lock = threading.RLock()
@@ -67,6 +68,11 @@ class PyAVVideoPlayer(VideoPlayer):
         self._sync_offset = 0.0  # Offset between audio and video
         self._frame_count = 0
         self._dropped_frames = 0
+        
+        # Cached canvas dimensions (updated on main thread, read by render thread)
+        # This avoids calling winfo_width/height from background threads which can hang
+        self._cached_canvas_width = 0
+        self._cached_canvas_height = 0
         
         logger.info("PyAVVideoPlayer initialized")
     
@@ -318,22 +324,18 @@ class PyAVVideoPlayer(VideoPlayer):
         
         try:
             logger.debug("Decoding first frame...")
-            # Wait for canvas to be realized (with timeout)
+            # Wait for cached canvas dimensions to be set (updated by main thread)
+            # Don't call winfo_width/height directly from background thread - it can hang!
             start_time = time.time()
             canvas_ready = False
             while time.time() - start_time < 2.0:  # Reduced timeout from 5s to 2s
-                try:
-                    w = self._canvas.winfo_width()
-                    h = self._canvas.winfo_height()
-                    if w > 0 and h > 0:
-                        canvas_ready = True
-                        break
-                except:
-                    pass  # Canvas might not be accessible
+                if self._cached_canvas_width > 0 and self._cached_canvas_height > 0:
+                    canvas_ready = True
+                    break
                 time.sleep(0.05)
             
             if not canvas_ready:
-                logger.warning("Canvas not ready after 2s timeout, proceeding anyway")
+                logger.warning("Canvas dimensions not cached after 2s timeout, proceeding anyway")
             
             # Protect container access with lock (container is not thread-safe for multiple operations)
             with self._container_lock:
@@ -534,11 +536,12 @@ class PyAVVideoPlayer(VideoPlayer):
                     if self._canvas is not None:
                         try:
                             logger.debug(f"Frame #{frames_rendered + 1}: Starting render pipeline")
-                            # Get canvas dimensions (check if valid)
-                            canvas_width = self._canvas.winfo_width()
-                            canvas_height = self._canvas.winfo_height()
+                            # Use cached canvas dimensions (updated by main thread)
+                            # NEVER call winfo_width/height from render thread - it can hang!
+                            canvas_width = self._cached_canvas_width
+                            canvas_height = self._cached_canvas_height
                             
-                            logger.debug(f"Frame #{frames_rendered + 1}: Canvas size={canvas_width}x{canvas_height}")
+                            logger.debug(f"Frame #{frames_rendered + 1}: Canvas size={canvas_width}x{canvas_height} (cached)")
                             
                             if canvas_width < 1 or canvas_height < 1:
                                 if not canvas_ready_warned:
@@ -652,6 +655,14 @@ class PyAVVideoPlayer(VideoPlayer):
         if self._canvas is None:
             logger.warning("Canvas is None in _update_canvas_on_main_thread")
             return
+        
+        # Update cached canvas dimensions (safe to call from main thread)
+        # The render thread reads these cached values instead of calling winfo directly
+        try:
+            self._cached_canvas_width = self._canvas.winfo_width()
+            self._cached_canvas_height = self._canvas.winfo_height()
+        except Exception:
+            pass  # Canvas might not be ready
         
         try:
             from PIL import ImageTk
