@@ -569,7 +569,11 @@ class PyAVVideoPlayer(VideoPlayer):
                             if new_width > 0 and new_height > 0:
                                 if frames_rendered == 0:
                                     logger.debug(f"Resizing frame to {new_width}x{new_height}")
+                                resize_start = time.time()
                                 pil_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                                resize_duration = time.time() - resize_start
+                                if frames_rendered < 5 or resize_duration > 0.05:  # Log first 5 frames or slow resizes
+                                    logger.info(f"Frame #{frames_rendered + 1}: LANCZOS resize took {resize_duration*1000:.1f}ms")
                             
                             # Check if it's time to display (throttle rendering to target FPS)
                             # Skip throttle check for first frame to ensure it displays ASAP
@@ -585,7 +589,7 @@ class PyAVVideoPlayer(VideoPlayer):
                             if not should_render:
                                frames_skipped_total += 1
                                if frames_skipped_total % 10 == 0:
-                                   logger.debug(f"Throttle skip: skipped {frames_skipped_total} total")
+                                   logger.info(f"Throttle skip: skipped {frames_skipped_total} total (last_canvas_update={last_canvas_update:.3f}, now={now:.3f})")
                                # Drop frame to keep up with decode thread  
                                logger.debug(f"Skipping frame #{frames_rendered + 1} due to throttle")
                                continue
@@ -614,7 +618,7 @@ class PyAVVideoPlayer(VideoPlayer):
                                 # call _update_canvas_on_main_thread to check the queue.
                             
                             except queue.Full:
-                                pass  # Skip if UI thread is too slow
+                                logger.info(f"Frame #{frames_rendered + 1}: Canvas update queue FULL - frame dropped (UI thread too slow)")
                         
                         except Exception as e:
                             logger.error(f"Error preparing frame for rendering: {e}", exc_info=True)

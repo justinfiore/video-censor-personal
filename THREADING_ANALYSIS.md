@@ -381,24 +381,24 @@ Since `last_canvas_update` starts at `-float('inf')`, the first frame should pas
 
 ## Recommendations
 
-### Immediate Fixes
-
-1. **Remove or simplify LANCZOS resize** - Use `Image.Resampling.BILINEAR` or `NEAREST` instead
-2. **Increase canvas update queue size** - From 1 to 3-5 to buffer more frames
-3. **Fix timeline redraw** - Only redraw the playhead marker, not all segments every frame
-4. **Add more logging** - Log when frames are actually put into `_canvas_update_queue` vs skipped
-
-### Architecture Improvements
-
-1. **Chunk audio playback** - Play audio in 100ms chunks instead of all remaining audio at once
-2. **Consider using Tkinter's native video capabilities** or PyGame for rendering instead of Canvas
-3. **Implement proper A/V sync** - Currently audio and video are essentially independent; implement clock-based synchronization
-
 ### Debug Steps
 
-1. Add logging at line 607 to confirm frames are being queued:
+- [x] Add logging at line 607 to confirm frames are being queued:
    ```python
    logger.info(f"Queued frame #{frames_rendered + 1} to canvas update queue")
    ```
-2. Log `last_canvas_update` and timing values to verify throttle logic
-3. Profile the LANCZOS resize to measure actual duration
+- [x] Log `last_canvas_update` and timing values to verify throttle logic
+- [x] Profile the LANCZOS resize to measure actual duration
+
+### Immediate Fixes
+
+- [ ] **Add more logging** - Log when frames are actually put into `_canvas_update_queue` vs skipped
+- [ ] **Fix timeline redraw** - Only redraw the playhead marker, not all segments every frame
+- [ ] **Increase canvas update queue size** - From 1 to 3-5 to buffer more frames
+- [ ] **Remove or simplify LANCZOS resize** - Use `Image.Resampling.BILINEAR` or `NEAREST` instead
+
+### Architecture Improvements
+
+- [ ] **Chunk audio playback** - Play audio in 100ms chunks instead of all remaining audio at once
+- [ ] **Consider using Tkinter's native video capabilities** or PyGame for rendering instead of Canvas
+- [ ] **Implement proper A/V sync** - Currently audio and video are essentially independent; implement clock-based synchronization
