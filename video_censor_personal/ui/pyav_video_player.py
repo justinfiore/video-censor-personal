@@ -199,11 +199,19 @@ class PyAVVideoPlayer(VideoPlayer):
                 self._audio_player.seek(seconds)
     
     def get_current_time(self) -> float:
-        """Get current playback position in seconds."""
+        """Get current playback position in seconds.
+        
+        NOTE: We check audio player FIRST (without _frame_lock) to avoid
+        deadlocks. The audio player has its own lock for thread safety.
+        """
+        # Check audio player first (doesn't need _frame_lock)
+        audio_player = self._audio_player  # Local ref to avoid race
+        if audio_player is not None and audio_player.is_playing():
+            # Use audio time as source of truth during playback
+            return audio_player.get_current_time()
+        
+        # Fall back to video time (needs lock for thread-safe read)
         with self._frame_lock:
-            if self._audio_player is not None and self._audio_player.is_playing():
-                # Use audio time as source of truth during playback
-                return self._audio_player.get_current_time()
             return self._current_time
     
     def on_time_changed(self, callback: Callable[[float], None]) -> None:

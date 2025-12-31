@@ -379,6 +379,49 @@ Since `last_canvas_update` starts at `-float('inf')`, the first frame should pas
 
 ---
 
+## New Findings (2025-12-31 11:07)
+
+### Deadlock Analysis from Latest Logs
+
+The render thread receives the first frame but **gets stuck acquiring `_frame_lock`**:
+```
+11:07:19,447 - Render thread received first frame from queue
+11:07:19,447 - Frame #1: image_array type=<class 'numpy.ndarray'>, size=(720, 1280, 3)
+11:07:19,447 - Frame #1: Acquiring frame lock for time update
+```
+
+No further logs from the render thread after this point. The decode thread drops 200+ frames because the render thread isn't consuming them.
+
+### Root Cause: Audio Thread Lock Scope
+
+The audio player's playback thread holds `_lock` for the **entire duration** of audio playback:
+
+```python
+# audio_player.py lines 229-263
+def _playback_thread_main(self) -> None:
+    while not self._stop_event.is_set():
+        with self._lock:  # Acquired here
+            # ... prepare audio frames ...
+            self._play_obj = simpleaudio.play_buffer(...)
+            self._play_obj.wait_done()  # BLOCKS for entire audio!
+        # Lock released only after audio finishes
+```
+
+### Deadlock Sequence
+
+1. **Audio thread** acquires `audio._lock` at line 229
+2. **Audio thread** starts playing audio and waits in `wait_done()` (blocks for minutes)
+3. **Main thread** calls `_update_timecode()` → `get_current_time()`
+4. **Main thread** acquires `_frame_lock` at line 203
+5. **Main thread** tries to call `self._audio_player.is_playing()` at line 204
+6. **Main thread** blocks waiting for `audio._lock` (held by audio thread)
+7. **Render thread** tries to acquire `_frame_lock` at line 519
+8. **Render thread** blocks waiting for `_frame_lock` (held by main thread)
+
+**Result**: Main thread, render thread, and audio thread are all blocked. Only decode thread runs (dropping frames).
+
+---
+
 ## Recommendations
 
 ### Debug Steps
@@ -397,9 +440,12 @@ Since `last_canvas_update` starts at `-float('inf')`, the first frame should pas
 - [x] **Fix winfo hang** - Cache canvas dimensions on main thread; render thread reads cached values instead of calling winfo_width/height (which can block)
 - [x] **Increase canvas update queue size** - From 1 to 3 to buffer more frames
 - [ ] **Remove or simplify LANCZOS resize** - Use `Image.Resampling.BILINEAR` or `NEAREST` instead
+- [x] **Fix audio lock scope** - Release `_lock` BEFORE calling `wait_done()` to avoid blocking other threads
+- [x] **Fix get_current_time() lock order** - Don't hold `_frame_lock` when accessing audio player
 
 ### Architecture Improvements
 
-- [ ] **Chunk audio playback** - Play audio in 100ms chunks instead of all remaining audio at once
+- [x] **Chunk audio playback** - Play audio in 500ms chunks instead of all remaining audio at once
+- [x] **Replace simpleaudio with sounddevice** - simpleaudio's destroy_audio_blob callback caused use-after-free crashes. Switched to sounddevice which uses a callback-based streaming model that's more compatible with Python's memory management.
 - [ ] **Consider using Tkinter's native video capabilities** or PyGame for rendering instead of Canvas
 - [ ] **Implement proper A/V sync** - Currently audio and video are essentially independent; implement clock-based synchronization
