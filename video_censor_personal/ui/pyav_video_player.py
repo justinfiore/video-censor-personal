@@ -151,8 +151,33 @@ class PyAVVideoPlayer(VideoPlayer):
             
             logger.info("Starting playback")
             self._is_playing = True
-            self._pause_event.clear()
             self._stop_event.clear()
+            
+            # Sync audio to current video position before starting
+            # This ensures audio starts from the timeline marker, not the beginning
+            current_pos = self._current_time
+            if self._audio_player is not None:
+                logger.info(f"Syncing audio to video position: {current_pos:.2f}s")
+                self._audio_player.seek(current_pos)
+            
+            # Check if we're resuming from pause (decode thread still alive)
+            is_resuming = self._decode_thread is not None and self._decode_thread.is_alive()
+            
+            if is_resuming:
+                # Trigger a seek to current position before resuming
+                # This is needed because the container may have advanced while paused
+                # (render thread was consuming frames from queue)
+                logger.info(f"Resuming playback - triggering seek to {current_pos:.2f}s")
+                self._seek_target = current_pos
+                self._seek_event.set()
+                
+                # Restart audio playback (was paused)
+                if self._audio_player is not None:
+                    logger.info("Restarting audio playback on resume")
+                    self._audio_player.play()
+            
+            # Clear pause event AFTER setting up seek (so decode thread handles seek first)
+            self._pause_event.clear()
             
             # Ensure audio is initialized before starting playback
             if self._audio_stream is not None and self._audio_player is None:
@@ -160,8 +185,8 @@ class PyAVVideoPlayer(VideoPlayer):
                 audio_thread = threading.Thread(target=self._initialize_audio_player, daemon=True)
                 audio_thread.start()
             
-            # Start decode thread (will check if audio is ready and start it)
-            if self._decode_thread is None or not self._decode_thread.is_alive():
+            # Start decode thread if not already running
+            if not is_resuming:
                 self._decode_thread = threading.Thread(target=self._decode_thread_main, daemon=True)
                 self._decode_thread.start()
     
@@ -284,12 +309,56 @@ class PyAVVideoPlayer(VideoPlayer):
     def _decode_thread_main(self) -> None:
         """Main decoding thread."""
         try:
+            # Seek video to current position before starting decode
+            # This ensures video starts from the same position as audio
+            # Also clear any pending seek event since we're handling it now
+            with self._frame_lock:
+                start_time = self._current_time
+                # Clear seek event - we're about to seek to the current position
+                self._seek_event.clear()
+            
+            # Always seek to start position to ensure we're at the right place
+            # (container may be at a different position from previous playback)
+            logger.info(f"Seeking video to start position: {start_time:.2f}s")
+            target_timestamp = int(start_time * av.time_base)
+            with self._container_lock:
+                self._container.seek(target_timestamp)
+            # Clear any stale frames
+            while not self._frame_queue.empty():
+                try:
+                    self._frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Also clear canvas update queue to avoid showing stale frames
+            while not self._canvas_update_queue.empty():
+                try:
+                    self._canvas_update_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Wait briefly for audio player to be initialized (may be initializing in background)
+            # This fixes the race condition where decode thread starts before audio init completes
+            audio_wait_start = time.time()
+            audio_wait_timeout = 5.0  # Wait up to 5 seconds for audio init
+            while self._audio_stream is not None and self._audio_player is None:
+                if time.time() - audio_wait_start > audio_wait_timeout:
+                    logger.warning("Timeout waiting for audio player initialization, starting video without audio sync")
+                    break
+                if self._stop_event.is_set():
+                    return
+                time.sleep(0.1)
+            
             # Start audio playback if initialized
             if self._audio_stream is not None and self._audio_player is not None:
                 try:
+                    logger.info("Starting audio playback")
                     self._audio_player.play()
                 except Exception as e:
                     logger.warning(f"Failed to start audio player: {e}")
+            
+            # Track whether we've started audio (for late-start case)
+            audio_started = self._audio_player is not None and self._audio_player.is_playing()
             
             while not self._stop_event.is_set():
                 # Handle pause
@@ -302,6 +371,19 @@ class PyAVVideoPlayer(VideoPlayer):
                     self._seek_event.clear()
                     self._perform_seek()
                     continue
+                
+                # Late-start audio if it became available after we started
+                if not audio_started and self._audio_player is not None:
+                    try:
+                        logger.info("Late-starting audio playback (audio init completed during decode)")
+                        # Sync audio to current video position
+                        with self._frame_lock:
+                            current_pos = self._current_time
+                        self._audio_player.seek(current_pos)
+                        self._audio_player.play()
+                        audio_started = True
+                    except Exception as e:
+                        logger.warning(f"Failed to late-start audio: {e}")
                 
                 # Decode frames
                 try:
@@ -433,9 +515,17 @@ class PyAVVideoPlayer(VideoPlayer):
                 if self._stop_event.is_set():
                     return
                 
+                # Check for pause/seek events frequently to allow responsive control
+                if self._pause_event.is_set() or self._seek_event.is_set():
+                    return  # Exit decode loop to handle pause/seek in main thread loop
+                
                 try:
                     for frame in packet.decode():
                         if self._stop_event.is_set():
+                            return
+                        
+                        # Check pause/seek inside inner loop too for responsiveness
+                        if self._pause_event.is_set() or self._seek_event.is_set():
                             return
                         
                         # Extract frame info and convert to numpy immediately
@@ -484,21 +574,35 @@ class PyAVVideoPlayer(VideoPlayer):
             self._is_playing = False
     
     def _render_thread_main(self) -> None:
-        """Main rendering thread - decode, convert, and resize frames for display."""
+        """Main rendering thread - decode, convert, and resize frames for display.
+        
+        A/V Synchronization Strategy:
+        - Audio is the master clock
+        - For each video frame, compare its PTS to audio time
+        - If video is ahead of audio: wait until it's time to display
+        - If video is behind audio: drop the frame to catch up
+        - This keeps video in sync with audio playback
+        """
         try:
             from PIL import Image, ImageTk
 
             logger.info("Render thread started")
-            # Initialize to -infinity so the first frame always passes the throttle check
-            last_canvas_update = -float('inf')
-            target_fps = 24  # Limit rendering to 24fps (more realistic for Tkinter)
-            min_frame_interval = 1.0 / target_fps
             frames_skipped_total = 0
             frames_rendered = 0
             canvas_ready_warned = False
+            # Maximum allowed drift before we drop frames (100ms)
+            max_drift_behind = 0.1
+            # How far ahead we allow video to be before waiting (30ms)
+            max_drift_ahead = 0.03
             
             while not self._stop_event.is_set():
                 try:
+                    # Wait while paused - don't consume frames from queue
+                    # This prevents the decode thread from advancing while we're paused
+                    if self._pause_event.is_set():
+                        time.sleep(0.05)
+                        continue
+                    
                     # Get frame from queue with SHORT timeout to allow other work
                     logger.debug(f"[RENDER_LOOP] Attempting to get frame from queue (frames_rendered={frames_rendered})")
                     frame_data = self._frame_queue.get(timeout=0.05)
@@ -514,26 +618,36 @@ class PyAVVideoPlayer(VideoPlayer):
                     image_array = frame_data.get('image_array')
                     logger.debug(f"Frame #{frames_rendered + 1}: image_array type={type(image_array)}, size={image_array.shape if image_array is not None else 'None'}")
                     
-                    # Skip if paused
-                    if self._pause_event.is_set():
-                        logger.debug(f"Frame #{frames_rendered + 1}: Paused, skipping")
-                        continue
-                    
-                    # Always update current time from the latest frame
-                    # NOTE: Do NOT call callbacks while holding the lock to avoid deadlocks
-                    logger.debug(f"Frame #{frames_rendered + 1}: Acquiring frame lock for time update")
+                    # Calculate frame time from PTS
                     pts = frame_data.get('pts')
-                    current_time_for_callback = None
+                    frame_time = 0.0
+                    if pts is not None and self._video_stream is not None:
+                        frame_time = float(pts) * float(self._video_stream.time_base)
+                    
+                    # Update current time
                     with self._frame_lock:
-                        if pts is not None:
-                            # Frame PTS is in stream time base, need to convert to seconds
-                            # Using video stream's time_base to convert to seconds
-                            if self._video_stream is not None:
-                                self._current_time = float(pts) * float(self._video_stream.time_base)
-                            else:
-                                self._current_time = float(pts) / av.time_base
-                        current_time_for_callback = self._current_time
-                    logger.debug(f"Frame #{frames_rendered + 1}: Frame lock released, current_time={current_time_for_callback:.3f}")
+                        self._current_time = frame_time
+                    
+                    # A/V SYNC: Compare frame time to audio time
+                    audio_player = self._audio_player
+                    if audio_player is not None and audio_player.is_playing():
+                        audio_time = audio_player.get_current_time()
+                        drift = frame_time - audio_time  # Positive = video ahead, negative = video behind
+                        
+                        if drift < -max_drift_behind:
+                            # Video is too far behind audio - drop this frame
+                            frames_skipped_total += 1
+                            if frames_skipped_total % 10 == 0:
+                                logger.info(f"A/V sync: dropped {frames_skipped_total} frames (video behind by {-drift*1000:.0f}ms)")
+                            continue
+                        elif drift > max_drift_ahead:
+                            # Video is ahead of audio - wait for audio to catch up
+                            wait_time = drift - max_drift_ahead
+                            if wait_time > 0.001:  # Only sleep if > 1ms
+                                logger.debug(f"A/V sync: waiting {wait_time*1000:.0f}ms (video ahead)")
+                                time.sleep(wait_time)
+                    
+                    logger.debug(f"Frame #{frames_rendered + 1}: frame_time={frame_time:.3f}s")
                     
                     # Call time callback OUTSIDE the lock to prevent deadlocks
                     # The callback might try to acquire locks or interact with UI
@@ -591,27 +705,8 @@ class PyAVVideoPlayer(VideoPlayer):
                                 if frames_rendered < 5 or resize_duration > 0.05:  # Log first 5 frames or slow resizes
                                     logger.info(f"Frame #{frames_rendered + 1}: LANCZOS resize took {resize_duration*1000:.1f}ms")
                             
-                            # Check if it's time to display (throttle rendering to target FPS)
-                            # Skip throttle check for first frame to ensure it displays ASAP
-                            now = time.time()
-                            if frames_rendered == 0:
-                               should_render = True  # Always render first frame immediately
-                               logger.debug(f"Frame #1: First frame - rendering immediately")
-                            else:
-                               time_since_last = now - last_canvas_update
-                               should_render = time_since_last >= min_frame_interval
-                               logger.debug(f"Frame #{frames_rendered + 1}: time_since_last={time_since_last*1000:.1f}ms, min_interval={min_frame_interval*1000:.1f}ms, should_render={should_render}")
-                            
-                            if not should_render:
-                               frames_skipped_total += 1
-                               if frames_skipped_total % 10 == 0:
-                                   logger.info(f"Throttle skip: skipped {frames_skipped_total} total (last_canvas_update={last_canvas_update:.3f}, now={now:.3f})")
-                               # Drop frame to keep up with decode thread  
-                               logger.debug(f"Skipping frame #{frames_rendered + 1} due to throttle")
-                               continue
-                            
                             # Queue PIL Image for main thread (main thread will create PhotoImage)
-                            # This is necessary because PhotoImage creation is not thread-safe
+                            # A/V sync timing is handled above - no wall-clock throttling needed here
                             try:
                                 if frames_rendered == 0:
                                     logger.debug("Queueing first PIL Image for main thread PhotoImage conversion")
@@ -621,9 +716,9 @@ class PyAVVideoPlayer(VideoPlayer):
                                     'canvas_height': canvas_height
                                 }, block=False)
                                 
-                                last_canvas_update = now
                                 frames_rendered += 1
-                                logger.info(f"*** FRAME RENDERED: frames_rendered now = {frames_rendered}")
+                                if frames_rendered <= 5 or frames_rendered % 30 == 0:
+                                    logger.info(f"*** FRAME RENDERED: frames_rendered now = {frames_rendered}")
                                 
                                 if frames_rendered == 1:
                                     logger.info("First frame queued for canvas update")
