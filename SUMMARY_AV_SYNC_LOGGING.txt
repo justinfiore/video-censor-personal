@@ -1,0 +1,124 @@
+================================================================================
+                    A/V SYNC LOGGING - IMPLEMENTATION SUMMARY
+================================================================================
+
+OBJECTIVE:
+----------
+Add comprehensive logging to track audio/video drift and enable data-driven
+tuning of A/V synchronization parameters.
+
+CHANGES MADE:
+=============
+
+1. VIDEO PLAYER (pyav_video_player.py)
+   -----------------------------------
+   
+   a) Added drift statistics tracking:
+      - New member: self._drift_samples (rolling buffer of last 100 drift values)
+      - Stores drift measurements in milliseconds
+      - Used to calculate running average
+
+   b) Enhanced render thread A/V sync logging:
+      - Log EVERY frame for first 10 frames
+      - Log EVERY 24th frame after that (≈1 second at 24fps)
+      - ALWAYS log when drift exceeds ±100ms
+      - Each log shows:
+        * Frame number being rendered
+        * Video timestamp (from frame PTS)
+        * Audio timestamp (from audio player)
+        * Current drift in ms (positive = video ahead)
+        * Running average drift over last 100 frames
+
+   c) Log format example:
+      A/V DRIFT: frame#1 video=0.000s audio=0.000s drift=+0.0ms (avg=+0.0ms)
+
+2. AUDIO PLAYER (audio_player.py)
+   ---- ------- ---
+   
+   a) Added periodic position logging:
+      - Logs audio playback position every ~0.5 seconds
+      - Shows sample position and frame count
+      - Helps verify audio stream is advancing correctly
+
+   b) Log format example:
+      Audio position: 1.234s (frame 59232)
+
+3. DOCUMENTATION
+   -------- ------
+   
+   a) AV_SYNC_LOGGING.md
+      - Detailed explanation of all new logging
+      - How to read and interpret drift logs
+      - Diagnostic guide for different scenarios
+      
+   b) TEST_AV_SYNC.md
+      - Step-by-step testing procedure
+      - How to collect baseline data
+      - How to analyze patterns
+      - Performance monitoring
+      
+   c) AV_SYNC_TUNING.md
+      - Tuning guide for different drift scenarios
+      - Parameter adjustment recommendations
+      - Before/after measurement process
+      - Parameter combinations for different use cases
+
+WHAT YOU CAN NOW DO:
+====================
+
+1. MEASURE drift over time
+   → Run video for 30 seconds
+   → Extract logs: grep "A/V DRIFT" logs/*.log
+   → Analyze min/max/avg drift
+   
+2. IDENTIFY the problem
+   → Consistent +50ms = video consistently ahead (tunable)
+   → Growing +100ms = sample rate mismatch (needs fix)
+   → Oscillating ±50ms = frame drops (needs queue size increase)
+   → Stale frame messages = seeking issues (needs investigation)
+
+3. TUNE parameters scientifically
+   → Adjust max_drift_ahead/behind thresholds
+   → Increase frame queue size if oscillating
+   → Switch image resampling if too slow
+   → Resample audio if sample rate mismatches
+
+4. VALIDATE improvements
+   → Collect new logs
+   → Compare statistics
+   → Test with multiple videos
+
+NEXT STEPS:
+===========
+
+1. Run the video player with a test video (30+ seconds)
+   
+2. Collect logs showing drift:
+   tail logs/video_censor_personal.log | grep "A/V DRIFT" | head -30
+   
+3. Look for patterns:
+   - Is drift growing? (yes → sample rate issue)
+   - Is drift oscillating? (yes → queue too small)
+   - Is drift constant? (yes → threshold adjustment)
+   
+4. Choose fix from AV_SYNC_TUNING.md matching your pattern
+   
+5. Make ONE change at a time
+   
+6. Retest and measure improvement
+
+TECHNICAL NOTES:
+================
+
+- Drift measurements use frame PTS (presentation timestamp) for video
+- Audio position from audio player's frame counter and sample rate
+- Positive drift = video ahead of audio (common, can be tuned)
+- Negative drift = audio ahead of video (indicates video too slow)
+- Drift over ±1000ms triggers "stale frame" discard (probably a seek event)
+
+Code locations for manual investigation:
+- Render thread A/V sync: pyav_video_player.py lines 650-685
+- Audio player position: audio_player.py line 267
+- Drift sample collection: pyav_video_player.py line 661
+
+================================================================================
