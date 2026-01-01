@@ -11,6 +11,9 @@ from pathlib import Path
 
 from video_censor_personal.ui.preview_editor import PreviewEditorApp
 
+# Alias for backward compatibility with tests
+DesktopApp = PreviewEditorApp
+
 # Setup logging for main module
 # Get the workspace root (parent of video_censor_personal package)
 workspace_root = Path(__file__).parent.parent.parent

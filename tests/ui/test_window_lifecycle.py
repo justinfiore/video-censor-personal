@@ -157,7 +157,7 @@ class TestWindowLifecycle:
         
         assert width > 0
         assert height > 0
-        assert title == "Video Censor Personal"
+        assert title == "Video Censor Personal - Preview Editor"
         
         # Update again before cleanup
         app.root.update_idletasks()
