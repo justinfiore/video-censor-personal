@@ -2,15 +2,15 @@
 
 ## 1. Profiling & Instrumentation
 
-- [ ] 1.1 Add detailed timing instrumentation at app startup:
+- [x] 1.1 Add detailed timing instrumentation at app startup:
   - JSON file loading time
   - Segment list population time (separate: parsing vs widget creation)
   - Video player initialization time
   - Total UI initialization time
-- [ ] 1.2 Create a `PerformanceProfiler` utility class to log and track timing metrics
+- [x] 1.2 Create a `PerformanceProfiler` utility class to log and track timing metrics
 - [ ] 1.3 Run profiler on small video (15 segments) and large video (206 segments); compare and document bottleneck
 - [ ] 1.4 Analyze logs and identify the longest single operation blocking the main thread
-- [ ] 1.5 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
+- [x] 1.5 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
 
 ## 2. Virtualization of Segment List
 

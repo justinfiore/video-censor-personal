@@ -8,12 +8,14 @@ import os
 import json
 import logging
 from pathlib import Path
+import time
 
 from video_censor_personal.ui.segment_manager import SegmentManager
 from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
 from video_censor_personal.ui.segment_details_pane import SegmentDetailsPaneImpl
 from video_censor_personal.ui.video_player_pane import VideoPlayerPaneImpl
 from video_censor_personal.ui.keyboard_shortcuts import KeyboardShortcutManager
+from video_censor_personal.ui.performance_profiler import PerformanceProfiler
 
 
 # Setup logging
@@ -54,6 +56,10 @@ class PreviewEditorApp:
             title: Window title
             json_file: Optional path to JSON file to load on startup
         """
+        # Initialize performance profiler
+        self.profiler = PerformanceProfiler()
+        self.profiler.start_phase("App Initialization")
+        
         logger.info(f"Initializing PreviewEditorApp with json_file={json_file}")
         
         self.root = ctk.CTk()
@@ -72,6 +78,8 @@ class PreviewEditorApp:
         self._create_layout()
         self._connect_signals()
         self._setup_keyboard_shortcuts()
+        
+        self.profiler.end_phase("App Initialization")
         
         # Auto-load JSON file if provided
         if self.auto_load_json:
@@ -334,7 +342,13 @@ class PreviewEditorApp:
     def _load_json_file(self, json_path: str) -> None:
         """Load JSON file and associated video."""
         try:
+            self.profiler.start_phase("JSON File Loading")
+            
+            # Time JSON loading
+            self.profiler.start_operation("JSON parsing and segment manager load")
             self.segment_manager.load_from_json(json_path)
+            self.profiler.end_operation("JSON parsing and segment manager load")
+            
             self.current_json_path = json_path
             
             if not self.segment_manager.video_file:
@@ -346,6 +360,7 @@ class PreviewEditorApp:
                     json_path=json_path,
                     output_video_path=self.segment_manager.output_video_file
                 )
+                self.profiler.end_phase("JSON File Loading")
                 return
             
             video_path = self.segment_manager.video_file
@@ -375,6 +390,7 @@ class PreviewEditorApp:
                             json_path=json_path,
                             output_video_path=self.segment_manager.output_video_file
                         )
+                        self.profiler.end_phase("JSON File Loading")
                         return
                 else:
                     messagebox.showinfo(
@@ -386,19 +402,34 @@ class PreviewEditorApp:
                         output_video_path=self.segment_manager.output_video_file
                     )
                     segments = self.segment_manager.get_all_segments()
+                    
+                    # Time segment list population
+                    self.profiler.start_operation("Segment list population (no video)")
                     self.segment_list_pane.load_segments(segments)
+                    self.profiler.end_operation("Segment list population (no video)")
+                    
                     if segments:
                         self.segment_list_pane._on_segment_clicked(segments[0].id)
                     self._add_recent_file(json_path)
+                    self.profiler.end_phase("JSON File Loading")
                     return
             
             # Load video
+            self.profiler.start_operation("Video player initialization")
             segments = self.segment_manager.get_all_segments()
             self.video_player_pane.load_video(video_path, segments)
+            self.profiler.end_operation("Video player initialization")
+            
             self.current_video_path = video_path
             
+            # Time segment list population
+            self.profiler.start_operation("Segment list population")
             segments = self.segment_manager.get_all_segments()
+            num_segments = len(segments)
+            logger.info(f"Loading {num_segments} segments")
+            
             self.segment_list_pane.load_segments(segments)
+            self.profiler.end_operation("Segment list population")
             
             if segments:
                 self.segment_list_pane._on_segment_clicked(segments[0].id)
@@ -410,7 +441,14 @@ class PreviewEditorApp:
             )
             self._add_recent_file(json_path)
             
+            self.profiler.end_phase("JSON File Loading")
+            
+            # Log performance summary
+            logger.info(f"Segment count: {num_segments}")
+            self.profiler.print_summary()
+            
         except Exception as e:
+            self.profiler.end_phase("JSON File Loading")
             messagebox.showerror(
                 "Error",
                 f"Failed to load file: {str(e)}"

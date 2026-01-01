@@ -1,6 +1,10 @@
 import customtkinter as ctk
 from typing import Optional, Callable, List, Dict
+import logging
+import time
 from video_censor_personal.ui.segment_manager import Segment
+
+logger = logging.getLogger("video_censor_personal.ui")
 
 
 class SegmentListItem(ctk.CTkFrame):
@@ -142,9 +146,13 @@ class SegmentListPaneImpl(ctk.CTkFrame):
     
     def load_segments(self, segments: List[Segment]) -> None:
         """Load and display segments."""
+        start_time = time.time()
+        logger.debug(f"[PROFILE] load_segments called with {len(segments)} segments")
+        
         self.all_segments = segments
         self.filtered_segments = segments
         
+        # Extract labels
         unique_labels = set()
         for seg in segments:
             unique_labels.update(seg.labels)
@@ -152,14 +160,26 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         label_values = ["All Labels"] + sorted(list(unique_labels))
         self.label_filter.configure(values=label_values)
         
+        # Render segments
         self._render_segments()
+        
+        elapsed = time.time() - start_time
+        logger.debug(f"[PROFILE] load_segments completed in {elapsed:.2f}s")
     
     def _render_segments(self) -> None:
         """Render filtered segments."""
+        start_time = time.time()
+        num_segments = len(self.filtered_segments)
+        
+        # Destroy old items
+        destroy_start = time.time()
         for item in self.segment_items.values():
             item.destroy()
         self.segment_items.clear()
+        destroy_time = time.time() - destroy_start
         
+        # Create new items
+        create_start = time.time()
         for idx, segment in enumerate(self.filtered_segments):
             item = SegmentListItem(
                 self.scrollable_frame,
@@ -168,9 +188,14 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             )
             item.grid(row=idx, column=0, sticky="ew", pady=2, padx=2)
             self.segment_items[segment.id] = item
+        create_time = time.time() - create_start
         
+        # Restore selection
         if self.selected_segment_id and self.selected_segment_id in self.segment_items:
             self.segment_items[self.selected_segment_id].set_selected(True)
+        
+        elapsed = time.time() - start_time
+        logger.debug(f"[PROFILE] _render_segments: {num_segments} items in {elapsed:.2f}s (destroy: {destroy_time:.2f}s, create: {create_time:.2f}s)")
     
     def _on_segment_clicked(self, segment_id: str) -> None:
         """Handle segment click."""
