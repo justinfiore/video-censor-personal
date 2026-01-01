@@ -8,9 +8,16 @@
   - Video player initialization time
   - Total UI initialization time
 - [x] 1.2 Create a `PerformanceProfiler` utility class to log and track timing metrics
-- [ ] 1.3 Run profiler on small video (15 segments) and large video (206 segments); compare and document bottleneck
-- [ ] 1.4 Analyze logs and identify the longest single operation blocking the main thread
-- [x] 1.5 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
+- [ ] 1.3 Add detailed profiling/debug logging around segment list UI creation:
+  - Log time to parse JSON segment data (before widget creation)
+  - Log time to CREATE each individual segment widget (at TRACE level)
+  - Log cumulative time for all widget creation
+  - Log time for frame layout/rendering after all widgets added
+  - Log memory usage before/after segment list population
+  - Add phase-level DEBUG logs: "Segment list: started parsing", "Segment list: widget creation started", "Segment list: X widgets created in Yms", "Segment list: layout complete"
+- [ ] 1.4 Run profiler on small video (15 segments) and large video (206 segments); capture logs and compare bottleneck
+- [ ] 1.5 Analyze logs and identify the longest single operation blocking the main thread
+- [x] 1.6 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
 
 ## 2. Virtualization of Segment List
 
