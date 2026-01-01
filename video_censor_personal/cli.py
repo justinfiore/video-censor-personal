@@ -129,6 +129,16 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--edit",
+        action="store_true",
+        help=(
+            "After analysis completes, automatically launch the preview editor UI "
+            "to review and edit detected segments. "
+            "The editor will open with the output JSON file pre-loaded."
+        ),
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s 0.1.0",

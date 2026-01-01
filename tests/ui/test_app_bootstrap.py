@@ -26,13 +26,13 @@ class TestAppBootstrap:
         assert app.root.winfo_exists()
 
     def test_window_title_is_set_correctly(self, app: DesktopApp) -> None:
-        """Test that window title is set to "Video Censor Personal".
+        """Test that window title is set to "Video Censor Personal - Preview Editor".
         
         Validates that:
         - Window title is correctly initialized
         - Title matches expected default value
         """
-        assert app.root.title() == "Video Censor Personal"
+        assert app.root.title() == "Video Censor Personal - Preview Editor"
 
     def test_window_title_can_be_customized(self) -> None:
         """Test that window title can be customized on initialization.

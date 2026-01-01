@@ -230,6 +230,21 @@ def main() -> int:
                 logger.info(f"Processing complete in {int(minutes)}m {seconds:.1f}s")
             else:
                 logger.info(f"Processing complete in {elapsed_time:.1f}s")
+            
+            # Launch preview editor if requested
+            if args.edit:
+                logger.info(f"Launching preview editor with output file: {args.output}")
+                try:
+                    from video_censor_personal.ui.main import launch_app
+                    # Note: launch_app blocks until the UI closes
+                    launch_app(json_file=args.output)
+                except ImportError:
+                    logger.error("Preview editor UI is not available. Make sure CustomTkinter is installed.")
+                    return 1
+                except Exception as e:
+                    logger.error(f"Failed to launch preview editor: {e}", exc_info=True)
+                    return 1
+            
             return 0
 
         except Exception as e:

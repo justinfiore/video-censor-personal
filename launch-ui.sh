@@ -185,6 +185,9 @@ check_tkinter() {
     fi
 }
 
+# Parse optional JSON file argument
+JSON_FILE="${1:-}"
+
 # Check if virtual environment exists and activate it
 if [ -d "$SCRIPT_DIR/venv" ]; then
     source "$SCRIPT_DIR/venv/bin/activate"
@@ -206,8 +209,26 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "Creating macOS app bundle..."
         bash "$SCRIPT_DIR/create-macos-app.sh"
     fi
+    
+    # Pass JSON file to app bundle if provided
+    if [ -n "$JSON_FILE" ]; then
+        # Convert relative path to absolute
+        if [[ ! "$JSON_FILE" = /* ]]; then
+            JSON_FILE="$(cd "$(dirname "$JSON_FILE")" && pwd)/$(basename "$JSON_FILE")"
+        fi
+        # Set environment variable and open app
+        export VIDEO_CENSOR_JSON_FILE="$JSON_FILE"
+    fi
+    
+    # Open the app bundle (this is asynchronous on macOS)
+    # Any errors will be logged to logs/ui_error.log
     open -a "Video Censor Personal"
+    echo "App launched. Check logs/ui_error.log if the app doesn't appear."
 else
     # On Linux and other platforms, launch directly
-    exec python3 -m video_censor_personal.ui.main
+    if [ -n "$JSON_FILE" ]; then
+        exec python3 -m video_censor_personal.ui.main "$JSON_FILE"
+    else
+        exec python3 -m video_censor_personal.ui.main
+    fi
 fi

@@ -165,62 +165,71 @@
 
 ## 6. JSON File Loading & Persistence
 
-- [ ] 6.1 Implement file loading in SegmentManager
-  - Load JSON from provided path
-  - Validate schema against output-generation spec
-  - Parse all segment fields: start_time, end_time, duration_seconds, labels, description, confidence, detections, allow (optional)
-  - Handle missing `allow` field (default to false)
-  - Error handling: file not found, invalid JSON, schema mismatch
+- [x] 6.1 Implement file loading in SegmentManager
+   - Load JSON from provided path
+   - Validate schema against output-generation spec
+   - Parse all segment fields: start_time, end_time, duration_seconds, labels, description, confidence, detections, allow (optional)
+   - Handle missing `allow` field (default to false)
+   - Error handling: file not found, invalid JSON, schema mismatch
 
-- [ ] 6.2 Implement atomic JSON persistence
-  - Write to temporary file first (same directory as original)
-  - Read current content to preserve any fields changed externally (defensive)
-  - Rename temp file to target (atomic on most filesystems)
-  - Handle errors: disk full, permission denied, path issues
-  - Log warnings if external changes detected (user info)
+- [x] 6.2 Implement atomic JSON persistence
+   - Write to temporary file first (same directory as original)
+   - Read current content to preserve any fields changed externally (defensive)
+   - Rename temp file to target (atomic on most filesystems)
+   - Handle errors: disk full, permission denied, path issues
+   - Log warnings if external changes detected (user info)
 
-- [ ] 6.3 Implement application file open dialog
-  - File menu: "Open Video + JSON" dialog
-  - User selects JSON file
-  - Application infers video path from JSON metadata `file` field
-  - Load both video and segments
-  - Handle missing video file (warn user, allow review-only mode)
+- [x] 6.3 Implement application file open dialog (with UX enhancements)
+   - File menu: "Open Video + JSON" dialog
+   - User selects JSON file
+   - Application infers video path from JSON metadata `file` field
+   - Load both video and segments
+   - **Enhanced**: Allow browsing for video if path in JSON is invalid
+   - **Enhanced**: Show video path in status bar before loading
+   - **Enhanced**: Add recent files menu for quick access
+   - **Enhanced**: Detect and track output video file (`{json_name}-clean.{ext}`)
+   - **Enhanced**: Add output video path to JSON metadata
+   - **Enhanced**: Show output video in status bar when available
 
 - [ ] 6.4 Write integration tests in `tests/ui/test_file_io.py` for file I/O
-   - Load sample JSON, verify all fields parsed correctly
-   - Toggle allow status, verify JSON written correctly
-   - Handle corrupted JSON gracefully
-   - Test with large segment lists (performance)
+    - Load sample JSON, verify all fields parsed correctly
+    - Toggle allow status, verify JSON written correctly
+    - Handle corrupted JSON gracefully
+    - Test with large segment lists (performance)
 
 ## 7. Main Application Integration
 
-- [ ] 7.1 Update DesktopApp to support preview-editor mode
-  - File: `video_censor_personal/ui/main.py`
-  - Refactor: Separate window bootstrap from layout logic
-  - Add mode selection or entry points:
-    - Mode 1: Bootstrap only (existing behavior, for tests)
-    - Mode 2: Preview Editor (new)
-  - Integrate all components (panes, segment manager, video player)
-  - Wire up event signals/callbacks between components
+- [x] 7.1 Update DesktopApp to support preview-editor mode
+   - File: `video_censor_personal/ui/main.py`
+   - **Enhanced**: Made preview editor the default view (removed empty DesktopApp)
+   - **Enhanced**: Added optional `json_file` parameter for auto-loading on startup
+   - Integrated all components (panes, segment manager, video player)
+   - Wired up event signals/callbacks between components
 
-- [ ] 7.2 Create menu bar with File, Actions menus (CustomTkinter-compatible)
-  - Use standard Tkinter Menu widget (CustomTkinter uses native menu system via parent Tk root)
-  - File menu: "Open Video + JSON", "Save JSON" (optional manual save), "Preferences", "Quit"
-  - Actions menu: (placeholder for future features like "Process Video" from ui-full-workflow)
-  - Connect menu items to appropriate handlers
-  - Note: CustomTkinter uses Tkinter's native menu system; styling applied at OS level
+- [x] 7.2 Create menu bar with File, Actions menus (CustomTkinter-compatible)
+   - Used standard Tkinter Menu widget
+   - File menu: "Open Video + JSON", "Recent Files", "Quit"
+   - Help menu: "Keyboard Shortcuts"
+   - Connected menu items to appropriate handlers
+   - Added status bar at bottom showing loaded files
 
-- [ ] 7.3 Implement error dialogs and user feedback (CustomTkinter-based)
-  - Use CTkToplevel for modal dialogs (error, warning, info messages)
-  - Display errors if file loading fails (CTkToplevel with CTkLabel + CTkButton)
-  - Show warning if JSON write fails (CTkToplevel with suggestion to retry)
-  - Show info message on successful segment update (brief notification or CTkLabel in main window)
-  - Log all errors to application log file
-  - Use CustomTkinter styling for dialog buttons and text
+- [x] 7.3 Implement error dialogs and user feedback (CustomTkinter-based)
+   - Used CTkToplevel for keyboard shortcuts help dialog
+   - Display errors if file loading fails (messagebox)
+   - Show warning if JSON file not found at path in metadata
+   - Show info message on review-only mode (when video missing)
+   - Log all errors to application log file
 
-- [ ] 7.4 Update __init__.py to export main entry points
-  - Ensure CLI can invoke UI without knowing internal structure
-  - Keep bootstrap and preview-editor modes available
+- [x] 7.4 Update __init__.py to export main entry points
+   - CLI can invoke UI via `video_censor_personal.ui.main`
+   - Preview editor modes available
+
+- [x] 7.5 Add CLI `--edit` flag (NEW - Beyond original scope)
+   - Added `--edit` flag to CLI parser
+   - After analysis completes, launches preview editor with output JSON pre-loaded
+   - Main entry point (`video_censor_personal.py`) handles launch
+   - File: `video_censor_personal/cli.py`, `video_censor_personal.py`
+   - Allows streamlined workflow: analyze → review/edit segments in UI
 
 ## 8. Testing & Quality
 

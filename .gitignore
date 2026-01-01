@@ -13,3 +13,7 @@ PR_DETAILS.md
 PR_DETAILS.md
 video-censor-remediation-pass.yaml
 video-censor-analysis-pass.yaml
+
+# Logs
+logs/
+crash-report.txt

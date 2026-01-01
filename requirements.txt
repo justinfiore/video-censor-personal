@@ -10,6 +10,12 @@ click>=8.1.0
 # Desktop UI
 customtkinter>=5.0.0
 
+# Video playback (PyAV replaces python-vlc)
+# Note: PyAV package is named 'av' on PyPI
+av>=10.0.0
+pydub>=0.25.1
+sounddevice>=0.5.0
+
 # Video processing (optional, for frame extraction)
 opencv-python>=4.8.0
 
