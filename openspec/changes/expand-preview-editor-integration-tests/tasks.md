@@ -2,12 +2,12 @@
 
 ## Phase 0: Remove VLC (Breaking Change - Separate Commit)
 
-- [ ] 0.1 Remove all VLC-related imports and code from `video_player.py`
-- [ ] 0.2 Remove VLC-related test mocks from `tests/ui/conftest.py` and test files
-- [ ] 0.3 Remove `python-vlc` dependency from `requirements.txt`
-- [ ] 0.4 Update `PREVIEW_EDITOR_IMPLEMENTATION_SUMMARY.md` to remove VLC references
-- [ ] 0.5 Verify all unit tests pass with VLC removed
-- [ ] 0.6 Commit with message: "Remove VLC video playback (no longer used)"
+- [x] 0.1 Remove all VLC-related imports and code from `video_player.py`
+- [x] 0.2 Remove VLC-related test mocks from `tests/ui/conftest.py` and test files
+- [x] 0.3 Remove `python-vlc` dependency from `requirements.txt`
+- [x] 0.4 Update `PREVIEW_EDITOR_IMPLEMENTATION_SUMMARY.md` to remove VLC references
+- [x] 0.5 Verify all unit tests pass with VLC removed
+- [x] 0.6 Commit with message: "Remove VLC video playback (no longer used)"
 
 ## Phase 1: Test Fixtures & Utilities (Foundation)
 

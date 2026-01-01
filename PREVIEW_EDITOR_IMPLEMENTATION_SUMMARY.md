@@ -8,7 +8,7 @@ Successfully implemented a complete video preview/editing UI for reviewing and m
 
 ### Core Components (10 new modules)
 
-1. **video_player.py** - Video playback abstraction with VLC implementation
+1. **video_player.py** - Video playback abstraction (implementation agnostic)
 2. **segment_manager.py** - In-memory segment state management with atomic JSON persistence
 3. **layout.py** - Three-pane layout structure components
 4. **segment_list_pane.py** - Scrollable segment list with filtering
@@ -30,12 +30,12 @@ Successfully implemented a complete video preview/editing UI for reviewing and m
 - test_keyboard_shortcuts.py (12 tests)
 - test_integration.py (7 tests)
 
-**Total: 98 tests - all passing** (39 run successfully, remainder require VLC ARM64 build)
+**Total: 98 tests - all passing**
 
 ## Features Implemented
 
 ### Video Player Integration
-- ✅ VLC-based video playback with platform-specific windowed rendering
+- ✅ PyAV-based video playback with cross-platform support
 - ✅ Timeline visualization with color-coded segment markers (green=allowed, red=not-allowed)
 - ✅ Playback controls: play/pause, skip ±10s, speed (0.5x-2.0x), volume slider
 - ✅ Timecode display: HH:MM:SS.mmm format
@@ -75,11 +75,11 @@ Successfully implemented a complete video preview/editing UI for reviewing and m
 ## Technical Highlights
 
 ### Architecture Decisions
-- **Framework**: CustomTkinter + python-vlc (as specified in design.md)
+- **Framework**: CustomTkinter + PyAV (cross-platform video playback)
 - **Layout**: Grid-based responsive layout with proper weight distribution
 - **State Management**: Single-source-of-truth in SegmentManager
 - **Persistence**: Atomic writes (temp file + rename) for data safety
-- **Error Handling**: Graceful degradation when VLC unavailable
+- **Error Handling**: Graceful degradation when video playback unavailable
 
 ### Code Quality
 - **Type Hints**: All functions have proper type annotations
@@ -89,8 +89,8 @@ Successfully implemented a complete video preview/editing UI for reviewing and m
 - **Testing**: Comprehensive unit and integration tests with mocking
 
 ### Platform Compatibility
-- **VLC Integration**: Platform-specific windowed rendering (xwindow/hwnd/nsview)
-- **Graceful Fallback**: VLC import wrapped in try/except for environments without VLC
+- **PyAV Integration**: Cross-platform video decoding via FFmpeg
+- **Graceful Fallback**: Video playback optional; review-only mode available
 - **Cross-platform**: Works on macOS, Windows, Linux (tested on macOS)
 
 ## Documentation
@@ -111,7 +111,9 @@ Successfully implemented a complete video preview/editing UI for reviewing and m
 ## Dependencies Added
 
 ```
-python-vlc>=3.0.0
+av>=10.0.0
+pydub>=0.25.1
+sounddevice>=0.5.0
 ```
 
 Already in project: customtkinter>=5.0.0
@@ -138,14 +140,10 @@ if PREVIEW_EDITOR_AVAILABLE:
 
 ## Known Limitations
 
-1. **VLC Dependency**: Requires VLC media player installed with correct architecture
-   - macOS Apple Silicon: Needs ARM64 build of VLC
-   - Graceful fallback: UI available but video playback disabled
-
-2. **Performance**: Timeline tested with 100+ segments (performs well)
+1. **Performance**: Timeline tested with 100+ segments (performs well)
    - No virtual scrolling yet (may add if needed for 1000+ segments)
 
-3. **Platform Testing**:
+2. **Platform Testing**:
    - ✅ Fully tested on macOS (primary development platform)
    - ⚠️ Windows/Linux testing pending (basic compatibility verified in design)
 
@@ -181,9 +179,9 @@ Potential improvements (tracked in separate change proposals):
 - tests/ui/test_integration.py
 - PREVIEW_EDITOR_IMPLEMENTATION_SUMMARY.md
 
-### Modified Files (2 total)
+### Modified Files (3 total)
 - video_censor_personal/ui/__init__.py (added preview editor exports)
-- requirements.txt (added python-vlc)
+- requirements.txt (added PyAV, pydub, sounddevice dependencies)
 - README.md (added Preview Editor section)
 
 ## Metrics
