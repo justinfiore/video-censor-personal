@@ -2,6 +2,7 @@
 
 import logging
 import time
+import tracemalloc
 from typing import Dict, Optional
 from pathlib import Path
 
@@ -11,11 +12,21 @@ logger = logging.getLogger("video_censor_personal.ui")
 class PerformanceProfiler:
     """Utility class for detailed performance profiling and timing instrumentation."""
     
-    def __init__(self):
-        """Initialize profiler with empty timings."""
+    def __init__(self, track_memory: bool = False):
+        """Initialize profiler with empty timings.
+        
+        Args:
+            track_memory: Whether to enable memory profiling (requires tracemalloc)
+        """
         self.timings: Dict[str, float] = {}
         self.start_times: Dict[str, float] = {}
         self.phase_start_time: Optional[float] = None
+        self.track_memory = track_memory
+        self.memory_snapshots: Dict[str, tuple] = {}
+        
+        if self.track_memory:
+            tracemalloc.start()
+            logger.debug("[PROFILE] Memory tracking enabled")
     
     def start_phase(self, phase_name: str) -> None:
         """Mark the start of a profiling phase.
@@ -81,6 +92,50 @@ class PerformanceProfiler:
         """
         self.timings[operation_name] = elapsed_seconds
         logger.debug(f"[PROFILE] Operation: {operation_name} ({elapsed_seconds:.3f}s)")
+    
+    def snapshot_memory(self, label: str) -> Optional[tuple]:
+        """Take a memory snapshot at a labeled point.
+        
+        Args:
+            label: Label for this memory snapshot
+            
+        Returns:
+            Memory snapshot tuple or None if memory tracking disabled
+        """
+        if not self.track_memory:
+            return None
+        
+        snapshot = tracemalloc.take_snapshot()
+        self.memory_snapshots[label] = snapshot
+        
+        current_size, peak_size = tracemalloc.get_traced_memory()
+        logger.debug(f"[PROFILE] Memory ({label}): current {current_size / 1024 / 1024:.1f}MB, peak {peak_size / 1024 / 1024:.1f}MB")
+        
+        return snapshot
+    
+    def get_memory_diff(self, before_label: str, after_label: str, top_n: int = 5) -> None:
+        """Log memory difference between two snapshots.
+        
+        Args:
+            before_label: Label of earlier snapshot
+            after_label: Label of later snapshot
+            top_n: Number of top allocations to show
+        """
+        if not self.track_memory:
+            return
+        
+        if before_label not in self.memory_snapshots or after_label not in self.memory_snapshots:
+            logger.warning(f"[PROFILE] Memory diff: missing snapshot ({before_label} or {after_label})")
+            return
+        
+        before = self.memory_snapshots[before_label]
+        after = self.memory_snapshots[after_label]
+        
+        top_stats = after.compare_to(before, 'lineno')
+        
+        logger.debug(f"[PROFILE] Memory diff ({before_label} -> {after_label}), top {top_n}:")
+        for stat in top_stats[:top_n]:
+            logger.debug(f"[PROFILE] {stat}")
     
     def get_timing(self, operation_name: str) -> Optional[float]:
         """Get recorded timing for an operation.

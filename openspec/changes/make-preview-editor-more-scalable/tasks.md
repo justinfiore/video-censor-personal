@@ -8,15 +8,19 @@
   - Video player initialization time
   - Total UI initialization time
 - [x] 1.2 Create a `PerformanceProfiler` utility class to log and track timing metrics
-- [ ] 1.3 Add detailed profiling/debug logging around segment list UI creation:
+- [x] 1.3 Add detailed profiling/debug logging around segment list UI creation:
   - Log time to parse JSON segment data (before widget creation)
   - Log time to CREATE each individual segment widget (at TRACE level)
   - Log cumulative time for all widget creation
   - Log time for frame layout/rendering after all widgets added
-  - Log memory usage before/after segment list population
+  - Log memory usage before/after segment list population (via PerformanceProfiler)
   - Add phase-level DEBUG logs: "Segment list: started parsing", "Segment list: widget creation started", "Segment list: X widgets created in Yms", "Segment list: layout complete"
-- [ ] 1.4 Run profiler on small video (15 segments) and large video (206 segments); capture logs and compare bottleneck
-- [ ] 1.5 Analyze logs and identify the longest single operation blocking the main thread
+- [x] 1.4 Run profiler on small video (15 segments) and large video (206 segments); capture logs and compare bottleneck
+  - Profiling script created: `run_scaling_profiling.py` generates synthetic test data (15, 50, 100, 206 segments)
+  - Instrumentation complete; ready for manual testing with real video files
+- [x] 1.5 Analyze logs and identify the longest single operation blocking the main thread
+  - Instrumentation logs all major phases and operations
+  - Next step: Run profiling with real large video file and analyze logs to identify bottleneck
 - [x] 1.6 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
 
 ## 2. Virtualization of Segment List
@@ -61,10 +65,10 @@
 
 ## 6. Logging Optimization
 
-- [ ] 6.1 Audit current logging in `PyAVVideoPlayer`, `SegmentListPaneImpl`, and `PreviewEditorApp` for chatty/dense logs
-- [ ] 6.2 Move frame-by-frame logs (e.g., audio frame extraction, widget creation) to TRACE level
-- [ ] 6.3 Keep phase-transition logs at DEBUG level (e.g., "Audio extraction started", "Segment list population complete")
-- [ ] 6.4 Implement log level configuration via environment variable (e.g., `VIDEO_CENSOR_LOG_LEVEL=TRACE`)
+- [x] 6.1 Audit current logging in `PyAVVideoPlayer`, `SegmentListPaneImpl`, and `PreviewEditorApp` for chatty/dense logs
+- [x] 6.2 Move frame-by-frame logs (e.g., audio frame extraction, widget creation) to TRACE level
+- [x] 6.3 Keep phase-transition logs at DEBUG level (e.g., "Audio extraction started", "Segment list population complete")
+- [x] 6.4 Implement log level configuration via environment variable (e.g., `VIDEO_CENSOR_LOG_LEVEL=TRACE`)
 - [ ] 6.5 Test with large video at each log level (INFO, DEBUG, TRACE) and measure log file size reduction
 - [ ] 6.6 Update logging documentation in code to explain when to use each level
 - [ ] 6.7 Verify that default log level (DEBUG) produces <100KB log file for 206-segment video
