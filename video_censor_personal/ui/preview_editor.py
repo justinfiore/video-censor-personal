@@ -35,7 +35,16 @@ def _setup_ui_logging() -> None:
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
+        
+        # Support log level configuration via environment variable
+        log_level_env = os.getenv("VIDEO_CENSOR_LOG_LEVEL", "DEBUG").upper()
+        if log_level_env == "TRACE":
+            # TRACE is level 5 (below DEBUG which is 10)
+            logging.addLevelName(5, "TRACE")
+            logger.setLevel(5)
+        else:
+            log_level = getattr(logging, log_level_env, logging.DEBUG)
+            logger.setLevel(log_level)
     
     return logger
 

@@ -942,6 +942,7 @@ class PyAVVideoPlayer(VideoPlayer):
         if self._audio_stream is None or self._audio_player is not None:
             return
         
+        overall_start = time.time()
         logger.info("Initializing audio player (background thread)")
         self._audio_player = SimpleAudioPlayer()
         
@@ -952,6 +953,7 @@ class PyAVVideoPlayer(VideoPlayer):
         
         logger.info(f"Extracting audio: {sample_rate}Hz, {channels} channels")
         
+        extraction_start = time.time()
         try:
             frame_count = 0
             for frame in self._container.decode(self._audio_stream):
@@ -961,9 +963,9 @@ class PyAVVideoPlayer(VideoPlayer):
                     array = frame.to_ndarray()
                     
                     frame_count += 1
-                    # Only log occasionally to avoid spam (every 50 frames)
-                    if frame_count % 50 == 0:
-                        logger.debug(f"Audio frame #{frame_count}: shape={array.shape}, dtype={array.dtype}")
+                    # Only log at TRACE level to avoid spam (was every 50 frames at DEBUG)
+                    if frame_count % 100 == 0:
+                        logger.log(5, f"[PROFILE] Audio frame #{frame_count}: shape={array.shape}, dtype={array.dtype}")
                     
                     # Ensure int16 format
                     if array.dtype != np.int16:
@@ -982,17 +984,19 @@ class PyAVVideoPlayer(VideoPlayer):
             self._audio_player = None
             return
         
+        extraction_time = time.time() - extraction_start
+        logger.debug(f"[PROFILE] Audio extraction: {frame_count} frames decoded in {extraction_time:.2f}s")
+        
         if not audio_frames_list:
             logger.warning("No audio frames decoded")
             self._audio_player = None
             return
         
         try:
-            logger.info(f"Audio extraction complete: {frame_count} frames decoded")
-            
             # PyAV returns frames with shape (channels, frame_size)
             # We need to concatenate along axis 1 (the frame_size axis) to get (channels, total_samples)
-            logger.info("Concatenating audio frames...")
+            concat_start = time.time()
+            logger.debug("[PROFILE] Audio: concatenating frames...")
             if len(audio_frames_list) > 0 and audio_frames_list[0].ndim == 2:
                 # Multichannel: concatenate along the samples axis (axis 1)
                 audio_data = np.concatenate(audio_frames_list, axis=1)
@@ -1002,13 +1006,18 @@ class PyAVVideoPlayer(VideoPlayer):
                 # Mono: concatenate along axis 0
                 audio_data = np.concatenate(audio_frames_list, axis=0)
             
-            logger.info(f"Audio concatenated: shape={audio_data.shape}, dtype={audio_data.dtype}")
-            logger.info(f"Loaded {audio_data.shape[0]} audio samples")
+            concat_time = time.time() - concat_start
+            logger.debug(f"[PROFILE] Audio: frames concatenated in {concat_time:.2f}s, shape={audio_data.shape}, dtype={audio_data.dtype}")
             
             # Load into audio player
-            logger.info("Loading audio data into player...")
+            load_start = time.time()
+            logger.debug("[PROFILE] Audio: loading into player...")
             self._audio_player.load_audio_data(audio_data, sample_rate, channels)
-            logger.info("Audio player initialized successfully")
+            load_time = time.time() - load_start
+            logger.debug(f"[PROFILE] Audio: loaded into player in {load_time:.2f}s")
+            
+            overall_time = time.time() - overall_start
+            logger.debug(f"[PROFILE] Audio player initialization complete in {overall_time:.2f}s")
         
         except Exception as e:
             logger.error(f"Error loading audio data: {e}")
