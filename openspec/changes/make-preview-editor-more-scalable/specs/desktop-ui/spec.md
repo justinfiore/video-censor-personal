@@ -16,21 +16,33 @@ The preview editor SHALL initialize and display the UI responsively regardless o
 - **WHEN** user launches the preview editor with a video containing 500+ segments
 - **THEN** the preview editor handles the load gracefully, displaying UI quickly and populating the segment list without blocking the main thread
 
-### Requirement: Segment List Rendering Performance
+### Requirement: Segment List Paging
 
-The segment list SHALL render efficiently and support large numbers of segments without performance degradation.
+The segment list SHALL use a paging-based approach to efficiently display large numbers of segments without performance degradation.
 
-#### Scenario: Scrolling through large segment list is smooth
-- **WHEN** user scrolls through a segment list with 200+ segments
-- **THEN** scrolling is smooth with no lag, visible items render quickly, and selection/navigation remains responsive
+#### Scenario: Segment list displays one page at a time
+- **WHEN** user views a segment list with 200+ segments
+- **THEN** only a configurable number of segments per page (e.g., 20-50) are rendered at once, with paging controls to navigate between pages
 
-#### Scenario: Segment selection works at any position in large list
-- **WHEN** user selects a segment near the beginning, middle, or end of a 200+ segment list
+#### Scenario: Paging controls are easy to use
+- **WHEN** user wants to navigate between pages of segments
+- **THEN** intuitive paging controls are available (Previous/Next buttons, page number display, optional direct page jump), and navigation is instant with no lag
+
+#### Scenario: Current page auto-updates during playback
+- **WHEN** video is playing and the current timecode moves to a segment on a different page
+- **THEN** the segment list automatically navigates to the page containing the currently playing segment, keeping the active segment visible
+
+#### Scenario: Segment selection works across pages
+- **WHEN** user selects a segment on any page
 - **THEN** the segment is selected, highlighted, and the video player seeks to the correct timestamp without delay
+
+#### Scenario: Filters apply across all pages
+- **WHEN** user applies filters (e.g., show only "disallowed" segments)
+- **THEN** only segments matching the filter criteria are shown, pagination is recalculated based on filtered results, and page navigation works correctly within filtered set
 
 #### Scenario: Memory usage remains reasonable with large videos
 - **WHEN** preview editor is open with a 1.5-hour video (200+ segments)
-- **THEN** memory usage remains under 2GB (no memory leaks or unbounded growth)
+- **THEN** memory usage remains under 2GB (only current page widgets are rendered, not all 200+ segments)
 
 ### Requirement: Audio Loading and Playback
 
