@@ -23,19 +23,22 @@
   - Next step: Run profiling with real large video file and analyze logs to identify bottleneck
 - [x] 1.6 Document findings in a `SCALING_ANALYSIS.md` file with specific timings and recommendations
 
-## 2. Virtualization of Segment List
+## 2. Paging of Segment List
 
 - [ ] 2.1 Study existing `SegmentListPaneImpl` implementation in `segment_list_pane.py` and understand current layout
-- [ ] 2.2 Design a virtual list container using CustomTkinter Canvas (mock it out in comments/pseudocode first)
-- [ ] 2.3 Refactor `SegmentListPaneImpl` to use Canvas-based scrolling with visible-items-only rendering
-- [ ] 2.4 Implement dynamic widget creation/destruction on scroll events (render items on viewport + buffer zone)
-- [ ] 2.5 Ensure selection tracking works across scroll (highlight current segment even when off-screen initially)
-- [ ] 2.6 Test virtualization with both small and large videos; verify no visual regressions
-- [ ] 2.7 Measure and document performance improvement (target: ~75% reduction in widget creation time)
+- [ ] 2.2 Design paging UI components: Previous/Next buttons, page indicator (e.g., "Page 3 of 10"), optional page size selector
+- [ ] 2.3 Refactor `SegmentListPaneImpl` to store all segment data but only render widgets for the current page
+- [ ] 2.4 Implement `go_to_page(page_number)` method that clears current widgets and renders new page
+- [ ] 2.5 Add auto-navigation during playback: when timecode changes, calculate which page contains the active segment and navigate if needed
+- [ ] 2.6 Integrate with filters: when filters are applied, recalculate filtered segment list and reset pagination to page 1
+- [ ] 2.7 Ensure selection tracking works across pages (highlight current segment, navigate to its page if needed)
+- [ ] 2.8 Add keyboard shortcuts for paging (e.g., Page Up/Page Down keys)
+- [ ] 2.9 Test paging with both small and large videos; verify no visual regressions
+- [ ] 2.10 Measure and document performance improvement (target: ~75% reduction in widget creation time)
 
 ## 3. Background Threading (If Needed)
 
-- [ ] 3.1 Assess if virtualization alone meets performance target; only proceed if still slow after 2.7
+- [ ] 3.1 Assess if paging alone meets performance target; only proceed if still slow after 2.10
 - [ ] 3.2 If proceeding: Create a `SegmentLoaderThread` class to handle JSON parsing and segment list population in background
 - [ ] 3.3 Implement queue-based communication between loader thread and main UI thread (use `queue.Queue`)
 - [ ] 3.4 Add a "Loading segments..." spinner/progress indicator while background thread works
