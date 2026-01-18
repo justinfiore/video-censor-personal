@@ -11,6 +11,7 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         
         self.current_segment: Optional[Segment] = None
         self.allow_toggle_callback: Optional[Callable[[str, bool], None]] = None
+        self.reviewed_toggle_callback: Optional[Callable[[str, bool], None]] = None
         
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -108,13 +109,24 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         self.description_label.grid(row=row, column=1, sticky="w", padx=10, pady=5)
         row += 1
         
+        checkbox_frame = ctk.CTkFrame(self.details_container, fg_color="transparent")
+        checkbox_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=15)
+        
         self.allow_checkbox = ctk.CTkCheckBox(
-            self.details_container,
+            checkbox_frame,
             text="Allow this segment",
             font=("Arial", 12, "bold"),
             command=self._on_allow_toggled
         )
-        self.allow_checkbox.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=15)
+        self.allow_checkbox.grid(row=0, column=0, sticky="w", padx=(0, 20))
+        
+        self.reviewed_checkbox = ctk.CTkCheckBox(
+            checkbox_frame,
+            text="Reviewed",
+            font=("Arial", 12, "bold"),
+            command=self._on_reviewed_toggled
+        )
+        self.reviewed_checkbox.grid(row=0, column=1, sticky="w")
         row += 1
         
         self.save_status_label = ctk.CTkLabel(
@@ -148,6 +160,10 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         """Set callback for allow toggle events."""
         self.allow_toggle_callback = callback
     
+    def set_reviewed_toggle_callback(self, callback: Callable[[str, bool], None]) -> None:
+        """Set callback for reviewed toggle events."""
+        self.reviewed_toggle_callback = callback
+    
     def display_segment(self, segment: Segment) -> None:
         """Display segment details."""
         self.current_segment = segment
@@ -173,6 +189,11 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             self.allow_checkbox.select()
         else:
             self.allow_checkbox.deselect()
+        
+        if segment.reviewed:
+            self.reviewed_checkbox.select()
+        else:
+            self.reviewed_checkbox.deselect()
         
         self._update_detections_display()
     
@@ -212,6 +233,31 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
                     self.allow_checkbox.select()
         
         self.allow_checkbox.configure(state="normal")
+    
+    def _on_reviewed_toggled(self) -> None:
+        """Handle reviewed checkbox toggle."""
+        if self.current_segment is None:
+            return
+        
+        new_reviewed_state = self.reviewed_checkbox.get() == 1
+        
+        self.reviewed_checkbox.configure(state="disabled")
+        
+        if self.reviewed_toggle_callback:
+            try:
+                self.reviewed_toggle_callback(self.current_segment.id, new_reviewed_state)
+            except Exception as e:
+                self.save_status_label.configure(
+                    text=f"✗ Error: {str(e)}",
+                    text_color="red"
+                )
+                
+                if new_reviewed_state:
+                    self.reviewed_checkbox.deselect()
+                else:
+                    self.reviewed_checkbox.select()
+        
+        self.reviewed_checkbox.configure(state="normal")
     
     def _toggle_detections(self) -> None:
         """Toggle detections section visibility."""
@@ -283,3 +329,10 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             self.allow_checkbox.select()
         else:
             self.allow_checkbox.deselect()
+    
+    def update_reviewed_status(self, reviewed: bool) -> None:
+        """Update reviewed checkbox without triggering callback."""
+        if reviewed:
+            self.reviewed_checkbox.select()
+        else:
+            self.reviewed_checkbox.deselect()

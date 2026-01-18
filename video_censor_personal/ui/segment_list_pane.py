@@ -204,6 +204,42 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         )
         self.allow_filter.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 5))
         
+        self.review_filter_var = ctk.StringVar(value="All Review Status")
+        self.review_filter = ctk.CTkComboBox(
+            self.filter_frame,
+            variable=self.review_filter_var,
+            values=["All Review Status", "Reviewed", "Unreviewed"],
+            command=self._on_filter_changed,
+            state="readonly"
+        )
+        self.review_filter.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 5))
+        
+        # Bulk action buttons
+        bulk_action_frame = ctk.CTkFrame(self.filter_frame, fg_color="transparent")
+        bulk_action_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=(5, 5))
+        bulk_action_frame.grid_columnconfigure(0, weight=1)
+        bulk_action_frame.grid_columnconfigure(1, weight=1)
+        
+        self.mark_reviewed_btn = ctk.CTkButton(
+            bulk_action_frame,
+            text="Mark All Reviewed",
+            command=self._on_mark_all_reviewed,
+            height=28,
+            font=("Arial", 10)
+        )
+        self.mark_reviewed_btn.grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        
+        self.mark_unreviewed_btn = ctk.CTkButton(
+            bulk_action_frame,
+            text="Mark All Unreviewed",
+            command=self._on_mark_all_unreviewed,
+            height=28,
+            font=("Arial", 10)
+        )
+        self.mark_unreviewed_btn.grid(row=0, column=1, sticky="ew", padx=(2, 0))
+        
+        self.bulk_action_callback: Optional[Callable[[List[str], bool], None]] = None
+        
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.scrollable_frame.grid_columnconfigure(0, weight=1)
@@ -310,6 +346,36 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         """Set callback for segment click events."""
         self.segment_click_callback = callback
     
+    def set_bulk_reviewed_callback(self, callback: Callable[[List[str], bool], None]) -> None:
+        """Set callback for bulk reviewed status changes.
+        
+        Args:
+            callback: Function called with (segment_ids, reviewed_status)
+        """
+        self.bulk_action_callback = callback
+    
+    def _on_mark_all_reviewed(self) -> None:
+        """Handle Mark All Reviewed button click."""
+        if not self.filtered_segments:
+            return
+        segment_ids = [seg.id for seg in self.filtered_segments]
+        if self.bulk_action_callback:
+            self.bulk_action_callback(segment_ids, True)
+        # Update local segment state
+        for seg in self.filtered_segments:
+            seg.reviewed = True
+    
+    def _on_mark_all_unreviewed(self) -> None:
+        """Handle Mark All Unreviewed button click."""
+        if not self.filtered_segments:
+            return
+        segment_ids = [seg.id for seg in self.filtered_segments]
+        if self.bulk_action_callback:
+            self.bulk_action_callback(segment_ids, False)
+        # Update local segment state
+        for seg in self.filtered_segments:
+            seg.reviewed = False
+    
     def load_segments(self, segments: List[Segment]) -> None:
         """Load and display segments."""
         start_time = time.time()
@@ -402,6 +468,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         """Handle filter change."""
         label_filter = self.label_filter_var.get()
         allow_filter = self.allow_filter_var.get()
+        review_filter = self.review_filter_var.get()
         
         self.filtered_segments = self.all_segments
         
@@ -415,6 +482,11 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             self.filtered_segments = [seg for seg in self.filtered_segments if seg.allow]
         elif allow_filter == "Not Allowed Only":
             self.filtered_segments = [seg for seg in self.filtered_segments if not seg.allow]
+        
+        if review_filter == "Reviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if seg.reviewed]
+        elif review_filter == "Unreviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if not seg.reviewed]
         
         self.current_page = 0
         self._render_current_page()

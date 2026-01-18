@@ -121,6 +121,9 @@ def test_segment_list_item_set_selected():
             item.segment = segment
             item.is_selected = False
             item.configure = Mock()
+            item.index_label = Mock()
+            item.time_label = Mock()
+            item.labels_label = Mock()
             
             item.set_selected(True)
             assert item.is_selected is True
@@ -198,12 +201,14 @@ def test_segment_list_pane_filter_by_label(sample_segments):
                     pane.selected_segment_id = None
                     pane.label_filter_var = Mock()
                     pane.allow_filter_var = Mock()
+                    pane.review_filter_var = Mock()
                     pane.page_size = DEFAULT_PAGE_SIZE
                     pane.current_page = 0
                     pane._render_current_page = Mock()
                     
                     pane.label_filter_var.get.return_value = "Profanity"
                     pane.allow_filter_var.get.return_value = "All Segments"
+                    pane.review_filter_var.get.return_value = "All Review Status"
                     
                     pane._on_filter_changed()
                     
@@ -226,12 +231,14 @@ def test_segment_list_pane_filter_by_allow_status(sample_segments):
                     pane.selected_segment_id = None
                     pane.label_filter_var = Mock()
                     pane.allow_filter_var = Mock()
+                    pane.review_filter_var = Mock()
                     pane.page_size = DEFAULT_PAGE_SIZE
                     pane.current_page = 0
                     pane._render_current_page = Mock()
                     
                     pane.label_filter_var.get.return_value = "All Labels"
                     pane.allow_filter_var.get.return_value = "Allowed Only"
+                    pane.review_filter_var.get.return_value = "All Review Status"
                     
                     pane._on_filter_changed()
                     

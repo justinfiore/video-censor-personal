@@ -338,6 +338,7 @@ class TestCrossComponentSynchronization:
         # Toggle and save
         manager.toggle_allow("0")
         manager.save_to_json()
+        manager.flush_sync()  # Ensure immediate write (async queue is debounced)
         
         # Verify in file
         with open(workspace["valid_full"], "r", encoding="utf-8") as f:
@@ -476,6 +477,7 @@ class TestStateConsistencyAndEdgeCases:
         initial_state = manager.segments[0].allow
         manager.toggle_allow("0")
         manager.save_to_json()
+        manager.flush_sync()  # Ensure immediate write (async queue is debounced)
         
         # Reload
         manager2 = SegmentManager()
@@ -921,6 +923,7 @@ def test_integration_load_and_toggle(sample_json_with_video):
     assert manager.segments[0].allow is True
     
     manager.save_to_json()
+    manager.flush_sync()  # Ensure immediate write (async queue is debounced)
     
     with open(sample_json_with_video, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -1035,6 +1038,7 @@ def test_integration_batch_allow_update(sample_json_with_video):
         assert manager.segments[2].allow is False
         
         manager.save_to_json()
+        manager.flush_sync()  # Ensure immediate write (async queue is debounced)
         
         with open(temp_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -1080,6 +1084,7 @@ def test_integration_large_segment_list():
             manager.toggle_allow(str(i))
         
         manager.save_to_json()
+        manager.flush_sync()  # Ensure immediate write (async queue is debounced)
         
         with open(temp_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -1120,6 +1125,7 @@ def test_integration_preserve_external_fields():
         
         manager.toggle_allow("0")
         manager.save_to_json()
+        manager.flush_sync()  # Ensure immediate write (async queue is debounced)
         
         with open(temp_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
