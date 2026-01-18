@@ -15,6 +15,8 @@ class KeyboardShortcutHandler:
         'A': 'toggle_allow',
         '<Return>': 'jump_to_segment',
         '<KP_Enter>': 'jump_to_segment',
+        '<Prior>': 'page_up',
+        '<Next>': 'page_down',
     }
     
     def __init__(self, root_widget: tk.Widget):
@@ -76,6 +78,8 @@ Space       - Play/Pause video
 ↓ (Down)    - Next segment
 A           - Toggle allow status on selected segment
 Enter       - Jump to selected segment start time
+Page Up     - Previous page of segments
+Page Down   - Next page of segments
 """
 
 
@@ -91,6 +95,8 @@ class KeyboardShortcutManager:
         self.next_segment_callback: Optional[Callable[[], None]] = None
         self.toggle_allow_callback: Optional[Callable[[], None]] = None
         self.jump_to_segment_callback: Optional[Callable[[], None]] = None
+        self.page_up_callback: Optional[Callable[[], None]] = None
+        self.page_down_callback: Optional[Callable[[], None]] = None
     
     def initialize(self, root_widget: tk.Widget) -> None:
         """Initialize keyboard shortcuts.
@@ -113,6 +119,8 @@ class KeyboardShortcutManager:
         self.handler.register_action('next_segment', self._on_next_segment)
         self.handler.register_action('toggle_allow', self._on_toggle_allow)
         self.handler.register_action('jump_to_segment', self._on_jump_to_segment)
+        self.handler.register_action('page_up', self._on_page_up)
+        self.handler.register_action('page_down', self._on_page_down)
     
     def _on_play_pause(self) -> None:
         """Handle play/pause action."""
@@ -149,6 +157,16 @@ class KeyboardShortcutManager:
         if self.jump_to_segment_callback:
             self.jump_to_segment_callback()
     
+    def _on_page_up(self) -> None:
+        """Handle page up action."""
+        if self.page_up_callback:
+            self.page_up_callback()
+    
+    def _on_page_down(self) -> None:
+        """Handle page down action."""
+        if self.page_down_callback:
+            self.page_down_callback()
+    
     def set_play_pause_callback(self, callback: Callable[[], None]) -> None:
         """Set play/pause callback."""
         self.play_pause_callback = callback
@@ -176,3 +194,11 @@ class KeyboardShortcutManager:
     def set_jump_to_segment_callback(self, callback: Callable[[], None]) -> None:
         """Set jump to segment callback."""
         self.jump_to_segment_callback = callback
+    
+    def set_page_up_callback(self, callback: Callable[[], None]) -> None:
+        """Set page up callback."""
+        self.page_up_callback = callback
+    
+    def set_page_down_callback(self, callback: Callable[[], None]) -> None:
+        """Set page down callback."""
+        self.page_down_callback = callback

@@ -139,9 +139,18 @@ class PyAVVideoPlayer(VideoPlayer):
             
             logger.info(f"Video loaded: duration={self._duration:.2f}s")
             
-            # Audio decoding is deferred until after first frame is rendered
-            # This prevents the main thread from being blocked by audio extraction
-            # Audio will be initialized when play() is called or when render_first_frame() completes
+            # Audio Loading Optimization:
+            # --------------------------
+            # Audio extraction is deferred to avoid blocking the main thread during video load.
+            # For large videos (1+ hours), audio extraction can take 5+ seconds.
+            # 
+            # Strategy:
+            # 1. On load(): Only detect audio stream presence, don't extract
+            # 2. On render_first_frame(): Schedule audio extraction on background thread
+            # 3. On play(): If audio not ready, extract synchronously (fallback)
+            #
+            # This allows the UI to remain responsive - user sees first frame immediately
+            # while audio extraction happens in background. See _initialize_audio_player().
             
         except Exception as e:
             logger.error(f"Failed to load video: {e}")
