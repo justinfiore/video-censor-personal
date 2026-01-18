@@ -306,10 +306,12 @@ class TestFilterPaginationInteraction:
                         pane.current_page = 3
                         pane.label_filter_var = Mock()
                         pane.allow_filter_var = Mock()
+                        pane.review_filter_var = Mock()
                         pane._render_current_page = Mock()
                         
                         pane.label_filter_var.get.return_value = "Violence"
                         pane.allow_filter_var.get.return_value = "All Segments"
+                        pane.review_filter_var.get.return_value = "All Review Status"
                         
                         pane._on_filter_changed()
                         

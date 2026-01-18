@@ -279,6 +279,7 @@ def test_segment_manager_save_to_json(temp_json_file):
     manager.toggle_allow("1")
     
     manager.save_to_json()
+    manager.flush_sync()  # Ensure immediate write (async queue is debounced)
     
     with open(temp_json_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -349,6 +350,7 @@ def test_segment_manager_atomic_save(temp_json_file):
     
     manager.toggle_allow("0")
     manager.save_to_json()
+    manager.flush_sync()  # Ensure immediate write (async queue is debounced)
     
     new_mtime = os.path.getmtime(temp_json_file)
     assert new_mtime > original_mtime
@@ -359,3 +361,168 @@ def test_segment_manager_atomic_save(temp_json_file):
     assert 'segments' in data
     assert 'file' in data
     assert data['segments'][0]['allow'] is True
+
+
+def test_segment_reviewed_field_default():
+    """Test that reviewed field defaults to False."""
+    segment = Segment(
+        id="0",
+        start_time=0.0,
+        end_time=5.0,
+        duration_seconds=5.0,
+        labels=["Test"],
+        description="Test segment",
+        confidence=0.9,
+        detections=[]
+    )
+    assert segment.reviewed is False
+
+
+def test_segment_reviewed_field_from_dict():
+    """Test parsing reviewed field from dict."""
+    data_with_reviewed = {
+        "start_time": 10.0,
+        "end_time": 15.0,
+        "duration_seconds": 5.0,
+        "labels": ["Test"],
+        "description": "Test",
+        "confidence": 0.9,
+        "detections": [],
+        "reviewed": True
+    }
+    segment = Segment.from_dict(data_with_reviewed, "0")
+    assert segment.reviewed is True
+    
+    # Test default when not present
+    data_without_reviewed = {
+        "start_time": 10.0,
+        "end_time": 15.0,
+        "duration_seconds": 5.0,
+        "labels": ["Test"],
+        "description": "Test",
+        "confidence": 0.9,
+        "detections": []
+    }
+    segment2 = Segment.from_dict(data_without_reviewed, "1")
+    assert segment2.reviewed is False
+
+
+def test_segment_reviewed_field_to_dict():
+    """Test that reviewed field is serialized to dict."""
+    segment = Segment(
+        id="0",
+        start_time=0.0,
+        end_time=5.0,
+        duration_seconds=5.0,
+        labels=["Test"],
+        description="Test segment",
+        confidence=0.9,
+        detections=[],
+        reviewed=True
+    )
+    data = segment.to_dict()
+    assert 'reviewed' in data
+    assert data['reviewed'] is True
+
+
+def test_segment_manager_set_reviewed(temp_json_file):
+    """Test setting reviewed status for a segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    assert manager.segments[0].reviewed is False
+    
+    manager.set_reviewed("0", True)
+    assert manager.segments[0].reviewed is True
+    
+    manager.set_reviewed("0", False)
+    assert manager.segments[0].reviewed is False
+
+
+def test_segment_manager_batch_set_reviewed(temp_json_file):
+    """Test batch setting reviewed status."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    count = manager.batch_set_reviewed(["0", "1"], True)
+    assert count == 2
+    assert manager.segments[0].reviewed is True
+    assert manager.segments[1].reviewed is True
+
+
+def test_async_write_queue_debouncing():
+    """Test that AsyncWriteQueue debounces writes."""
+    from video_censor_personal.ui.segment_manager import AsyncWriteQueue
+    import time
+    
+    write_count = [0]
+    
+    def mock_write():
+        write_count[0] += 1
+    
+    queue = AsyncWriteQueue(mock_write, debounce_seconds=0.1)
+    
+    # Mark dirty multiple times quickly
+    queue.mark_dirty()
+    queue.mark_dirty()
+    queue.mark_dirty()
+    
+    # Should be dirty
+    assert queue.is_dirty() is True
+    
+    # Wait for debounce
+    time.sleep(0.2)
+    
+    # Should have only one write
+    assert write_count[0] == 1
+    assert queue.is_dirty() is False
+    
+    queue.cleanup()
+
+
+def test_async_write_queue_flush_sync():
+    """Test synchronous flush."""
+    from video_censor_personal.ui.segment_manager import AsyncWriteQueue
+    
+    write_count = [0]
+    
+    def mock_write():
+        write_count[0] += 1
+    
+    queue = AsyncWriteQueue(mock_write, debounce_seconds=5.0)  # Long debounce
+    
+    queue.mark_dirty()
+    assert queue.is_dirty() is True
+    
+    # Flush synchronously
+    result = queue.flush_sync()
+    assert result is True
+    assert queue.is_dirty() is False
+    assert write_count[0] == 1
+    
+    queue.cleanup()
+
+
+def test_async_write_queue_status_callback():
+    """Test status callback is invoked correctly."""
+    from video_censor_personal.ui.segment_manager import AsyncWriteQueue
+    import time
+    
+    status_changes = []
+    
+    def mock_write():
+        pass
+    
+    def status_callback(is_dirty):
+        status_changes.append(is_dirty)
+    
+    queue = AsyncWriteQueue(mock_write, debounce_seconds=0.1)
+    queue.set_status_callback(status_callback)
+    
+    queue.mark_dirty()
+    assert True in status_changes
+    
+    time.sleep(0.2)
+    assert False in status_changes
+    
+    queue.cleanup()

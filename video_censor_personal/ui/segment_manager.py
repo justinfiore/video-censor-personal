@@ -1,8 +1,10 @@
 import json
 import os
 import tempfile
+import threading
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional
+from threading import Timer, Lock
+from typing import List, Dict, Any, Optional, Callable
 
 
 @dataclass
@@ -53,6 +55,7 @@ class Segment:
     confidence: float
     detections: List[Detection]
     allow: bool = False
+    reviewed: bool = False
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any], segment_id: str) -> 'Segment':
@@ -75,7 +78,8 @@ class Segment:
             description=data.get('description', ''),
             confidence=data.get('confidence', 0.0),
             detections=detections,
-            allow=data.get('allow', False)
+            allow=data.get('allow', False),
+            reviewed=data.get('reviewed', False)
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -95,9 +99,100 @@ class Segment:
                 }
                 for d in self.detections
             ],
-            'allow': self.allow
+            'allow': self.allow,
+            'reviewed': self.reviewed
         }
         return result
+
+
+class AsyncWriteQueue:
+    """Async write queue with debouncing for batched JSON persistence.
+    
+    Buffers segment changes in memory and writes to disk at most once
+    every debounce_seconds. Provides dirty state tracking and callbacks
+    for sync status UI updates.
+    """
+    
+    def __init__(self, write_fn: Callable[[], None], debounce_seconds: float = 5.0):
+        self._write_fn = write_fn
+        self._debounce = debounce_seconds
+        self._dirty = False
+        self._timer: Optional[Timer] = None
+        self._lock = Lock()
+        self._on_status_change: Optional[Callable[[bool], None]] = None
+    
+    def set_status_callback(self, callback: Callable[[bool], None]) -> None:
+        """Set callback for sync status changes.
+        
+        Args:
+            callback: Function called with True when dirty, False when clean
+        """
+        self._on_status_change = callback
+    
+    def mark_dirty(self) -> None:
+        """Mark data as dirty and schedule a write."""
+        with self._lock:
+            was_dirty = self._dirty
+            self._dirty = True
+            if not was_dirty and self._on_status_change:
+                self._on_status_change(True)
+            self._schedule_write()
+    
+    def _schedule_write(self) -> None:
+        """Schedule a debounced write."""
+        if self._timer:
+            self._timer.cancel()
+        self._timer = Timer(self._debounce, self._flush)
+        self._timer.daemon = True
+        self._timer.start()
+    
+    def _flush(self) -> None:
+        """Flush pending changes to disk."""
+        with self._lock:
+            if self._dirty:
+                try:
+                    self._write_fn()
+                    self._dirty = False
+                    if self._on_status_change:
+                        self._on_status_change(False)
+                except Exception:
+                    pass
+    
+    def flush_sync(self, timeout: float = 10.0) -> bool:
+        """Synchronously flush pending changes.
+        
+        Args:
+            timeout: Maximum time to wait (not currently used, reserved for future)
+            
+        Returns:
+            True if flush was successful or nothing to flush, False on error
+        """
+        with self._lock:
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
+            if self._dirty:
+                try:
+                    self._write_fn()
+                    self._dirty = False
+                    if self._on_status_change:
+                        self._on_status_change(False)
+                    return True
+                except Exception:
+                    return False
+            return True
+    
+    def is_dirty(self) -> bool:
+        """Check if there are pending changes."""
+        with self._lock:
+            return self._dirty
+    
+    def cleanup(self) -> None:
+        """Cancel any pending timer."""
+        with self._lock:
+            if self._timer:
+                self._timer.cancel()
+                self._timer = None
 
 
 class SegmentManager:
@@ -109,6 +204,22 @@ class SegmentManager:
         self.video_file: Optional[str] = None
         self.output_video_file: Optional[str] = None
         self._original_data: Optional[Dict[str, Any]] = None
+        self._write_queue: Optional[AsyncWriteQueue] = None
+    
+    def _init_write_queue(self) -> None:
+        """Initialize the async write queue."""
+        if self._write_queue:
+            self._write_queue.cleanup()
+        self._write_queue = AsyncWriteQueue(self._do_save_to_json)
+    
+    def set_sync_status_callback(self, callback: Callable[[bool], None]) -> None:
+        """Set callback for sync status changes.
+        
+        Args:
+            callback: Function called with True when dirty, False when synchronized
+        """
+        if self._write_queue:
+            self._write_queue.set_status_callback(callback)
     
     def load_from_json(self, file_path: str) -> None:
         """Load segments from JSON file.
@@ -152,6 +263,9 @@ class SegmentManager:
             Segment.from_dict(seg, str(idx))
             for idx, seg in enumerate(segments_data)
         ]
+        
+        # Initialize async write queue
+        self._init_write_queue()
     
     def _resolve_video_path(self, json_path: str, video_file_ref: str) -> str:
         """Resolve video file path, trying multiple strategies.
@@ -292,7 +406,24 @@ class SegmentManager:
         segment.allow = allow
     
     def save_to_json(self) -> None:
-        """Save segments to JSON file with atomic write.
+        """Queue async save of segments to JSON file.
+        
+        Uses the async write queue to batch writes. For immediate writes,
+        use flush_sync() after calling this method.
+        
+        Raises:
+            ValueError: If no file loaded
+        """
+        if self.file_path is None:
+            raise ValueError("No file loaded")
+        
+        if self._write_queue:
+            self._write_queue.mark_dirty()
+        else:
+            self._do_save_to_json()
+    
+    def _do_save_to_json(self) -> None:
+        """Perform the actual JSON file save with atomic write.
         
         Raises:
             ValueError: If no file loaded
@@ -360,6 +491,25 @@ class SegmentManager:
                     pass
             raise IOError(f"Failed to save JSON file: {e}")
     
+    def flush_sync(self, timeout: float = 10.0) -> bool:
+        """Synchronously flush pending changes to disk.
+        
+        Args:
+            timeout: Maximum time to wait (reserved for future use)
+            
+        Returns:
+            True if flush was successful or nothing to flush, False on error
+        """
+        if self._write_queue:
+            return self._write_queue.flush_sync(timeout)
+        return True
+    
+    def cleanup(self) -> None:
+        """Clean up resources including the async write queue."""
+        if self._write_queue:
+            self._write_queue.cleanup()
+            self._write_queue = None
+    
     def get_segments_by_label(self, label: str) -> List[Segment]:
         """Get all segments with a specific label."""
         return [seg for seg in self.segments if label in seg.labels]
@@ -382,5 +532,43 @@ class SegmentManager:
         for segment in self.segments:
             if label in segment.labels:
                 segment.allow = allow
+                count += 1
+        return count
+    
+    def set_reviewed(self, segment_id: str, reviewed: bool) -> None:
+        """Set reviewed status for a segment.
+        
+        Args:
+            segment_id: ID of segment to update
+            reviewed: New reviewed status
+            
+        Raises:
+            ValueError: If segment not found
+        """
+        segment = self.get_segment_by_id(segment_id)
+        if segment is None:
+            raise ValueError(f"Segment not found: {segment_id}")
+        
+        segment.reviewed = reviewed
+    
+    def get_segments_by_reviewed_status(self, reviewed: bool) -> List[Segment]:
+        """Get all segments with specific reviewed status."""
+        return [seg for seg in self.segments if seg.reviewed == reviewed]
+    
+    def batch_set_reviewed(self, segment_ids: List[str], reviewed: bool) -> int:
+        """Set reviewed status for multiple segments.
+        
+        Args:
+            segment_ids: List of segment IDs to update
+            reviewed: New reviewed status
+            
+        Returns:
+            Number of segments updated
+        """
+        count = 0
+        id_set = set(segment_ids)
+        for segment in self.segments:
+            if segment.id in id_set:
+                segment.reviewed = reviewed
                 count += 1
         return count

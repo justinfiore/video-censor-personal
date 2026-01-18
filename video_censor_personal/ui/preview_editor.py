@@ -94,6 +94,11 @@ class PreviewEditorApp:
         self.recent_files: List[str] = self._load_recent_files()
         self.auto_load_json: Optional[str] = json_file
         
+        # Auto-review tracking
+        self._selected_segment_id: Optional[str] = None
+        self._selection_time: Optional[float] = None
+        self._AUTO_REVIEW_THRESHOLD = 1.0  # seconds
+        
         self._setup_window()
         self._create_menu()
         self._create_layout()
@@ -144,6 +149,7 @@ class PreviewEditorApp:
         status_frame = ctk.CTkFrame(self.root, fg_color=("gray80", "gray20"))
         status_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=0)
         status_frame.grid_columnconfigure(0, weight=1)
+        status_frame.grid_columnconfigure(1, weight=0)
         
         self.status_label = ctk.CTkLabel(
             status_frame,
@@ -152,6 +158,26 @@ class PreviewEditorApp:
             anchor="w"
         )
         self.status_label.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Sync status indicator (right side)
+        self.sync_status_frame = ctk.CTkFrame(status_frame, fg_color="transparent")
+        self.sync_status_frame.grid(row=0, column=1, sticky="e", padx=10, pady=5)
+        
+        self.sync_indicator = ctk.CTkLabel(
+            self.sync_status_frame,
+            text="●",
+            font=("Arial", 14),
+            text_color="green"
+        )
+        self.sync_indicator.grid(row=0, column=0, padx=(0, 5))
+        
+        self.sync_label = ctk.CTkLabel(
+            self.sync_status_frame,
+            text="Synchronized",
+            font=("Arial", 10),
+            text_color=("gray20", "gray80")
+        )
+        self.sync_label.grid(row=0, column=1)
     
     def _update_status_bar(self, json_path: Optional[str] = None, video_path: Optional[str] = None, output_video_path: Optional[str] = None) -> None:
         """Update status bar with current file paths."""
@@ -177,6 +203,23 @@ class PreviewEditorApp:
             status_text = "  |  ".join(parts)
         
         self.status_label.configure(text=status_text)
+    
+    def _update_sync_status(self, is_dirty: bool) -> None:
+        """Update sync status indicator.
+        
+        Args:
+            is_dirty: True if there are pending changes, False if synchronized
+        """
+        # Use after() to ensure UI updates happen on the main thread
+        def do_update():
+            if is_dirty:
+                self.sync_indicator.configure(text_color="orange")
+                self.sync_label.configure(text="Pending Changes")
+            else:
+                self.sync_indicator.configure(text_color="green")
+                self.sync_label.configure(text="Synchronized")
+        
+        self.root.after(0, do_update)
     
     def _create_menu(self) -> None:
         """Create menu bar."""
@@ -222,8 +265,10 @@ class PreviewEditorApp:
     def _connect_signals(self) -> None:
         """Connect signals between components."""
         self.segment_list_pane.set_segment_click_callback(self._on_segment_selected)
+        self.segment_list_pane.set_bulk_reviewed_callback(self._on_bulk_reviewed)
         
         self.segment_details_pane.set_allow_toggle_callback(self._on_allow_toggled)
+        self.segment_details_pane.set_reviewed_toggle_callback(self._on_reviewed_toggled)
         
         self.video_player_pane.set_time_update_callback(self._on_time_update)
     
@@ -372,6 +417,9 @@ class PreviewEditorApp:
             self.segment_manager.load_from_json(json_path)
             self.profiler.end_operation("JSON parsing and segment manager load")
             
+            # Setup sync status callback
+            self.segment_manager.set_sync_status_callback(self._update_sync_status)
+            
             self.current_json_path = json_path
             
             if not self.segment_manager.video_file:
@@ -479,10 +527,36 @@ class PreviewEditorApp:
     
     def _on_segment_selected(self, segment_id: str) -> None:
         """Handle segment selection."""
+        # Check if previous segment should be marked as reviewed (>1 second selection)
+        self._check_auto_review_previous_segment()
+        
+        # Track new segment selection time
+        self._selected_segment_id = segment_id
+        self._selection_time = time.time()
+        
         segment = self.segment_manager.get_segment_by_id(segment_id)
         if segment:
             self.segment_details_pane.display_segment(segment)
             self.video_player_pane.seek_to_time(segment.start_time)
+    
+    def _check_auto_review_previous_segment(self) -> None:
+        """Check if the previously selected segment should be auto-marked as reviewed."""
+        if self._selected_segment_id is None or self._selection_time is None:
+            return
+        
+        elapsed = time.time() - self._selection_time
+        if elapsed >= self._AUTO_REVIEW_THRESHOLD:
+            segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
+            if segment and not segment.reviewed:
+                try:
+                    self.segment_manager.set_reviewed(self._selected_segment_id, True)
+                    self.segment_manager.save_to_json()
+                    # Update UI if the segment is still displayed
+                    if self.segment_details_pane.current_segment and \
+                       self.segment_details_pane.current_segment.id == self._selected_segment_id:
+                        self.segment_details_pane.update_reviewed_status(True)
+                except Exception:
+                    pass
     
     def _on_allow_toggled(self, segment_id: str, allow: bool) -> None:
         """Handle allow toggle."""
@@ -495,6 +569,22 @@ class PreviewEditorApp:
             segments = self.segment_manager.get_all_segments()
             self.video_player_pane.update_timeline_segments(segments)
             
+        except Exception as e:
+            raise IOError(f"Failed to save changes: {str(e)}")
+    
+    def _on_reviewed_toggled(self, segment_id: str, reviewed: bool) -> None:
+        """Handle reviewed toggle."""
+        try:
+            self.segment_manager.set_reviewed(segment_id, reviewed)
+            self.segment_manager.save_to_json()
+        except Exception as e:
+            raise IOError(f"Failed to save changes: {str(e)}")
+    
+    def _on_bulk_reviewed(self, segment_ids: List[str], reviewed: bool) -> None:
+        """Handle bulk reviewed status change."""
+        try:
+            self.segment_manager.batch_set_reviewed(segment_ids, reviewed)
+            self.segment_manager.save_to_json()
         except Exception as e:
             raise IOError(f"Failed to save changes: {str(e)}")
     
@@ -577,6 +667,10 @@ class PreviewEditorApp:
     def cleanup(self) -> None:
         """Clean up application resources."""
         try:
+            # Flush pending changes before exit
+            self.segment_manager.flush_sync()
+            self.segment_manager.cleanup()
+            
             self.video_player_pane.cleanup()
             if self.root.winfo_exists():
                 self.root.destroy()
