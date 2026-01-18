@@ -164,7 +164,7 @@ def test_segment_list_pane_load_segments(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = []
@@ -172,13 +172,16 @@ def test_segment_list_pane_load_segments(sample_segments):
                     pane.segment_items = {}
                     pane.selected_segment_id = None
                     pane.label_filter = Mock()
-                    pane._render_segments = Mock()
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
+                    pane._render_current_page = Mock()
                     
                     pane.load_segments(sample_segments)
                     
                     assert pane.all_segments == sample_segments
                     assert pane.filtered_segments == sample_segments
-                    pane._render_segments.assert_called_once()
+                    assert pane.current_page == 0
+                    pane._render_current_page.assert_called_once()
 
 
 def test_segment_list_pane_filter_by_label(sample_segments):
@@ -186,7 +189,7 @@ def test_segment_list_pane_filter_by_label(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments
@@ -195,7 +198,9 @@ def test_segment_list_pane_filter_by_label(sample_segments):
                     pane.selected_segment_id = None
                     pane.label_filter_var = Mock()
                     pane.allow_filter_var = Mock()
-                    pane._render_segments = Mock()
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
+                    pane._render_current_page = Mock()
                     
                     pane.label_filter_var.get.return_value = "Profanity"
                     pane.allow_filter_var.get.return_value = "All Segments"
@@ -204,6 +209,7 @@ def test_segment_list_pane_filter_by_label(sample_segments):
                     
                     assert len(pane.filtered_segments) == 2
                     assert all("Profanity" in seg.labels for seg in pane.filtered_segments)
+                    assert pane.current_page == 0
 
 
 def test_segment_list_pane_filter_by_allow_status(sample_segments):
@@ -211,7 +217,7 @@ def test_segment_list_pane_filter_by_allow_status(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments
@@ -220,7 +226,9 @@ def test_segment_list_pane_filter_by_allow_status(sample_segments):
                     pane.selected_segment_id = None
                     pane.label_filter_var = Mock()
                     pane.allow_filter_var = Mock()
-                    pane._render_segments = Mock()
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
+                    pane._render_current_page = Mock()
                     
                     pane.label_filter_var.get.return_value = "All Labels"
                     pane.allow_filter_var.get.return_value = "Allowed Only"
@@ -236,14 +244,17 @@ def test_segment_list_pane_highlight_at_time(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments
                     pane.filtered_segments = sample_segments
                     pane.segment_items = {}
                     pane.selected_segment_id = None
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
                     pane._on_segment_clicked = Mock()
+                    pane._render_current_page = Mock()
                     
                     pane.highlight_segment_at_time(12.0)
                     pane._on_segment_clicked.assert_called_with("0")
@@ -257,14 +268,17 @@ def test_segment_list_pane_select_next(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments
                     pane.filtered_segments = sample_segments
                     pane.segment_items = {}
                     pane.selected_segment_id = "0"
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
                     pane._on_segment_clicked = Mock()
+                    pane._render_current_page = Mock()
                     
                     next_id = pane.select_next_segment()
                     assert next_id == "1"
@@ -276,14 +290,17 @@ def test_segment_list_pane_select_previous(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments
                     pane.filtered_segments = sample_segments
                     pane.segment_items = {}
                     pane.selected_segment_id = "1"
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 0
                     pane._on_segment_clicked = Mock()
+                    pane._render_current_page = Mock()
                     
                     prev_id = pane.select_previous_segment()
                     assert prev_id == "0"
@@ -315,12 +332,15 @@ def test_segment_list_pane_clear(sample_segments):
         with patch('customtkinter.CTkScrollableFrame'):
             with patch('customtkinter.CTkLabel'):
                 with patch('customtkinter.CTkComboBox'):
-                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
+                    from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl, DEFAULT_PAGE_SIZE
                     
                     pane = SegmentListPaneImpl.__new__(SegmentListPaneImpl)
                     pane.all_segments = sample_segments.copy()
                     pane.filtered_segments = sample_segments.copy()
                     pane.selected_segment_id = "0"
+                    pane.page_size = DEFAULT_PAGE_SIZE
+                    pane.current_page = 2
+                    pane._update_pagination_ui = Mock()
                     
                     mock_item1 = Mock()
                     mock_item2 = Mock()
@@ -334,3 +354,4 @@ def test_segment_list_pane_clear(sample_segments):
                     assert len(pane.all_segments) == 0
                     assert len(pane.filtered_segments) == 0
                     assert pane.selected_segment_id is None
+                    assert pane.current_page == 0

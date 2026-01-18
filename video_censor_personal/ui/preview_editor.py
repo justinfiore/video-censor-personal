@@ -20,7 +20,19 @@ from video_censor_personal.ui.performance_profiler import PerformanceProfiler
 
 # Setup logging
 def _setup_ui_logging() -> None:
-    """Configure logging for the UI."""
+    """Configure logging for the UI.
+    
+    Log Level Strategy:
+    -------------------
+    - INFO: General application flow (file loaded, operations started)
+    - DEBUG (Default): Phase-level and operation-level timing measurements
+      Example: "[PROFILE] Segment list: 20 widgets created in 0.05s"
+    - TRACE (Level 5): Frame-by-frame and widget-by-widget details
+      Enabled with: export VIDEO_CENSOR_LOG_LEVEL=TRACE
+    
+    Default is DEBUG which provides useful profiling without excessive verbosity.
+    Use TRACE only for deep troubleshooting of performance issues.
+    """
     # Get the workspace root (parent of video_censor_personal package)
     workspace_root = Path(__file__).parent.parent.parent
     log_dir = workspace_root / "logs"
@@ -226,6 +238,8 @@ class PreviewEditorApp:
         self.keyboard_manager.set_next_segment_callback(self._on_keyboard_next_segment)
         self.keyboard_manager.set_toggle_allow_callback(self._on_keyboard_toggle_allow)
         self.keyboard_manager.set_jump_to_segment_callback(self._on_keyboard_jump_to_segment)
+        self.keyboard_manager.set_page_up_callback(self._on_keyboard_page_up)
+        self.keyboard_manager.set_page_down_callback(self._on_keyboard_page_down)
     
     def _auto_load_json(self) -> None:
         """Auto-load JSON file on startup."""
@@ -529,6 +543,14 @@ class PreviewEditorApp:
         segment_id = self.segment_list_pane.get_selected_segment_id()
         if segment_id:
             self._on_segment_selected(segment_id)
+    
+    def _on_keyboard_page_up(self) -> None:
+        """Handle page up keyboard shortcut."""
+        self.segment_list_pane.handle_page_up()
+    
+    def _on_keyboard_page_down(self) -> None:
+        """Handle page down keyboard shortcut."""
+        self.segment_list_pane.handle_page_down()
     
     def _show_shortcuts_help(self) -> None:
         """Show keyboard shortcuts help dialog."""
