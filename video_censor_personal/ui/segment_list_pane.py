@@ -117,8 +117,14 @@ class SegmentListItem(ctk.CTkFrame):
         self.is_selected = selected
         if selected:
             self.configure(border_color="#1f6aa5", fg_color="#2a2d2e")
+            self.index_label.configure(text_color="white")
+            self.time_label.configure(text_color="white")
+            self.labels_label.configure(text_color="white")
         else:
             self.configure(border_color="gray50", fg_color="transparent")
+            self.index_label.configure(text_color="gray60")
+            self.time_label.configure(text_color=("gray10", "gray90"))
+            self.labels_label.configure(text_color="gray")
     
     def update_allow_indicator(self, allow: bool) -> None:
         """Update allow indicator."""
@@ -202,7 +208,35 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         self.scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.scrollable_frame.grid_columnconfigure(0, weight=1)
         
+        self._bind_mousewheel_scroll()
+        
         self._create_pagination_controls()
+    
+    def _bind_mousewheel_scroll(self) -> None:
+        """Bind mouse wheel events for scrolling on macOS and Windows/Linux."""
+        def _on_mousewheel(event):
+            if hasattr(self.scrollable_frame, '_parent_canvas'):
+                canvas = self.scrollable_frame._parent_canvas
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
+                else:
+                    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        self.scrollable_frame.bind("<MouseWheel>", _on_mousewheel)
+        self.scrollable_frame.bind("<Button-4>", _on_mousewheel)
+        self.scrollable_frame.bind("<Button-5>", _on_mousewheel)
+        
+        self._mousewheel_handler = _on_mousewheel
+    
+    def _bind_mousewheel_to_widget(self, widget) -> None:
+        """Bind mouse wheel events to a widget and its children for scrolling."""
+        widget.bind("<MouseWheel>", self._mousewheel_handler)
+        widget.bind("<Button-4>", self._mousewheel_handler)
+        widget.bind("<Button-5>", self._mousewheel_handler)
+        for child in widget.winfo_children():
+            self._bind_mousewheel_to_widget(child)
     
     def _create_pagination_controls(self) -> None:
         """Create the pagination UI controls."""
@@ -336,6 +370,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             
             item.grid(row=row_idx, column=0, sticky="ew", pady=2, padx=2)
             self.segment_items[segment.id] = item
+            self._bind_mousewheel_to_widget(item)
         
         create_time = time.time() - create_start
         logger.debug(f"[PROFILE] Segment list: {num_page} widgets created in {create_time:.2f}s")
