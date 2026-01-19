@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import tempfile
 import threading
 from dataclasses import dataclass, asdict
 from threading import Timer, Lock
 from typing import List, Dict, Any, Optional, Callable
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -113,7 +116,7 @@ class AsyncWriteQueue:
     for sync status UI updates.
     """
     
-    def __init__(self, write_fn: Callable[[], None], debounce_seconds: float = 5.0):
+    def __init__(self, write_fn: Callable[[], None], debounce_seconds: float = 2.0):
         self._write_fn = write_fn
         self._debounce = debounce_seconds
         self._dirty = False
@@ -134,7 +137,9 @@ class AsyncWriteQueue:
         with self._lock:
             was_dirty = self._dirty
             self._dirty = True
+            logger.debug("AsyncWriteQueue: mark_dirty called, was_dirty=%s", was_dirty)
             if not was_dirty and self._on_status_change:
+                logger.info("AsyncWriteQueue: Status changed to dirty, invoking callback")
                 self._on_status_change(True)
             self._schedule_write()
     
@@ -142,21 +147,29 @@ class AsyncWriteQueue:
         """Schedule a debounced write."""
         if self._timer:
             self._timer.cancel()
+            logger.debug("AsyncWriteQueue: Cancelled existing timer")
         self._timer = Timer(self._debounce, self._flush)
         self._timer.daemon = True
         self._timer.start()
+        logger.info("AsyncWriteQueue: Scheduled write in %.1f seconds", self._debounce)
     
     def _flush(self) -> None:
         """Flush pending changes to disk."""
+        logger.debug("AsyncWriteQueue: _flush called")
         with self._lock:
             if self._dirty:
+                logger.info("AsyncWriteQueue: Flushing pending changes to disk")
                 try:
                     self._write_fn()
                     self._dirty = False
+                    logger.info("AsyncWriteQueue: Save completed successfully, status now clean")
                     if self._on_status_change:
+                        logger.debug("AsyncWriteQueue: Invoking status callback with is_dirty=False")
                         self._on_status_change(False)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error("AsyncWriteQueue: Save failed with exception: %s", e, exc_info=True)
+            else:
+                logger.debug("AsyncWriteQueue: _flush called but not dirty, skipping")
     
     def flush_sync(self, timeout: float = 10.0) -> bool:
         """Synchronously flush pending changes.
@@ -167,19 +180,26 @@ class AsyncWriteQueue:
         Returns:
             True if flush was successful or nothing to flush, False on error
         """
+        logger.debug("AsyncWriteQueue: flush_sync called")
         with self._lock:
             if self._timer:
                 self._timer.cancel()
                 self._timer = None
+                logger.debug("AsyncWriteQueue: Cancelled pending timer in flush_sync")
             if self._dirty:
+                logger.info("AsyncWriteQueue: Performing synchronous flush")
                 try:
                     self._write_fn()
                     self._dirty = False
+                    logger.info("AsyncWriteQueue: Synchronous flush completed successfully")
                     if self._on_status_change:
                         self._on_status_change(False)
                     return True
-                except Exception:
+                except Exception as e:
+                    logger.error("AsyncWriteQueue: Synchronous flush failed: %s", e, exc_info=True)
                     return False
+            else:
+                logger.debug("AsyncWriteQueue: flush_sync called but nothing to flush")
             return True
     
     def is_dirty(self) -> bool:
@@ -414,12 +434,15 @@ class SegmentManager:
         Raises:
             ValueError: If no file loaded
         """
+        logger.debug("SegmentManager.save_to_json: Called, file_path=%s", self.file_path)
         if self.file_path is None:
             raise ValueError("No file loaded")
         
         if self._write_queue:
+            logger.debug("SegmentManager.save_to_json: Calling mark_dirty on write queue")
             self._write_queue.mark_dirty()
         else:
+            logger.debug("SegmentManager.save_to_json: No write queue, doing immediate save")
             self._do_save_to_json()
     
     def _do_save_to_json(self) -> None:
@@ -429,6 +452,7 @@ class SegmentManager:
             ValueError: If no file loaded
             IOError: If write fails
         """
+        logger.info("SegmentManager._do_save_to_json: Starting save to %s", self.file_path)
         if self.file_path is None:
             raise ValueError("No file loaded")
         
@@ -482,8 +506,10 @@ class SegmentManager:
                 temp_path = temp_file.name
             
             os.replace(temp_path, self.file_path)
+            logger.info("SegmentManager._do_save_to_json: Save completed successfully to %s", self.file_path)
             
         except Exception as e:
+            logger.error("SegmentManager._do_save_to_json: Save failed: %s", e, exc_info=True)
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)

@@ -99,6 +99,9 @@ class PreviewEditorApp:
         self._selection_time: Optional[float] = None
         self._AUTO_REVIEW_THRESHOLD = 1.0  # seconds
         
+        # Sync status polling (thread-safe flag for background thread communication)
+        self._pending_sync_status: Optional[bool] = None
+        
         self._setup_window()
         self._create_menu()
         self._create_layout()
@@ -166,7 +169,7 @@ class PreviewEditorApp:
         self.sync_indicator = ctk.CTkLabel(
             self.sync_status_frame,
             text="●",
-            font=("Arial", 14),
+            font=("Arial", 16),
             text_color="green"
         )
         self.sync_indicator.grid(row=0, column=0, padx=(0, 5))
@@ -174,7 +177,6 @@ class PreviewEditorApp:
         self.sync_label = ctk.CTkLabel(
             self.sync_status_frame,
             text="Synchronized",
-            font=("Arial", 10),
             text_color=("gray20", "gray80")
         )
         self.sync_label.grid(row=0, column=1)
@@ -207,19 +209,61 @@ class PreviewEditorApp:
     def _update_sync_status(self, is_dirty: bool) -> None:
         """Update sync status indicator.
         
+        This is called from background threads (Timer), so we use a polling
+        mechanism instead of root.after() which can be unreliable from threads.
+        
         Args:
             is_dirty: True if there are pending changes, False if synchronized
         """
-        # Use after() to ensure UI updates happen on the main thread
-        def do_update():
-            if is_dirty:
-                self.sync_indicator.configure(text_color="orange")
-                self.sync_label.configure(text="Pending Changes")
-            else:
-                self.sync_indicator.configure(text_color="green")
-                self.sync_label.configure(text="Synchronized")
+        logger.info("_update_sync_status called with is_dirty=%s", is_dirty)
+        self._pending_sync_status = is_dirty
+    
+    def _poll_sync_status(self) -> None:
+        """Poll for sync status updates from background thread.
         
-        self.root.after(0, do_update)
+        Called periodically from the main thread to check if the sync status
+        needs updating. Also checks for auto-review of current segment.
+        """
+        if self._pending_sync_status is not None:
+            is_dirty = self._pending_sync_status
+            self._pending_sync_status = None
+            
+            try:
+                logger.debug("Applying sync status update, is_dirty=%s", is_dirty)
+                if is_dirty:
+                    self.sync_indicator.configure(text_color="orange")
+                    self.sync_label.configure(text="Pending Changes")
+                    logger.info("Sync status UI updated to 'Pending Changes' (orange)")
+                else:
+                    self.sync_indicator.configure(text_color="green")
+                    self.sync_label.configure(text="Synchronized")
+                    logger.info("Sync status UI updated to 'Synchronized' (green)")
+            except Exception as e:
+                logger.error("Error updating sync status UI: %s", e, exc_info=True)
+        
+        # Check for auto-review of current segment (while still viewing it)
+        self._check_auto_review_current_segment()
+        
+        # Schedule next poll
+        self.root.after(100, self._poll_sync_status)
+    
+    def _check_auto_review_current_segment(self) -> None:
+        """Auto-mark current segment as reviewed if viewed for >1 second."""
+        if self._selected_segment_id is None or self._selection_time is None:
+            return
+        
+        elapsed = time.time() - self._selection_time
+        if elapsed >= self._AUTO_REVIEW_THRESHOLD:
+            segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
+            if segment and not segment.reviewed:
+                try:
+                    self.segment_manager.set_reviewed(self._selected_segment_id, True)
+                    self.segment_manager.save_to_json()
+                    # Update UI checkbox since segment is currently displayed
+                    self.segment_details_pane.update_reviewed_status(True)
+                    logger.info("Auto-reviewed segment %s after %.1fs", self._selected_segment_id, elapsed)
+                except Exception as e:
+                    logger.error("Failed to auto-review segment: %s", e)
     
     def _create_menu(self) -> None:
         """Create menu bar."""
@@ -528,7 +572,9 @@ class PreviewEditorApp:
     def _on_segment_selected(self, segment_id: str) -> None:
         """Handle segment selection."""
         # Check if previous segment should be marked as reviewed (>1 second selection)
-        self._check_auto_review_previous_segment()
+        # This is handled by _check_auto_review_current_segment polling, but we also
+        # check here for immediate feedback when navigating away
+        self._check_auto_review_current_segment()
         
         # Track new segment selection time
         self._selected_segment_id = segment_id
@@ -539,24 +585,6 @@ class PreviewEditorApp:
             self.segment_details_pane.display_segment(segment)
             self.video_player_pane.seek_to_time(segment.start_time)
     
-    def _check_auto_review_previous_segment(self) -> None:
-        """Check if the previously selected segment should be auto-marked as reviewed."""
-        if self._selected_segment_id is None or self._selection_time is None:
-            return
-        
-        elapsed = time.time() - self._selection_time
-        if elapsed >= self._AUTO_REVIEW_THRESHOLD:
-            segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
-            if segment and not segment.reviewed:
-                try:
-                    self.segment_manager.set_reviewed(self._selected_segment_id, True)
-                    self.segment_manager.save_to_json()
-                    # Update UI if the segment is still displayed
-                    if self.segment_details_pane.current_segment and \
-                       self.segment_details_pane.current_segment.id == self._selected_segment_id:
-                        self.segment_details_pane.update_reviewed_status(True)
-                except Exception:
-                    pass
     
     def _on_allow_toggled(self, segment_id: str, allow: bool) -> None:
         """Handle allow toggle."""
@@ -679,6 +707,8 @@ class PreviewEditorApp:
     
     def run(self) -> None:
         """Start the application event loop."""
+        # Start sync status polling
+        self._poll_sync_status()
         self.root.mainloop()
 
 

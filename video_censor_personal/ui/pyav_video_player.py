@@ -883,7 +883,7 @@ class PyAVVideoPlayer(VideoPlayer):
         
         Called periodically from the main thread's update timer (every 50ms).
         """
-        logger.debug("_update_canvas_on_main_thread() called on main thread")
+        logger.log(5, "_update_canvas_on_main_thread() called on main thread")
         
         if self._canvas is None:
             logger.warning("Canvas is None in _update_canvas_on_main_thread")
@@ -902,11 +902,11 @@ class PyAVVideoPlayer(VideoPlayer):
             
             # Get queued image data (non-blocking)
             try:
-                logger.debug("Attempting to get frame from canvas update queue")
+                logger.log(5, "Attempting to get frame from canvas update queue")
                 frame_data = self._canvas_update_queue.get_nowait()
                 logger.info("*** CANVAS UPDATE: Received queued frame (queue size now: %d) ***", self._canvas_update_queue.qsize())
             except queue.Empty:
-                logger.debug("Canvas update queue is empty")
+                logger.log(5, "Canvas update queue is empty")
                 return  # No work to do
             
             pil_image = frame_data.get('pil_image')
