@@ -59,6 +59,7 @@ def test_segment_details_pane_display_segment(sample_segment):
                         pane.confidence_label = Mock()
                         pane.description_label = Mock()
                         pane.allow_checkbox = Mock()
+                        pane.reviewed_checkbox = Mock()
                         pane._update_detections_display = Mock()
                         
                         pane.display_segment(sample_segment)

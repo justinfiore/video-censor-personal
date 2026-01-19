@@ -235,6 +235,71 @@ If you find issues, include:
    - Python version: `python3 --version`
    - Installed packages: `pip list | grep -E "PyAV|pydub|simpleaudio"`
 
+## Testing Large Videos (200+ Segments)
+
+The preview editor supports large videos with hundreds of segments through pagination.
+
+### Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| Initial UI display | <3 seconds |
+| Page navigation | <500ms |
+| Full segment list load | <10 seconds |
+
+### Test Cases
+
+- [ ] **Load Large Video**
+  - Load a video with 200+ segments
+  - UI should remain responsive during load
+  - Segment list shows first page with pagination controls
+
+- [ ] **Page Navigation**
+  - Click Next/Previous buttons → pages change smoothly
+  - Page indicator updates correctly (e.g., "Page 3 of 11")
+  - Keyboard shortcuts (Page Up/Page Down) work
+
+- [ ] **Auto-Navigation During Playback**
+  - Play video continuously
+  - As playback reaches segments on different pages, list auto-navigates
+  - Current segment is highlighted after navigation
+
+- [ ] **Filter and Pagination Interaction**
+  - Apply label filter → pagination resets to page 1
+  - Page count updates based on filtered results
+  - Clear filter → shows all segments
+
+- [ ] **Selection Across Pages**
+  - Select segment, navigate away, navigate back → selection preserved
+  - Use Up/Down arrows to navigate → auto-page when crossing boundaries
+
+### Generating Test Data
+
+Use the profiling script to generate synthetic test data:
+
+```bash
+python run_scaling_profiling.py
+```
+
+This creates test JSON files with 15, 50, 100, and 206 segments in a temporary directory.
+
+### Measuring Performance
+
+Enable DEBUG logging to see timing information:
+
+```bash
+export VIDEO_CENSOR_LOG_LEVEL=DEBUG
+python video_censor_personal.py
+```
+
+Look for log lines like:
+```
+[PROFILE] Segment list: 20 widgets created in 0.15s
+[PROFILE] Segment list: total page rendering time 0.18s
+```
+
+See `PERFORMANCE_TUNING.md` for detailed performance guidance.
+
 ## Success Indicators
 
 ✓ **All tests pass** (`test_video_playback.py`)
@@ -243,6 +308,7 @@ If you find issues, include:
 ✓ **Controls are responsive** (no UI lag)
 ✓ **Errors are handled gracefully** (no crashes)
 ✓ **No "audio-only mode" message** (macOS now supports full video!)
+✓ **Large videos load without UI freeze** (200+ segments)
 
 ## Next Steps After Testing
 
