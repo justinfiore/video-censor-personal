@@ -3,12 +3,14 @@
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from typing import Optional, List
+from typing import Optional, List, Set
 import os
 import json
 import logging
 from pathlib import Path
 import time
+import signal
+import atexit
 
 from video_censor_personal.ui.segment_manager import SegmentManager
 from video_censor_personal.ui.segment_list_pane import SegmentListPaneImpl
@@ -99,8 +101,15 @@ class PreviewEditorApp:
         self._selection_time: Optional[float] = None
         self._AUTO_REVIEW_THRESHOLD = 1.0  # seconds
         
+        # Playback-based auto-review tracking
+        self._playback_covered_times: Set[float] = set()  # Track covered time positions
+        self._last_playback_time: Optional[float] = None
+        
         # Sync status polling (thread-safe flag for background thread communication)
         self._pending_sync_status: Optional[bool] = None
+        
+        # Signal handling for graceful shutdown
+        self._setup_signal_handlers()
         
         self._setup_window()
         self._create_menu()
@@ -116,6 +125,36 @@ class PreviewEditorApp:
             self.root.after(100, self._auto_load_json)
         else:
             logger.info("No JSON file specified for auto-load")
+    
+    def _setup_signal_handlers(self) -> None:
+        """Setup signal handlers for graceful shutdown."""
+        def signal_handler(signum, frame):
+            logger.info("Received signal %s, flushing pending changes", signum)
+            try:
+                self.segment_manager.flush_sync()
+            except Exception as e:
+                logger.error("Error flushing on signal: %s", e)
+            # Re-raise to allow default behavior
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+        
+        # Handle SIGINT (Ctrl+C) and SIGTERM
+        try:
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+        except (ValueError, OSError) as e:
+            # Signal handling may fail in non-main thread or on some platforms
+            logger.warning("Could not set signal handlers: %s", e)
+        
+        # Also register atexit handler as fallback
+        atexit.register(self._atexit_flush)
+    
+    def _atexit_flush(self) -> None:
+        """Flush pending changes at exit (atexit handler)."""
+        try:
+            self.segment_manager.flush_sync()
+        except Exception as e:
+            logger.error("Error flushing on atexit: %s", e)
     
     def _setup_window(self) -> None:
         """Configure window geometry and layout."""
@@ -264,6 +303,74 @@ class PreviewEditorApp:
                     logger.info("Auto-reviewed segment %s after %.1fs", self._selected_segment_id, elapsed)
                 except Exception as e:
                     logger.error("Failed to auto-review segment: %s", e)
+    
+    def _track_playback_coverage(self, current_time: float) -> None:
+        """Track video playback coverage and auto-mark reviewed when segment is fully covered.
+        
+        Args:
+            current_time: Current video playback time in seconds
+        """
+        if self._selected_segment_id is None:
+            return
+        
+        segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
+        if segment is None or segment.reviewed:
+            return
+        
+        # Only track times within the segment's timespan
+        if segment.start_time <= current_time <= segment.end_time:
+            # Round to 0.1s granularity to avoid excessive set entries
+            rounded_time = round(current_time, 1)
+            self._playback_covered_times.add(rounded_time)
+            
+            # Track continuous playback (detect seeks by large jumps)
+            if self._last_playback_time is not None:
+                time_diff = abs(current_time - self._last_playback_time)
+                # If there's a large jump (> 1 second), user seeked - don't count as continuous
+                if time_diff <= 1.0:
+                    # Fill in small gaps for continuous playback
+                    if self._last_playback_time < current_time:
+                        t = self._last_playback_time
+                        while t <= current_time:
+                            if segment.start_time <= t <= segment.end_time:
+                                self._playback_covered_times.add(round(t, 1))
+                            t += 0.1
+            
+            self._last_playback_time = current_time
+            
+            # Check if entire segment timespan has been covered
+            self._check_full_segment_coverage(segment)
+    
+    def _check_full_segment_coverage(self, segment) -> None:
+        """Check if entire segment has been covered by playback and mark as reviewed.
+        
+        Args:
+            segment: The segment to check coverage for
+        """
+        segment_duration = segment.end_time - segment.start_time
+        if segment_duration <= 0:
+            return
+        
+        # Generate expected time points (0.1s granularity)
+        expected_times = set()
+        t = segment.start_time
+        while t <= segment.end_time:
+            expected_times.add(round(t, 1))
+            t += 0.1
+        
+        # Check if at least 90% of expected times are covered
+        # (allowing for slight timing variations)
+        coverage_ratio = len(self._playback_covered_times & expected_times) / len(expected_times) if expected_times else 0
+        
+        if coverage_ratio >= 0.9:
+            try:
+                self.segment_manager.set_reviewed(self._selected_segment_id, True)
+                self.segment_manager.save_to_json()
+                self.segment_details_pane.update_reviewed_status(True)
+                logger.info("Auto-reviewed segment %s after full playback coverage (%.1f%%)", 
+                           self._selected_segment_id, coverage_ratio * 100)
+            except Exception as e:
+                logger.error("Failed to auto-review segment on playback coverage: %s", e)
     
     def _create_menu(self) -> None:
         """Create menu bar."""
@@ -580,6 +687,10 @@ class PreviewEditorApp:
         self._selected_segment_id = segment_id
         self._selection_time = time.time()
         
+        # Reset playback coverage tracking for new segment
+        self._playback_covered_times.clear()
+        self._last_playback_time = None
+        
         segment = self.segment_manager.get_segment_by_id(segment_id)
         if segment:
             self.segment_details_pane.display_segment(segment)
@@ -619,6 +730,9 @@ class PreviewEditorApp:
     def _on_time_update(self, current_time: float) -> None:
         """Handle video time update."""
         self.segment_list_pane.highlight_segment_at_time(current_time)
+        
+        # Track playback coverage for auto-review
+        self._track_playback_coverage(current_time)
     
     def _on_keyboard_play_pause(self) -> None:
         """Handle play/pause keyboard shortcut."""

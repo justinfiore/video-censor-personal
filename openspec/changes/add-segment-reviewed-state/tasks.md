@@ -21,8 +21,8 @@
 ## 3. Auto-Review Detection
 - [x] 3.1 Track segment selection time in `PreviewEditor` (record when segment becomes selected)
 - [x] 3.2 On segment deselection or new selection, check if >1 second elapsed → mark as reviewed
-- [ ] 3.3 Track video playback position relative to current segment
-- [ ] 3.4 When playback covers entire segment timespan, mark as reviewed
+- [x] 3.3 Track video playback position relative to current segment
+- [x] 3.4 When playback covers entire segment timespan, mark as reviewed
 
 ## 4. Sync Status Indicator & Exit Handling
 - [x] 4.1 Add status indicator widget to bottom-right of UI (opposite JSON/Video labels)
@@ -30,7 +30,7 @@
 - [x] 4.3 Display green circle + "Synchronized" when clean
 - [x] 4.4 Subscribe to `AsyncWriteQueue` status callbacks
 - [x] 4.5 Hook application close event to call `flush_sync()` before exit
-- [ ] 4.6 Handle Ctrl+C / SIGINT to flush before termination
+- [x] 4.6 Handle Ctrl+C / SIGINT to flush before termination
 
 ## 5. Review Status Filter & Bulk Actions
 - [x] 5.1 Add "All Review Status" / "Reviewed" / "Unreviewed" dropdown to filter frame
@@ -43,13 +43,13 @@
 ## 6. Testing
 - [x] 6.1 Unit tests for `reviewed` field serialization/deserialization
 - [x] 6.2 Unit tests for `AsyncWriteQueue` (debouncing, dirty tracking, ordering, flush_sync)
-- [ ] 6.3 Integration tests for auto-review detection (click timing, playback tracking)
-- [ ] 6.4 Test flush-on-exit writes pending changes before shutdown
-- [ ] 6.5 Integration tests for sync status indicator state changes
-- [ ] 6.6 Integration tests for review status filter
-- [ ] 6.7 Integration tests for bulk mark reviewed/unreviewed actions
+- [x] 6.3 Integration tests for auto-review detection (click timing, playback tracking)
+- [x] 6.4 Test flush-on-exit writes pending changes before shutdown
+- [x] 6.5 Integration tests for sync status indicator state changes
+- [x] 6.6 Integration tests for review status filter
+- [x] 6.7 Integration tests for bulk mark reviewed/unreviewed actions
 
 ## 7. Validation
 - [x] 7.1 Verify backwards compatibility: JSON without `reviewed` loads correctly
 - [x] 7.2 Verify no data loss during async writes (test rapid operations)
-- [ ] 7.3 Test with large segment files (200+ segments)
+- [x] 7.3 Test with large segment files (200+ segments)
