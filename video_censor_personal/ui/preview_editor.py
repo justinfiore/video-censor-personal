@@ -18,6 +18,7 @@ from video_censor_personal.ui.segment_details_pane import SegmentDetailsPaneImpl
 from video_censor_personal.ui.video_player_pane import VideoPlayerPaneImpl
 from video_censor_personal.ui.keyboard_shortcuts import KeyboardShortcutManager
 from video_censor_personal.ui.performance_profiler import PerformanceProfiler
+from video_censor_personal.ui.edit_mode_controller import EditModeController
 
 
 # Setup logging
@@ -90,6 +91,7 @@ class PreviewEditorApp:
         
         self.segment_manager = SegmentManager()
         self.keyboard_manager = KeyboardShortcutManager()
+        self.edit_mode_controller = EditModeController(self.segment_manager)
         
         self.current_json_path: Optional[str] = None
         self.current_video_path: Optional[str] = None
@@ -420,8 +422,16 @@ class PreviewEditorApp:
         
         self.segment_details_pane.set_allow_toggle_callback(self._on_allow_toggled)
         self.segment_details_pane.set_reviewed_toggle_callback(self._on_reviewed_toggled)
+        self.segment_details_pane.set_edit_mode_controller(self.edit_mode_controller)
+        self.segment_details_pane.set_segment_manager(self.segment_manager)
+        self.segment_details_pane.set_edit_segment_callback(self._on_edit_segment)
+        self.segment_details_pane.set_duplicate_segment_callback(self._on_duplicate_segment)
+        self.segment_details_pane.set_delete_segment_callback(self._on_delete_segment)
         
         self.video_player_pane.set_time_update_callback(self._on_time_update)
+        
+        self.edit_mode_controller.set_on_edit_mode_changed(self._on_edit_mode_changed)
+        self.edit_mode_controller.set_on_segment_updated(self._on_segment_updated)
     
     def _setup_keyboard_shortcuts(self) -> None:
         """Setup keyboard shortcuts."""
@@ -733,6 +743,65 @@ class PreviewEditorApp:
         
         # Track playback coverage for auto-review
         self._track_playback_coverage(current_time)
+    
+    def _on_edit_mode_changed(self, is_editing: bool) -> None:
+        """Handle edit mode state changes."""
+        logger.info(f"Edit mode changed: is_editing={is_editing}")
+        
+        if hasattr(self.segment_details_pane, 'set_edit_mode'):
+            self.segment_details_pane.set_edit_mode(is_editing)
+        
+        if hasattr(self.video_player_pane, 'set_edit_mode'):
+            self.video_player_pane.set_edit_mode(is_editing, self.edit_mode_controller)
+    
+    def _on_segment_updated(self, segment_id: str) -> None:
+        """Handle segment update after edit mode apply."""
+        segment = self.segment_manager.get_segment_by_id(segment_id)
+        if segment:
+            self.segment_details_pane.display_segment(segment)
+            
+            if hasattr(self.segment_list_pane, 'update_segment_times'):
+                self.segment_list_pane.update_segment_times(segment_id, segment.start_time, segment.end_time)
+            
+            segments = self.segment_manager.get_all_segments()
+            self.video_player_pane.update_timeline_segments(segments)
+    
+    def _on_edit_segment(self, segment: "Segment") -> None:
+        """Handle edit segment request."""
+        from video_censor_personal.ui.segment_manager import Segment
+        self.edit_mode_controller.enter_edit_mode(segment)
+    
+    def _on_duplicate_segment(self, segment_id: str) -> None:
+        """Handle duplicate segment request."""
+        try:
+            new_segment = self.segment_manager.duplicate_segment(segment_id)
+            
+            segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.load_segments(segments)
+            self.video_player_pane.update_timeline_segments(segments)
+            
+            self._on_segment_selected(new_segment.id)
+            self.edit_mode_controller.enter_edit_mode(new_segment)
+            
+        except ValueError as e:
+            logger.error(f"Failed to duplicate segment: {e}")
+    
+    def _on_delete_segment(self, segment_id: str) -> None:
+        """Handle delete segment request."""
+        try:
+            next_id = self.segment_manager.delete_segment(segment_id)
+            
+            segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.load_segments(segments)
+            self.video_player_pane.update_timeline_segments(segments)
+            
+            if next_id:
+                self._on_segment_selected(next_id)
+            else:
+                self.segment_details_pane.clear()
+                
+        except ValueError as e:
+            logger.error(f"Failed to delete segment: {e}")
     
     def _on_keyboard_play_pause(self) -> None:
         """Handle play/pause keyboard shortcut."""
