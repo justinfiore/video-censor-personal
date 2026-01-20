@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Preview Editor Initialization
 
@@ -55,8 +55,6 @@ The audio SHALL be loaded efficiently and cached appropriately to avoid redundan
 #### Scenario: Audio loading does not block segment list rendering
 - **WHEN** preview editor is initializing with a large video
 - **THEN** the segment list can begin rendering while audio is still being loaded in the background, and the UI remains responsive
-
-## ADDED Requirements
 
 ### Requirement: Performance Monitoring
 
