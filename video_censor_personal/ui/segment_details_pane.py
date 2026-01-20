@@ -189,6 +189,7 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             text="Show Detections ▼",
             command=self._toggle_detections,
             fg_color="transparent",
+            text_color="black",
             border_width=1,
             hover_color="#2a2d2e"
         )
