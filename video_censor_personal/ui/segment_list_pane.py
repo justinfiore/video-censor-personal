@@ -193,6 +193,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.label_filter.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.label_filter)
         
         self.allow_filter_var = ctk.StringVar(value="All Segments")
         self.allow_filter = ctk.CTkComboBox(
@@ -203,6 +204,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.allow_filter.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.allow_filter)
         
         self.review_filter_var = ctk.StringVar(value="All Review Status")
         self.review_filter = ctk.CTkComboBox(
@@ -213,6 +215,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.review_filter.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.review_filter)
         
         # Bulk action buttons
         bulk_action_frame = ctk.CTkFrame(self.filter_frame, fg_color="transparent")
@@ -590,6 +593,39 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         
         if self.segment_click_callback:
             self.segment_click_callback(segment_id)
+    
+    def _make_combobox_text_clickable(self, combo: ctk.CTkComboBox) -> None:
+        """Make CTkComboBox open dropdown when clicking its text/entry area.
+        
+        CTkComboBox is a composite widget with an internal Entry field. This method
+        binds the click event to that entry so the dropdown opens regardless of where
+        the user clicks (text or arrow), and prevents the edit cursor from appearing.
+        """
+        def on_entry_click(event, cb=combo):
+            # Open dropdown exactly like the arrow button does
+            if hasattr(cb, "_open_dropdown_menu"):
+                cb._open_dropdown_menu()
+            elif hasattr(cb, "_dropdown_menu") and cb._dropdown_menu is not None:
+                cb._dropdown_menu.post(cb.winfo_rootx(), cb.winfo_rooty() + cb.winfo_height())
+            
+            # Prevent the Entry from taking focus and showing caret
+            return "break"
+        
+        # CTkComboBox has an internal _entry widget that receives the click
+        entry = getattr(combo, "_entry", None)
+        if entry is not None:
+            entry.bind("<Button-1>", on_entry_click, add="+")
+            # Show button-like cursor to indicate clickability
+            try:
+                entry.configure(cursor="", takefocus=0)
+            except Exception:
+                pass
+        
+        # Also show button-like cursor on the combobox itself for visual consistency
+        try:
+            combo.configure(cursor="")
+        except Exception:
+            pass
     
     def _on_filter_changed(self, value=None) -> None:
         """Handle filter change."""
