@@ -247,12 +247,33 @@ sudo apt-get install ffmpeg
 
 See [LAUNCH_UI.md](LAUNCH_UI.md) for more troubleshooting.
 
+## Testing
+
+Run tests to verify everything works:
+
+```bash
+# Run all tests (including UI tests)
+./run-tests.sh
+
+# Run only non-UI tests (recommended during development)
+./run-non-ui-tests.sh
+
+# Run only UI tests
+./run-ui-tests.sh
+
+# Run specific test file or test
+./run-specific-tests.sh "tests/test_module.py"
+./run-specific-tests.sh "tests/test_module.py::TestClass::test_method"
+```
+
+For more details on testing, see the Testing Instructions in [openspec/AGENTS.md](openspec/AGENTS.md).
+
 ## Next Steps
 
 - **Getting Started**: See [QUICK_START.md](QUICK_START.md) for detailed walkthrough
 - **Configuration**: See [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) for all config options
 - **System Details**: See [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) for architecture and design
-- **Testing**: Run `pytest` to verify everything works
+- **Testing**: See instructions above or [openspec/AGENTS.md](openspec/AGENTS.md)
 
 ## Support
 
