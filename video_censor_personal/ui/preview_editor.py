@@ -164,7 +164,15 @@ class PreviewEditorApp:
         window_height = 900
         self.root.geometry(f"{window_width}x{window_height}")
         
-        self._center_window()
+        # Maximize window to fill the entire screen
+        try:
+            self.root.state("zoomed")  # Windows
+        except tk.TclError:
+            # On macOS/Linux, use different approach
+            self.root.update_idletasks()
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            self.root.geometry(f"{screen_width}x{screen_height}+0+0")
         
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=0)
