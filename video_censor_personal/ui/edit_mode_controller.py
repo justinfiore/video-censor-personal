@@ -126,11 +126,17 @@ class EditModeController:
     
     def set_on_start_time_changed(self, callback: Callable[[float], None]) -> None:
         """Set callback for start time changes."""
+        callback_name = getattr(callback, '__name__', f'{type(callback).__name__}') if callback else 'None'
+        logger.info(f"[CONTROLLER] set_on_start_time_changed called with callback={callback is not None}, callback_name={callback_name}")
         self._on_start_time_changed = callback
+        logger.info(f"[CONTROLLER] self._on_start_time_changed is now={self._on_start_time_changed is not None}, id={id(self)}")
+        logger.info(f"[CONTROLLER] Verification: self._on_start_time_changed type={type(self._on_start_time_changed)}")
     
     def set_on_end_time_changed(self, callback: Callable[[float], None]) -> None:
         """Set callback for end time changes."""
+        logger.info(f"[CONTROLLER] set_on_end_time_changed called with callback={callback is not None}")
         self._on_end_time_changed = callback
+        logger.info(f"[CONTROLLER] self._on_end_time_changed is now={self._on_end_time_changed is not None}")
     
     def set_on_labels_changed(self, callback: Callable[[List[str]], None]) -> None:
         """Set callback for labels changes."""
@@ -221,21 +227,31 @@ class EditModeController:
         Returns:
             True if the update was valid and applied
         """
+        logger.info(f"[CONTROLLER] update_start({new_start}) called, id={id(self)}")
+        
         if self._edit_state is None:
+            logger.warning(f"[CONTROLLER] update_start: No edit state")
             return False
         
         snapped_start = self._snap_to_increment(new_start)
+        logger.info(f"[CONTROLLER] Snapped {new_start} -> {snapped_start}")
         
         if snapped_start < 0:
+            logger.warning(f"[CONTROLLER] update_start: snapped_start < 0")
             return False
         
         if snapped_start >= self._edit_state.edited_end - self.MINIMUM_SEGMENT_DURATION:
+            logger.warning(f"[CONTROLLER] update_start: snapped_start ({snapped_start}) >= edited_end ({self._edit_state.edited_end}) - min_duration ({self.MINIMUM_SEGMENT_DURATION})")
             return False
         
         self._edit_state.edited_start = snapped_start
+        logger.info(f"[CONTROLLER] Updated edited_start to {snapped_start}, has callback: {self._on_start_time_changed is not None}")
         
         if self._on_start_time_changed:
+            logger.info(f"[CONTROLLER] Calling _on_start_time_changed callback, callback_type={type(self._on_start_time_changed)}")
             self._on_start_time_changed(snapped_start)
+        else:
+            logger.warning(f"[CONTROLLER] No _on_start_time_changed callback registered! _on_start_time_changed={self._on_start_time_changed}")
         
         return True
     
@@ -248,18 +264,27 @@ class EditModeController:
         Returns:
             True if the update was valid and applied
         """
+        logger.info(f"[CONTROLLER] update_end({new_end}) called")
+        
         if self._edit_state is None:
+            logger.warning(f"[CONTROLLER] update_end: No edit state")
             return False
         
         snapped_end = self._snap_to_increment(new_end)
+        logger.info(f"[CONTROLLER] Snapped {new_end} -> {snapped_end}")
         
         if snapped_end <= self._edit_state.edited_start + self.MINIMUM_SEGMENT_DURATION:
+            logger.warning(f"[CONTROLLER] update_end: snapped_end ({snapped_end}) <= edited_start ({self._edit_state.edited_start}) + min_duration ({self.MINIMUM_SEGMENT_DURATION})")
             return False
         
         self._edit_state.edited_end = snapped_end
+        logger.info(f"[CONTROLLER] Updated edited_end to {snapped_end}, has callback: {self._on_end_time_changed is not None}")
         
         if self._on_end_time_changed:
+            logger.info(f"[CONTROLLER] Calling _on_end_time_changed callback")
             self._on_end_time_changed(snapped_end)
+        else:
+            logger.warning(f"[CONTROLLER] No _on_end_time_changed callback registered!")
         
         return True
     
@@ -344,9 +369,11 @@ class EditModeController:
             Tuple of (start_time, end_time) for the visible range
         """
         if self._edit_state is None:
+            logger.info(f"[CONTROLLER] get_zoom_range: No edit state, returning full duration")
             return (0.0, video_duration)
         
         zoom_start = max(0.0, self._edit_state.edited_start - buffer)
         zoom_end = min(video_duration, self._edit_state.edited_end + buffer)
         
+        logger.info(f"[CONTROLLER] get_zoom_range: segment={self._edit_state.edited_start}-{self._edit_state.edited_end}, buffer={buffer}, result={zoom_start}-{zoom_end}")
         return (zoom_start, zoom_end)

@@ -414,6 +414,9 @@ class PreviewEditorApp:
         
         self.segment_details_pane = SegmentDetailsPaneImpl(main_container)
         self.segment_details_pane.grid(row=1, column=1, sticky="nsew", padx=2, pady=2)
+        
+        # Connect video player to segment details pane so scrubber changes update text fields
+        self.video_player_pane.set_segment_details_pane(self.segment_details_pane)
     
     def _connect_signals(self) -> None:
         """Connect signals between components."""
@@ -760,11 +763,13 @@ class PreviewEditorApp:
         if segment:
             self.segment_details_pane.display_segment(segment)
             
-            if hasattr(self.segment_list_pane, 'update_segment_times'):
-                self.segment_list_pane.update_segment_times(segment_id, segment.start_time, segment.end_time)
-            
+            # Refresh segment list to show updated times
             segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.load_segments(segments)
             self.video_player_pane.update_timeline_segments(segments)
+            
+            # Exit edit mode UI (model already exited in EditModeController.apply())
+            self._on_edit_mode_changed(False)
     
     def _on_edit_segment(self, segment: "Segment") -> None:
         """Handle edit segment request."""

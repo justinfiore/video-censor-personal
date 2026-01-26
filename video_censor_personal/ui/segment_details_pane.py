@@ -49,18 +49,24 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         
         self.details_container = ctk.CTkFrame(self.scrollable_frame, fg_color="transparent")
         self.details_container.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
-        self.details_container.grid_columnconfigure(1, weight=1)
+        self.details_container.grid_columnconfigure(0, weight=1)
+        self.details_container.grid_columnconfigure(1, weight=0)
         self.details_container.grid_remove()
+        
+        # Left side: details and checkboxes
+        details_left_frame = ctk.CTkFrame(self.details_container, fg_color="transparent")
+        details_left_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        details_left_frame.grid_columnconfigure(1, weight=1)
         
         row = 0
         
         ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="Time Range:",
             font=("Arial", 11, "bold")
         ).grid(row=row, column=0, sticky="w", padx=10, pady=5)
         self.time_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 11)
         )
@@ -68,12 +74,12 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         row += 1
         
         ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="Duration:",
             font=("Arial", 11, "bold")
         ).grid(row=row, column=0, sticky="w", padx=10, pady=5)
         self.duration_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 11)
         )
@@ -81,12 +87,12 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         row += 1
         
         ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="Labels:",
             font=("Arial", 11, "bold")
         ).grid(row=row, column=0, sticky="w", padx=10, pady=5)
         self.labels_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 11)
         )
@@ -94,12 +100,12 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         row += 1
         
         ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="Confidence:",
             font=("Arial", 11, "bold")
         ).grid(row=row, column=0, sticky="w", padx=10, pady=5)
         self.confidence_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 11)
         )
@@ -107,12 +113,12 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         row += 1
         
         ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="Description:",
             font=("Arial", 11, "bold")
         ).grid(row=row, column=0, sticky="nw", padx=10, pady=5)
         self.description_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 11),
             wraplength=400,
@@ -121,7 +127,7 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         self.description_label.grid(row=row, column=1, sticky="w", padx=10, pady=5)
         row += 1
         
-        checkbox_frame = ctk.CTkFrame(self.details_container, fg_color="transparent")
+        checkbox_frame = ctk.CTkFrame(details_left_frame, fg_color="transparent")
         checkbox_frame.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=15)
         
         self.allow_checkbox = ctk.CTkCheckBox(
@@ -142,22 +148,21 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         row += 1
         
         self.save_status_label = ctk.CTkLabel(
-            self.details_container,
+            details_left_frame,
             text="",
             font=("Arial", 10),
             text_color="green"
         )
         self.save_status_label.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
-        row += 1
         
+        # Right side: action buttons (vertical layout)
         self.action_buttons_frame = ctk.CTkFrame(self.details_container, fg_color="transparent")
-        self.action_buttons_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
-        self.action_buttons_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.action_buttons_frame.grid(row=0, column=1, sticky="ne", padx=10, pady=10)
         
         self.edit_segment_button = ctk.CTkButton(
             self.action_buttons_frame,
             text="✏️ Edit",
-            width=80,
+            width=100,
             command=self._on_edit_segment_clicked
         )
         self.edit_segment_button.grid(row=0, column=0, padx=2, pady=2)
@@ -165,24 +170,23 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         self.duplicate_segment_button = ctk.CTkButton(
             self.action_buttons_frame,
             text="📋 Duplicate",
-            width=80,
+            width=100,
             command=self._on_duplicate_segment_clicked
         )
-        self.duplicate_segment_button.grid(row=0, column=1, padx=2, pady=2)
+        self.duplicate_segment_button.grid(row=1, column=0, padx=2, pady=2)
         
         self.delete_segment_button = ctk.CTkButton(
             self.action_buttons_frame,
             text="🗑️ Delete",
-            width=80,
+            width=100,
             fg_color="#8B0000",
             hover_color="#A52A2A",
             command=self._on_delete_segment_clicked
         )
-        self.delete_segment_button.grid(row=0, column=2, padx=2, pady=2)
-        row += 1
+        self.delete_segment_button.grid(row=2, column=0, padx=2, pady=2)
         
-        self._create_edit_mode_ui(row)
-        row += 1
+        # Edit mode UI (row 0, column 1 - same position as action buttons)
+        self._create_edit_mode_ui()
         
         self.expand_button = ctk.CTkButton(
             self.details_container,
@@ -193,11 +197,10 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             border_width=1,
             hover_color="#2a2d2e"
         )
-        self.expand_button.grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
-        row += 1
+        self.expand_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 5))
         
         self.detections_frame = ctk.CTkFrame(self.details_container)
-        self.detections_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        self.detections_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
         self.detections_frame.grid_columnconfigure(0, weight=1)
         self.detections_frame.grid_remove()
         
@@ -384,7 +387,7 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
         else:
             self.reviewed_checkbox.deselect()
     
-    def _create_edit_mode_ui(self, row: int) -> None:
+    def _create_edit_mode_ui(self) -> None:
         """Create the edit mode UI elements."""
         self.edit_mode_container = ctk.CTkFrame(
             self.details_container,
@@ -392,61 +395,95 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             border_width=2,
             border_color=("#4caf50", "#2d5f2d")
         )
-        self.edit_mode_container.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=10)
-        self.edit_mode_container.grid_columnconfigure(1, weight=1)
+        self.edit_mode_container.grid(row=0, column=1, sticky="nsew", padx=5, pady=10)
+        self.edit_mode_container.grid_columnconfigure(0, weight=1)
+        self.edit_mode_container.grid_columnconfigure(1, weight=0)
         self.edit_mode_container.grid_remove()
         
+        # Row 0: Title on left, time fields on right
         ctk.CTkLabel(
             self.edit_mode_container,
             text="✏️ Editing Segment",
             font=("Arial", 12, "bold"),
             text_color=("#2d5f2d", "#4caf50")
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(10, 5))
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 5))
+        
+        # Time fields frame (upper right)
+        time_fields_frame = ctk.CTkFrame(self.edit_mode_container, fg_color="transparent")
+        time_fields_frame.grid(row=0, column=1, sticky="ne", padx=10, pady=(10, 5))
         
         ctk.CTkLabel(
-            self.edit_mode_container,
-            text="Start Time:",
+            time_fields_frame,
+            text="Start:",
             font=("Arial", 11, "bold")
-        ).grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        ).grid(row=0, column=0, sticky="e", padx=(0, 5), pady=2)
         
         self.start_time_entry = ctk.CTkEntry(
-            self.edit_mode_container,
-            width=120,
+            time_fields_frame,
+            width=100,
             placeholder_text="MM:SS.mmm"
         )
-        self.start_time_entry.grid(row=1, column=1, sticky="w", padx=10, pady=5)
+        self.start_time_entry.grid(row=0, column=1, sticky="e", padx=(0, 10), pady=2)
         self.start_time_entry.bind("<KeyRelease>", self._on_start_time_entry_changed)
+        self.start_time_entry.bind("<FocusOut>", self._on_start_time_entry_focus_out)
         
         ctk.CTkLabel(
-            self.edit_mode_container,
-            text="End Time:",
+            time_fields_frame,
+            text="End:",
             font=("Arial", 11, "bold")
-        ).grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        ).grid(row=0, column=2, sticky="e", padx=(0, 5), pady=2)
         
         self.end_time_entry = ctk.CTkEntry(
-            self.edit_mode_container,
-            width=120,
+            time_fields_frame,
+            width=100,
             placeholder_text="MM:SS.mmm"
         )
-        self.end_time_entry.grid(row=2, column=1, sticky="w", padx=10, pady=5)
+        self.end_time_entry.grid(row=0, column=3, sticky="e", pady=2)
         self.end_time_entry.bind("<KeyRelease>", self._on_end_time_entry_changed)
+        self.end_time_entry.bind("<FocusOut>", self._on_end_time_entry_focus_out)
         
+        # Row 1: Validation message on left, buttons on right
         self.time_validation_label = ctk.CTkLabel(
             self.edit_mode_container,
             text="",
             font=("Arial", 10),
             text_color="red"
         )
-        self.time_validation_label.grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
+        self.time_validation_label.grid(row=1, column=0, sticky="w", padx=10, pady=(0, 5))
         
+        # Buttons frame (right side, under time fields)
+        edit_buttons_frame = ctk.CTkFrame(self.edit_mode_container, fg_color="transparent")
+        edit_buttons_frame.grid(row=1, column=1, sticky="e", padx=10, pady=(0, 5))
+        
+        self.cancel_edit_button = ctk.CTkButton(
+            edit_buttons_frame,
+            text="Cancel",
+            width=80,
+            fg_color="gray",
+            hover_color="#555555",
+            command=self._on_cancel_edit
+        )
+        self.cancel_edit_button.grid(row=0, column=0, padx=(0, 5), pady=2)
+        
+        self.apply_edit_button = ctk.CTkButton(
+            edit_buttons_frame,
+            text="Apply",
+            width=80,
+            fg_color="#2d5f2d",
+            hover_color="#4caf50",
+            command=self._on_apply_edit
+        )
+        self.apply_edit_button.grid(row=0, column=1, pady=2)
+        
+        # Row 2: Labels section (full width)
         ctk.CTkLabel(
             self.edit_mode_container,
             text="Labels:",
             font=("Arial", 11, "bold")
-        ).grid(row=4, column=0, sticky="nw", padx=10, pady=5)
+        ).grid(row=2, column=0, sticky="nw", padx=10, pady=5)
         
         self.labels_edit_frame = ctk.CTkFrame(self.edit_mode_container, fg_color="transparent")
-        self.labels_edit_frame.grid(row=4, column=1, sticky="ew", padx=10, pady=5)
+        self.labels_edit_frame.grid(row=2, column=1, sticky="ew", padx=10, pady=5)
         
         self.label_chips_frame = ctk.CTkFrame(self.labels_edit_frame, fg_color="transparent")
         self.label_chips_frame.pack(fill="x", expand=True, pady=(0, 5))
@@ -462,37 +499,18 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
             command=self._show_add_label_menu
         )
         self.add_label_button.pack(anchor="w")
-        
-        edit_buttons_frame = ctk.CTkFrame(self.edit_mode_container, fg_color="transparent")
-        edit_buttons_frame.grid(row=5, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
-        edit_buttons_frame.grid_columnconfigure((0, 1), weight=1)
-        
-        self.cancel_edit_button = ctk.CTkButton(
-            edit_buttons_frame,
-            text="Cancel",
-            width=100,
-            fg_color="gray",
-            hover_color="#555555",
-            command=self._on_cancel_edit
-        )
-        self.cancel_edit_button.grid(row=0, column=0, padx=5, pady=5)
-        
-        self.apply_edit_button = ctk.CTkButton(
-            edit_buttons_frame,
-            text="Apply",
-            width=100,
-            fg_color="#2d5f2d",
-            hover_color="#4caf50",
-            command=self._on_apply_edit
-        )
-        self.apply_edit_button.grid(row=0, column=1, padx=5, pady=5)
     
     def set_edit_mode_controller(self, controller: "EditModeController") -> None:
         """Set the edit mode controller reference."""
         self.edit_mode_controller = controller
         
-        controller.set_on_start_time_changed(self._update_start_time_display)
-        controller.set_on_end_time_changed(self._update_end_time_display)
+        # Note: We DON'T connect time display updates as direct callbacks to avoid
+        # feedback loops. When user types in the text field, the <KeyRelease> event
+        # updates the controller, but we don't want the controller callback to 
+        # immediately rewrite the field (which would move the cursor and break typing).
+        # Instead, scrubber changes (which come from video_player_pane callbacks)
+        # update the fields via _on_scrubber_start_changed/_on_scrubber_end_changed
+        # (which are not yet wired up, see note below).
         controller.set_on_labels_changed(self._update_labels_display)
     
     def set_segment_manager(self, manager: "SegmentManager") -> None:
@@ -606,43 +624,93 @@ class SegmentDetailsPaneImpl(ctk.CTkFrame):
     
     def _on_start_time_entry_changed(self, event=None) -> None:
         """Handle start time entry change."""
+        import logging
+        logger = logging.getLogger("video_censor_personal.ui")
+        
         if not self.edit_mode_controller or not self._is_edit_mode:
+            logger.debug(f"[TIME_CHANGE] Start time change ignored: controller={self.edit_mode_controller is not None}, is_edit_mode={self._is_edit_mode}")
             return
         
         time_str = self.start_time_entry.get()
         parsed = self._parse_time_input(time_str)
+        logger.info(f"[TIME_CHANGE] Start time entry changed: '{time_str}' -> {parsed}")
         
         if parsed is None:
             self.start_time_entry.configure(border_color="red")
             self.time_validation_label.configure(text="Invalid start time format")
+            logger.warning(f"[TIME_CHANGE] Invalid start time format: '{time_str}'")
             return
         
-        if self.edit_mode_controller.update_start(parsed):
+        update_result = self.edit_mode_controller.update_start(parsed)
+        logger.info(f"[TIME_CHANGE] update_start({parsed}) returned {update_result}")
+        
+        if update_result:
             self.start_time_entry.configure(border_color="gray")
             self.time_validation_label.configure(text="")
+            # Also update timeline directly to ensure visual feedback
+            logger.info(f"[TIME_CHANGE] Notifying observers of start time change to {parsed}")
         else:
             self.start_time_entry.configure(border_color="red")
             self.time_validation_label.configure(text="Start must be before end")
     
     def _on_end_time_entry_changed(self, event=None) -> None:
         """Handle end time entry change."""
+        import logging
+        logger = logging.getLogger("video_censor_personal.ui")
+        
         if not self.edit_mode_controller or not self._is_edit_mode:
+            logger.debug(f"[TIME_CHANGE] End time change ignored: controller={self.edit_mode_controller is not None}, is_edit_mode={self._is_edit_mode}")
             return
         
         time_str = self.end_time_entry.get()
         parsed = self._parse_time_input(time_str)
+        logger.info(f"[TIME_CHANGE] End time entry changed: '{time_str}' -> {parsed}")
         
         if parsed is None:
             self.end_time_entry.configure(border_color="red")
             self.time_validation_label.configure(text="Invalid end time format")
+            logger.warning(f"[TIME_CHANGE] Invalid end time format: '{time_str}'")
             return
         
-        if self.edit_mode_controller.update_end(parsed):
+        update_result = self.edit_mode_controller.update_end(parsed)
+        logger.info(f"[TIME_CHANGE] update_end({parsed}) returned {update_result}")
+        
+        if update_result:
             self.end_time_entry.configure(border_color="gray")
             self.time_validation_label.configure(text="")
         else:
             self.end_time_entry.configure(border_color="red")
             self.time_validation_label.configure(text="End must be after start")
+    
+    def _on_start_time_entry_focus_out(self, event=None) -> None:
+        """Handle start time entry losing focus - sync with timeline."""
+        import logging
+        logger = logging.getLogger("video_censor_personal.ui")
+        
+        logger.info(f"[FOCUS_OUT] Start time entry lost focus. is_edit_mode={self._is_edit_mode}, has_controller={self.edit_mode_controller is not None}")
+        
+        if not self.edit_mode_controller or not self._is_edit_mode:
+            logger.warning(f"[FOCUS_OUT] Skipping: controller={self.edit_mode_controller}, is_edit_mode={self._is_edit_mode}")
+            return
+        
+        # Trigger the change handler to ensure latest value is processed
+        logger.info(f"[FOCUS_OUT] Triggering start time change handler")
+        self._on_start_time_entry_changed()
+    
+    def _on_end_time_entry_focus_out(self, event=None) -> None:
+        """Handle end time entry losing focus - sync with timeline."""
+        import logging
+        logger = logging.getLogger("video_censor_personal.ui")
+        
+        logger.info(f"[FOCUS_OUT] End time entry lost focus. is_edit_mode={self._is_edit_mode}, has_controller={self.edit_mode_controller is not None}")
+        
+        if not self.edit_mode_controller or not self._is_edit_mode:
+            logger.warning(f"[FOCUS_OUT] Skipping: controller={self.edit_mode_controller}, is_edit_mode={self._is_edit_mode}")
+            return
+        
+        # Trigger the change handler to ensure latest value is processed
+        logger.info(f"[FOCUS_OUT] Triggering end time change handler")
+        self._on_end_time_entry_changed()
     
     def _on_cancel_edit(self) -> None:
         """Handle cancel edit button."""

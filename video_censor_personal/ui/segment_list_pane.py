@@ -382,9 +382,16 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         num_segments = len(segments)
         logger.debug(f"[PROFILE] Segment list: load_segments started with {num_segments} segments")
         
+        # Preserve selected segment ID if it still exists
+        previous_selected_id = self.selected_segment_id
+        
         self.all_segments = segments
         self.filtered_segments = segments
-        self.current_page = 0
+        
+        # Keep current page if valid, otherwise reset to 0
+        max_page = max(0, (len(self.filtered_segments) - 1) // self.page_size)
+        if self.current_page > max_page:
+            self.current_page = 0
         
         parse_start = time.time()
         unique_labels = set()
@@ -397,6 +404,12 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         self.label_filter.configure(values=label_values)
         
         self._render_current_page()
+        
+        # Re-select the previous segment if it still exists and is on current page
+        if previous_selected_id:
+            segment_still_exists = any(s.id == previous_selected_id for s in self.filtered_segments)
+            if segment_still_exists and previous_selected_id in self.segment_items:
+                self._on_segment_clicked(previous_selected_id)
         
         elapsed = time.time() - start_time
         logger.debug(f"[PROFILE] Segment list: load_segments completed in {elapsed:.2f}s")

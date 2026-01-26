@@ -85,10 +85,13 @@ class TimelineCanvas(tk.Canvas):
             start: Start of visible range in seconds
             end: End of visible range in seconds
         """
+        logger.info(f"[TIMELINE] set_zoom_range({start}, {end}) called")
         self._visible_start = max(0.0, start)
         self._visible_end = min(self.duration, end) if self.duration > 0 else end
         self._is_zoomed = True
+        logger.info(f"[TIMELINE] Zoom set to {self._visible_start} - {self._visible_end}, is_zoomed={self._is_zoomed}")
         self._redraw_full()
+        logger.info(f"[TIMELINE] set_zoom_range redraw complete")
     
     def clear_zoom(self) -> None:
         """Clear zoom and show full timeline."""
@@ -105,21 +108,27 @@ class TimelineCanvas(tk.Canvas):
             start_time: Initial start scrubber position
             end_time: Initial end scrubber position
         """
+        logger.info(f"[TIMELINE] set_edit_mode({is_editing}, start={start_time}, end={end_time}) called")
         self._is_edit_mode = is_editing
         self._edit_start_time = start_time
         self._edit_end_time = end_time
         self._dragging_scrubber = None
         self._redraw_full()
+        logger.info(f"[TIMELINE] set_edit_mode redraw complete")
     
     def update_edit_start_time(self, time: float) -> None:
         """Update the edit start scrubber position."""
+        logger.info(f"[TIMELINE] update_edit_start_time({time}) called")
         self._edit_start_time = time
         self._redraw_full()
+        logger.info(f"[TIMELINE] update_edit_start_time redraw complete")
     
     def update_edit_end_time(self, time: float) -> None:
         """Update the edit end scrubber position."""
+        logger.info(f"[TIMELINE] update_edit_end_time({time}) called")
         self._edit_end_time = time
         self._redraw_full()
+        logger.info(f"[TIMELINE] update_edit_end_time redraw complete")
     
     @property
     def visible_start_time(self) -> float:
@@ -308,7 +317,7 @@ class TimelineCanvas(tk.Canvas):
         if 0 <= start_x <= width and 0 <= end_x <= width:
             self.create_rectangle(
                 start_x, height * 0.2, end_x, height * 0.8,
-                fill="#3a7ebf33",
+                fill="#3a7ebf",
                 outline="#3a7ebf",
                 width=1,
                 tags=self.SCRUBBER_REGION_TAG
@@ -378,6 +387,7 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         self._edit_mode_controller: Optional["EditModeController"] = None
         self._edit_mode_start_time: float = 0.0
         self._edit_mode_end_time: float = 0.0
+        self._segment_details_pane: Optional["SegmentDetailsPaneImpl"] = None
         
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
@@ -662,11 +672,6 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
             
             self.timeline.set_current_time(current)
             
-            if self._is_edit_mode and self.video_player.is_playing():
-                if current >= self._edit_mode_end_time:
-                    self.pause()
-                    logger.info(f"Paused at edit mode end time: {self._edit_mode_end_time}")
-            
             if self.time_update_callback:
                 self.time_update_callback(current)
         except Exception as e:
@@ -714,6 +719,10 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
         duration = self.video_player.get_duration()
         self.timeline.set_segments(segments, duration)
     
+    def set_segment_details_pane(self, pane: "SegmentDetailsPaneImpl") -> None:
+        """Set reference to segment details pane for updating UI."""
+        self._segment_details_pane = pane
+    
     def set_edit_mode(self, is_editing: bool, controller: Optional["EditModeController"] = None) -> None:
         """Set edit mode state and configure timeline accordingly.
         
@@ -721,33 +730,72 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
             is_editing: Whether edit mode is active
             controller: The edit mode controller for getting segment times
         """
-        self._is_edit_mode = is_editing
-        self._edit_mode_controller = controller
-        
-        if is_editing and controller:
-            start_time = controller.edited_start or 0.0
-            end_time = controller.edited_end or 0.0
-            self._edit_mode_start_time = start_time
-            self._edit_mode_end_time = end_time
+        try:
+            logger.info(f"[VIDEO_PLAYER] set_edit_mode called: is_editing={is_editing}, controller={controller is not None}")
+            self._is_edit_mode = is_editing
+            self._edit_mode_controller = controller
             
-            video_duration = self.video_player.get_duration() if self.video_player else 0.0
-            zoom_start, zoom_end = controller.get_zoom_range(video_duration)
-            self.timeline.set_zoom_range(zoom_start, zoom_end)
-            self.timeline.set_edit_mode(True, start_time, end_time)
+            if is_editing and controller:
+                logger.info(f"[VIDEO_PLAYER] Registering controller callbacks")
+                logger.info(f"[VIDEO_PLAYER] controller type={type(controller)}, has set_on_start_time_changed={hasattr(controller, 'set_on_start_time_changed')}")
+                start_time = controller.edited_start or 0.0
+                end_time = controller.edited_end or 0.0
+                self._edit_mode_start_time = start_time
+                self._edit_mode_end_time = end_time
+                
+                logger.info(f"[VIDEO_PLAYER] Getting video duration")
+                video_duration = self.video_player.get_duration() if self.video_player else 0.0
+                logger.info(f"[VIDEO_PLAYER] Getting zoom range")
+                zoom_start, zoom_end = controller.get_zoom_range(video_duration)
+                logger.info(f"[VIDEO_PLAYER] Setting timeline zoom range")
+                self.timeline.set_zoom_range(zoom_start, zoom_end)
+                logger.info(f"[VIDEO_PLAYER] Setting timeline edit mode")
+                self.timeline.set_edit_mode(True, start_time, end_time)
+                logger.info(f"[VIDEO_PLAYER] Timeline setup complete, about to set callbacks")
             
-            self.timeline.set_on_start_time_changed(self._on_scrubber_start_changed)
-            self.timeline.set_on_end_time_changed(self._on_scrubber_end_changed)
+            try:
+                logger.info(f"[VIDEO_PLAYER] About to set timeline callbacks")
+                self.timeline.set_on_start_time_changed(self._on_scrubber_start_changed)
+                logger.info(f"[VIDEO_PLAYER] Timeline start callback set")
+                self.timeline.set_on_end_time_changed(self._on_scrubber_end_changed)
+                logger.info(f"[VIDEO_PLAYER] Timeline end callback set")
+            except Exception as e:
+                logger.error(f"[VIDEO_PLAYER] Exception setting timeline callbacks: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
             
-            controller.set_on_start_time_changed(self._on_controller_start_changed)
-            controller.set_on_end_time_changed(self._on_controller_end_changed)
+            try:
+                logger.info(f"[VIDEO_PLAYER] About to call controller.set_on_start_time_changed")
+                controller.set_on_start_time_changed(self._on_controller_start_changed)
+                logger.info(f"[VIDEO_PLAYER] set_on_start_time_changed completed")
+            except Exception as e:
+                logger.error(f"[VIDEO_PLAYER] Exception setting start callback: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
             
+            try:
+                logger.info(f"[VIDEO_PLAYER] About to call controller.set_on_end_time_changed")
+                controller.set_on_end_time_changed(self._on_controller_end_changed)
+                logger.info(f"[VIDEO_PLAYER] set_on_end_time_changed completed")
+            except Exception as e:
+                logger.error(f"[VIDEO_PLAYER] Exception setting end callback: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+            
+            logger.info(f"[VIDEO_PLAYER] Controller callbacks registered successfully")
             self.play_segment_button.grid()
-        else:
-            self.timeline.clear_zoom()
-            self.timeline.set_edit_mode(False)
-            self.timeline.set_on_start_time_changed(None)
-            self.timeline.set_on_end_time_changed(None)
-            self.play_segment_button.grid_remove()
+            
+            if not is_editing or not controller:
+                self.timeline.clear_zoom()
+                self.timeline.set_edit_mode(False)
+                self.timeline.set_on_start_time_changed(None)
+                self.timeline.set_on_end_time_changed(None)
+                self.play_segment_button.grid_remove()
+        except Exception as e:
+            logger.error(f"[VIDEO_PLAYER] EXCEPTION in set_edit_mode: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
     
     def _on_play_segment(self) -> None:
         """Handle Play Segment button click - seek to start and play."""
@@ -762,21 +810,29 @@ class VideoPlayerPaneImpl(ctk.CTkFrame):
     def _on_scrubber_start_changed(self, time: float) -> None:
         """Handle scrubber start time change."""
         self._edit_mode_start_time = time
+        if self._segment_details_pane:
+            self._segment_details_pane._update_start_time_display(time)
         if self._edit_mode_controller:
             self._edit_mode_controller.update_start(time)
     
     def _on_scrubber_end_changed(self, time: float) -> None:
         """Handle scrubber end time change."""
         self._edit_mode_end_time = time
+        if self._segment_details_pane:
+            self._segment_details_pane._update_end_time_display(time)
         if self._edit_mode_controller:
             self._edit_mode_controller.update_end(time)
     
     def _on_controller_start_changed(self, time: float) -> None:
         """Handle controller start time change (from text input)."""
+        logger.info(f"[VIDEO_PLAYER] _on_controller_start_changed({time}) called")
         self._edit_mode_start_time = time
         self.timeline.update_edit_start_time(time)
+        logger.info(f"[VIDEO_PLAYER] _on_controller_start_changed completed")
     
     def _on_controller_end_changed(self, time: float) -> None:
         """Handle controller end time change (from text input)."""
+        logger.info(f"[VIDEO_PLAYER] _on_controller_end_changed({time}) called")
         self._edit_mode_end_time = time
         self.timeline.update_edit_end_time(time)
+        logger.info(f"[VIDEO_PLAYER] _on_controller_end_changed completed")
