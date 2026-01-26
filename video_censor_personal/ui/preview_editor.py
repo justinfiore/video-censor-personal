@@ -293,6 +293,10 @@ class PreviewEditorApp:
         if self._selected_segment_id is None or self._selection_time is None:
             return
         
+        # Skip auto-review if disabled
+        if not self.segment_list_pane.is_auto_review_enabled():
+            return
+        
         elapsed = time.time() - self._selection_time
         if elapsed >= self._AUTO_REVIEW_THRESHOLD:
             segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
@@ -349,6 +353,10 @@ class PreviewEditorApp:
         Args:
             segment: The segment to check coverage for
         """
+        # Skip if auto-review is disabled
+        if not self.segment_list_pane.is_auto_review_enabled():
+            return
+        
         segment_duration = segment.end_time - segment.start_time
         if segment_duration <= 0:
             return
@@ -422,6 +430,7 @@ class PreviewEditorApp:
         """Connect signals between components."""
         self.segment_list_pane.set_segment_click_callback(self._on_segment_selected)
         self.segment_list_pane.set_bulk_reviewed_callback(self._on_bulk_reviewed)
+        self.segment_list_pane.set_auto_review_toggle_callback(self._on_auto_review_toggle)
         
         self.segment_details_pane.set_allow_toggle_callback(self._on_allow_toggled)
         self.segment_details_pane.set_reviewed_toggle_callback(self._on_reviewed_toggled)
@@ -746,6 +755,10 @@ class PreviewEditorApp:
         
         # Track playback coverage for auto-review
         self._track_playback_coverage(current_time)
+    
+    def _on_auto_review_toggle(self, enabled: bool) -> None:
+        """Handle auto-review toggle."""
+        logger.info("Auto-review %s", "enabled" if enabled else "disabled")
     
     def _on_edit_mode_changed(self, is_editing: bool) -> None:
         """Handle edit mode state changes."""

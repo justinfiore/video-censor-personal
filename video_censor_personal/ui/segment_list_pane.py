@@ -219,6 +219,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         bulk_action_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=(5, 5))
         bulk_action_frame.grid_columnconfigure(0, weight=1)
         bulk_action_frame.grid_columnconfigure(1, weight=1)
+        bulk_action_frame.grid_columnconfigure(2, weight=1)
         
         self.mark_reviewed_btn = ctk.CTkButton(
             bulk_action_frame,
@@ -236,9 +237,20 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             height=28,
             font=("Arial", 10)
         )
-        self.mark_unreviewed_btn.grid(row=0, column=1, sticky="ew", padx=(2, 0))
+        self.mark_unreviewed_btn.grid(row=0, column=1, sticky="ew", padx=(2, 2))
+        
+        self.auto_review_enabled = True
+        self.toggle_auto_review_btn = ctk.CTkButton(
+            bulk_action_frame,
+            text="Disable Auto Mark Reviewed",
+            command=self._on_toggle_auto_review,
+            height=28,
+            font=("Arial", 10)
+        )
+        self.toggle_auto_review_btn.grid(row=0, column=2, sticky="ew", padx=(2, 0))
         
         self.bulk_action_callback: Optional[Callable[[List[str], bool], None]] = None
+        self.auto_review_toggle_callback: Optional[Callable[[bool], None]] = None
         
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
@@ -375,6 +387,29 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         # Update local segment state
         for seg in self.filtered_segments:
             seg.reviewed = False
+    
+    def _on_toggle_auto_review(self) -> None:
+        """Handle toggle auto-review button click."""
+        self.auto_review_enabled = not self.auto_review_enabled
+        if self.auto_review_enabled:
+            self.toggle_auto_review_btn.configure(text="Disable Auto Mark Reviewed")
+        else:
+            self.toggle_auto_review_btn.configure(text="Enable Auto Mark Reviewed")
+        
+        if self.auto_review_toggle_callback:
+            self.auto_review_toggle_callback(self.auto_review_enabled)
+    
+    def set_auto_review_toggle_callback(self, callback: Callable[[bool], None]) -> None:
+        """Set callback for auto-review toggle.
+        
+        Args:
+            callback: Function called with (enabled: bool)
+        """
+        self.auto_review_toggle_callback = callback
+    
+    def is_auto_review_enabled(self) -> bool:
+        """Check if auto-review is enabled."""
+        return self.auto_review_enabled
     
     def load_segments(self, segments: List[Segment]) -> None:
         """Load and display segments."""
