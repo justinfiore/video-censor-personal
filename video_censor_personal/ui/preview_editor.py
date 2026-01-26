@@ -413,26 +413,84 @@ class PreviewEditorApp:
         help_menu.add_command(label="Keyboard Shortcuts", command=self._show_shortcuts_help)
     
     def _create_layout(self) -> None:
-        """Create three-pane layout."""
+        """Create three-pane layout with resizable details pane."""
         main_container = ctk.CTkFrame(self.root)
         main_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5, rowspan=1)
         
-        main_container.grid_rowconfigure(0, weight=7)
-        main_container.grid_rowconfigure(1, weight=3)
+        # Initialize with details pane 10% larger (row weights: 6.7 and 3.3, total=10)
+        main_container.grid_rowconfigure(0, weight=67)  # 6.7/10 = 67/100
+        main_container.grid_rowconfigure(1, weight=0)    # Separator row
+        main_container.grid_rowconfigure(2, weight=33)  # 3.3/10 = 33/100
         main_container.grid_columnconfigure(0, weight=2)
         main_container.grid_columnconfigure(1, weight=6)
         
         self.segment_list_pane = SegmentListPaneImpl(main_container)
-        self.segment_list_pane.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=2, pady=2)
+        self.segment_list_pane.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=2, pady=2)
         
         self.video_player_pane = VideoPlayerPaneImpl(main_container)
         self.video_player_pane.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
+        # Create resizable separator
+        self._create_resizable_separator(main_container)
+        
         self.segment_details_pane = SegmentDetailsPaneImpl(main_container)
-        self.segment_details_pane.grid(row=1, column=1, sticky="nsew", padx=2, pady=2)
+        self.segment_details_pane.grid(row=2, column=1, sticky="nsew", padx=2, pady=2)
         
         # Connect video player to segment details pane so scrubber changes update text fields
         self.video_player_pane.set_segment_details_pane(self.segment_details_pane)
+    
+    def _create_resizable_separator(self, parent: ctk.CTkFrame) -> None:
+        """Create a resizable separator between video player and details pane."""
+        separator = ctk.CTkFrame(parent, height=5, fg_color=("gray70", "gray30"))
+        separator.grid(row=1, column=1, sticky="ew", padx=2, pady=0)
+        
+        # Make cursor change on hover
+        separator.bind("<Enter>", lambda e: separator.configure(cursor="sb_v_double_arrow"))
+        separator.bind("<Leave>", lambda e: separator.configure(cursor=""))
+        
+        # Track drag state
+        self._drag_data = {"y": 0, "dragging": False}
+        
+        def on_press(event):
+            self._drag_data["y"] = event.y_root
+            self._drag_data["dragging"] = True
+        
+        def on_drag(event):
+            # Calculate delta in pixels (positive = dragging down)
+            delta = event.y_root - self._drag_data["y"]
+            
+            if delta == 0:
+                return
+            
+            # Get current weights
+            current_row0_weight = parent.grid_rowconfigure(0, "weight")
+            current_row2_weight = parent.grid_rowconfigure(2, "weight")
+            
+            # Scale delta to weight units (2:1 ratio for responsive dragging)
+            scaled_delta = delta * 2
+            
+            # Dragging down = increase video pane, decrease details pane
+            new_row0_weight = max(10, current_row0_weight + scaled_delta)
+            new_row2_weight = max(10, current_row2_weight - scaled_delta)
+            
+            parent.grid_rowconfigure(0, weight=new_row0_weight)
+            parent.grid_rowconfigure(2, weight=new_row2_weight)
+            
+            self._drag_data["y"] = event.y_root
+        
+        def on_release(event):
+            self._drag_data["dragging"] = False
+            # Re-render frames after resize is complete
+            self.segment_list_pane._render_current_page()
+            # Re-display current segment to update layout
+            if self._selected_segment_id:
+                segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
+                if segment:
+                    self.segment_details_pane.display_segment(segment)
+        
+        separator.bind("<Button-1>", on_press)
+        separator.bind("<B1-Motion>", on_drag)
+        separator.bind("<ButtonRelease-1>", on_release)
     
     def _connect_signals(self) -> None:
         """Connect signals between components."""
