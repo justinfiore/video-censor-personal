@@ -9,8 +9,5 @@ I want you to create a new branch from the current branch (just add the `-clean`
 
 Then create a cleaner commit history where each commit is cohesive and performs a small logical part of the overall branch.
 Each commit message should be clear and descriptive.
-Then create a new PR using `git-create-pr` with a good title `-t` and description `-d` (feel free to use emojis in the description).
-
-Make sure each commit has the JIRA ticket as the start of the commit message title (if you can extract that from the branch name).
 
 Make sure to push the new branch to the remote with `git push origin HEAD`

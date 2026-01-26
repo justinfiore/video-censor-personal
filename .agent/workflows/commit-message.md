@@ -11,7 +11,7 @@ Only analyze the changes on the git stage `git diff --cached`
 Use the following format for consistent and descriptive commit messages:
 
 ```
-{JIRA Ticket}: {prefix}: {subject}
+{prefix}: {subject}
 
 {body}
 ```
@@ -24,13 +24,10 @@ The first line should be the “subject” of the commit.
 It should give us a summary in one line.
 - Written in Present Tense
 - Written as Commands
-- e.g., "BZ-4171: perf: Adds Pooled `RestTemplates` for the 3 different TAP-API Instances"
+- e.g., "perf: Adds Pooled `RestTemplates` for the 3 different foobar Instances"
 
 This is what the commit is DOING to the code in the present
-Use Markdown if appropriate
-**should** Start with the JIRA Ticket Number.
-Extract the JIRA ticket number from the branch name (if possible). If not, ask for it.
-"N/A" or "none" means that there isn't a JIRA Ticket and that the `{JIRA Ticket}: ` should be omitted from the first line.
+Use Markdown as appropriate.
 
 **Body**
 
