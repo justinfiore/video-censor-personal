@@ -763,9 +763,9 @@ class PreviewEditorApp:
         if segment:
             self.segment_details_pane.display_segment(segment)
             
-            # Refresh segment list to show updated times
+            # Refresh segment list while preserving filters and page position
             segments = self.segment_manager.get_all_segments()
-            self.segment_list_pane.load_segments(segments)
+            self.segment_list_pane.refresh_segments_with_filters(segments)
             self.video_player_pane.update_timeline_segments(segments)
             
             # Exit edit mode UI (model already exited in EditModeController.apply())

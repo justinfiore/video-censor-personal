@@ -414,6 +414,85 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         elapsed = time.time() - start_time
         logger.debug(f"[PROFILE] Segment list: load_segments completed in {elapsed:.2f}s")
     
+    def refresh_segments_with_filters(self, segments: List[Segment]) -> None:
+        """Refresh segment data while preserving current filters and page position.
+        
+        This is used after editing a segment to update the list without resetting
+        filter selections and pagination state.
+        
+        Args:
+            segments: New segment data
+        """
+        start_time = time.time()
+        num_segments = len(segments)
+        logger.debug(f"[PROFILE] Segment list: refresh_segments_with_filters started with {num_segments} segments")
+        
+        # Preserve selected segment ID and current page
+        previous_selected_id = self.selected_segment_id
+        previous_page = self.current_page
+        
+        # Update all segments and reapply current filters
+        self.all_segments = segments
+        
+        # Parse new labels
+        parse_start = time.time()
+        unique_labels = set()
+        for seg in segments:
+            unique_labels.update(seg.labels)
+        parse_time = time.time() - parse_start
+        logger.log(5, f"[PROFILE] Segment list: parsed labels from {num_segments} segments in {parse_time:.3f}s")
+        
+        label_values = ["All Labels"] + sorted(list(unique_labels))
+        self.label_filter.configure(values=label_values)
+        
+        # Re-apply current filters to new data
+        self._apply_filters_without_page_reset()
+        
+        # Restore page position if still valid
+        max_page = max(0, (len(self.filtered_segments) - 1) // self.page_size)
+        if previous_page > max_page:
+            self.current_page = 0
+        else:
+            self.current_page = previous_page
+        
+        self._render_current_page()
+        
+        # Re-select the previous segment if it still exists and is on current page
+        if previous_selected_id:
+            segment_still_exists = any(s.id == previous_selected_id for s in self.filtered_segments)
+            if segment_still_exists and previous_selected_id in self.segment_items:
+                self._on_segment_clicked(previous_selected_id)
+        
+        elapsed = time.time() - start_time
+        logger.debug(f"[PROFILE] Segment list: refresh_segments_with_filters completed in {elapsed:.2f}s")
+    
+    def _apply_filters_without_page_reset(self) -> None:
+        """Apply current filter selections to all_segments, preserving page position.
+        
+        This is like _on_filter_changed but doesn't reset current_page to 0.
+        """
+        label_filter = self.label_filter_var.get()
+        allow_filter = self.allow_filter_var.get()
+        review_filter = self.review_filter_var.get()
+        
+        self.filtered_segments = self.all_segments
+        
+        if label_filter != "All Labels":
+            self.filtered_segments = [
+                seg for seg in self.filtered_segments
+                if label_filter in seg.labels
+            ]
+        
+        if allow_filter == "Allowed Only":
+            self.filtered_segments = [seg for seg in self.filtered_segments if seg.allow]
+        elif allow_filter == "Not Allowed Only":
+            self.filtered_segments = [seg for seg in self.filtered_segments if not seg.allow]
+        
+        if review_filter == "Reviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if seg.reviewed]
+        elif review_filter == "Unreviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if not seg.reviewed]
+    
     def _render_current_page(self) -> None:
         """Render only the current page of segments."""
         start_time = time.time()
