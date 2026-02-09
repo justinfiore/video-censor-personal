@@ -598,3 +598,123 @@ class SegmentManager:
                 segment.reviewed = reviewed
                 count += 1
         return count
+    
+    def update_segment(
+        self,
+        segment_id: str,
+        new_start_time: Optional[float] = None,
+        new_end_time: Optional[float] = None,
+        new_labels: Optional[List[str]] = None
+    ) -> None:
+        """Update segment properties.
+        
+        Args:
+            segment_id: ID of segment to update
+            new_start_time: New start time in seconds (optional)
+            new_end_time: New end time in seconds (optional)
+            new_labels: New labels list (optional)
+            
+        Raises:
+            ValueError: If segment not found or times are invalid
+        """
+        segment = self.get_segment_by_id(segment_id)
+        if segment is None:
+            raise ValueError(f"Segment not found: {segment_id}")
+        
+        start = new_start_time if new_start_time is not None else segment.start_time
+        end = new_end_time if new_end_time is not None else segment.end_time
+        
+        if start >= end:
+            raise ValueError(f"Start time ({start}) must be less than end time ({end})")
+        
+        if start < 0:
+            raise ValueError(f"Start time cannot be negative: {start}")
+        
+        if new_start_time is not None:
+            segment.start_time = new_start_time
+        if new_end_time is not None:
+            segment.end_time = new_end_time
+        
+        segment.duration_seconds = segment.end_time - segment.start_time
+        
+        if new_labels is not None:
+            segment.labels = new_labels
+        
+        self.save_to_json()
+    
+    def duplicate_segment(self, segment_id: str) -> Segment:
+        """Duplicate a segment.
+        
+        Creates a new segment with the same properties but a unique ID.
+        The new segment is inserted immediately after the original.
+        
+        Args:
+            segment_id: ID of segment to duplicate
+            
+        Returns:
+            The newly created segment
+            
+        Raises:
+            ValueError: If segment not found
+        """
+        import uuid
+        
+        segment = self.get_segment_by_id(segment_id)
+        if segment is None:
+            raise ValueError(f"Segment not found: {segment_id}")
+        
+        new_segment = Segment(
+            id=str(uuid.uuid4()),
+            start_time=segment.start_time,
+            end_time=segment.end_time,
+            duration_seconds=segment.duration_seconds,
+            labels=segment.labels.copy(),
+            description=segment.description,
+            confidence=segment.confidence,
+            detections=[
+                Detection(
+                    label=d.label,
+                    confidence=d.confidence,
+                    reasoning=d.reasoning
+                )
+                for d in segment.detections
+            ],
+            allow=segment.allow,
+            reviewed=False
+        )
+        
+        original_index = self.segments.index(segment)
+        self.segments.insert(original_index + 1, new_segment)
+        
+        self.save_to_json()
+        
+        return new_segment
+    
+    def delete_segment(self, segment_id: str) -> Optional[str]:
+        """Delete a segment.
+        
+        Args:
+            segment_id: ID of segment to delete
+            
+        Returns:
+            ID of the next segment in list (for auto-selection), or None if no segments remain
+            
+        Raises:
+            ValueError: If segment not found
+        """
+        segment = self.get_segment_by_id(segment_id)
+        if segment is None:
+            raise ValueError(f"Segment not found: {segment_id}")
+        
+        segment_index = self.segments.index(segment)
+        self.segments.remove(segment)
+        
+        self.save_to_json()
+        
+        if not self.segments:
+            return None
+        
+        if segment_index < len(self.segments):
+            return self.segments[segment_index].id
+        else:
+            return self.segments[-1].id

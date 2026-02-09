@@ -45,12 +45,18 @@
 - [x] 3.1 Assess if paging alone meets performance target; only proceed if still slow after 2.10
   - **Decision**: Paging provides 90% reduction in widget creation (206 → 20 widgets)
   - Background threading NOT needed for segment list - skip tasks 3.2-3.7
-- [ ] 3.2 If proceeding: Create a `SegmentLoaderThread` class to handle JSON parsing and segment list population in background
-- [ ] 3.3 Implement queue-based communication between loader thread and main UI thread (use `queue.Queue`)
-- [ ] 3.4 Add a "Loading segments..." spinner/progress indicator while background thread works
-- [ ] 3.5 Implement cancellation mechanism (e.g., if user closes window during load)
-- [ ] 3.6 Test thread safety: rapid file open/close, file changes during load, concurrent operations
-- [ ] 3.7 Verify UI remains responsive throughout load process
+- [x] 3.2 If proceeding: Create a `SegmentLoaderThread` class to handle JSON parsing and segment list population in background
+  - **SKIPPED**: Paging alone provides sufficient performance improvement (90% reduction)
+- [x] 3.3 Implement queue-based communication between loader thread and main UI thread (use `queue.Queue`)
+  - **SKIPPED**: Not needed per 3.1 decision
+- [x] 3.4 Add a "Loading segments..." spinner/progress indicator while background thread works
+  - **SKIPPED**: Not needed per 3.1 decision
+- [x] 3.5 Implement cancellation mechanism (e.g., if user closes window during load)
+  - **SKIPPED**: Not needed per 3.1 decision
+- [x] 3.6 Test thread safety: rapid file open/close, file changes during load, concurrent operations
+  - **SKIPPED**: Not needed per 3.1 decision
+- [x] 3.7 Verify UI remains responsive throughout load process
+  - **SKIPPED**: Not needed per 3.1 decision; paging keeps widget count low
 
 ## 4. Audio Loading Optimization
 

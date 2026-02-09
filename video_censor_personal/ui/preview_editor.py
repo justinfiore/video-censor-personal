@@ -18,6 +18,7 @@ from video_censor_personal.ui.segment_details_pane import SegmentDetailsPaneImpl
 from video_censor_personal.ui.video_player_pane import VideoPlayerPaneImpl
 from video_censor_personal.ui.keyboard_shortcuts import KeyboardShortcutManager
 from video_censor_personal.ui.performance_profiler import PerformanceProfiler
+from video_censor_personal.ui.edit_mode_controller import EditModeController
 
 
 # Setup logging
@@ -90,6 +91,7 @@ class PreviewEditorApp:
         
         self.segment_manager = SegmentManager()
         self.keyboard_manager = KeyboardShortcutManager()
+        self.edit_mode_controller = EditModeController(self.segment_manager)
         
         self.current_json_path: Optional[str] = None
         self.current_video_path: Optional[str] = None
@@ -162,7 +164,15 @@ class PreviewEditorApp:
         window_height = 900
         self.root.geometry(f"{window_width}x{window_height}")
         
-        self._center_window()
+        # Maximize window to fill the entire screen
+        try:
+            self.root.state("zoomed")  # Windows
+        except tk.TclError:
+            # On macOS/Linux, use different approach
+            self.root.update_idletasks()
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            self.root.geometry(f"{screen_width}x{screen_height}+0+0")
         
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=0)
@@ -291,6 +301,10 @@ class PreviewEditorApp:
         if self._selected_segment_id is None or self._selection_time is None:
             return
         
+        # Skip auto-review if disabled
+        if not self.segment_list_pane.is_auto_review_enabled():
+            return
+        
         elapsed = time.time() - self._selection_time
         if elapsed >= self._AUTO_REVIEW_THRESHOLD:
             segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
@@ -347,6 +361,10 @@ class PreviewEditorApp:
         Args:
             segment: The segment to check coverage for
         """
+        # Skip if auto-review is disabled
+        if not self.segment_list_pane.is_auto_review_enabled():
+            return
+        
         segment_duration = segment.end_time - segment.start_time
         if segment_duration <= 0:
             return
@@ -395,33 +413,103 @@ class PreviewEditorApp:
         help_menu.add_command(label="Keyboard Shortcuts", command=self._show_shortcuts_help)
     
     def _create_layout(self) -> None:
-        """Create three-pane layout."""
+        """Create three-pane layout with resizable details pane."""
         main_container = ctk.CTkFrame(self.root)
         main_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5, rowspan=1)
         
-        main_container.grid_rowconfigure(0, weight=7)
-        main_container.grid_rowconfigure(1, weight=3)
+        # Initialize with details pane 10% larger (row weights: 6.7 and 3.3, total=10)
+        main_container.grid_rowconfigure(0, weight=67)  # 6.7/10 = 67/100
+        main_container.grid_rowconfigure(1, weight=0)    # Separator row
+        main_container.grid_rowconfigure(2, weight=33)  # 3.3/10 = 33/100
         main_container.grid_columnconfigure(0, weight=2)
         main_container.grid_columnconfigure(1, weight=6)
         
         self.segment_list_pane = SegmentListPaneImpl(main_container)
-        self.segment_list_pane.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=2, pady=2)
+        self.segment_list_pane.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=2, pady=2)
         
         self.video_player_pane = VideoPlayerPaneImpl(main_container)
         self.video_player_pane.grid(row=0, column=1, sticky="nsew", padx=2, pady=2)
         
+        # Create resizable separator
+        self._create_resizable_separator(main_container)
+        
         self.segment_details_pane = SegmentDetailsPaneImpl(main_container)
-        self.segment_details_pane.grid(row=1, column=1, sticky="nsew", padx=2, pady=2)
+        self.segment_details_pane.grid(row=2, column=1, sticky="nsew", padx=2, pady=2)
+        
+        # Connect video player to segment details pane so scrubber changes update text fields
+        self.video_player_pane.set_segment_details_pane(self.segment_details_pane)
+    
+    def _create_resizable_separator(self, parent: ctk.CTkFrame) -> None:
+        """Create a resizable separator between video player and details pane."""
+        separator = ctk.CTkFrame(parent, height=5, fg_color=("gray70", "gray30"))
+        separator.grid(row=1, column=1, sticky="ew", padx=2, pady=0)
+        
+        # Make cursor change on hover
+        separator.bind("<Enter>", lambda e: separator.configure(cursor="sb_v_double_arrow"))
+        separator.bind("<Leave>", lambda e: separator.configure(cursor=""))
+        
+        # Track drag state
+        self._drag_data = {"y": 0, "dragging": False}
+        
+        def on_press(event):
+            self._drag_data["y"] = event.y_root
+            self._drag_data["dragging"] = True
+        
+        def on_drag(event):
+            # Calculate delta in pixels (positive = dragging down)
+            delta = event.y_root - self._drag_data["y"]
+            
+            if delta == 0:
+                return
+            
+            # Get current weights
+            current_row0_weight = parent.grid_rowconfigure(0, "weight")
+            current_row2_weight = parent.grid_rowconfigure(2, "weight")
+            
+            # Scale delta to weight units (2:1 ratio for responsive dragging)
+            scaled_delta = delta * 2
+            
+            # Dragging down = increase video pane, decrease details pane
+            new_row0_weight = max(10, current_row0_weight + scaled_delta)
+            new_row2_weight = max(10, current_row2_weight - scaled_delta)
+            
+            parent.grid_rowconfigure(0, weight=new_row0_weight)
+            parent.grid_rowconfigure(2, weight=new_row2_weight)
+            
+            self._drag_data["y"] = event.y_root
+        
+        def on_release(event):
+            self._drag_data["dragging"] = False
+            # Re-render frames after resize is complete
+            self.segment_list_pane._render_current_page()
+            # Re-display current segment to update layout
+            if self._selected_segment_id:
+                segment = self.segment_manager.get_segment_by_id(self._selected_segment_id)
+                if segment:
+                    self.segment_details_pane.display_segment(segment)
+        
+        separator.bind("<Button-1>", on_press)
+        separator.bind("<B1-Motion>", on_drag)
+        separator.bind("<ButtonRelease-1>", on_release)
     
     def _connect_signals(self) -> None:
         """Connect signals between components."""
         self.segment_list_pane.set_segment_click_callback(self._on_segment_selected)
         self.segment_list_pane.set_bulk_reviewed_callback(self._on_bulk_reviewed)
+        self.segment_list_pane.set_auto_review_toggle_callback(self._on_auto_review_toggle)
         
         self.segment_details_pane.set_allow_toggle_callback(self._on_allow_toggled)
         self.segment_details_pane.set_reviewed_toggle_callback(self._on_reviewed_toggled)
+        self.segment_details_pane.set_edit_mode_controller(self.edit_mode_controller)
+        self.segment_details_pane.set_segment_manager(self.segment_manager)
+        self.segment_details_pane.set_edit_segment_callback(self._on_edit_segment)
+        self.segment_details_pane.set_duplicate_segment_callback(self._on_duplicate_segment)
+        self.segment_details_pane.set_delete_segment_callback(self._on_delete_segment)
         
         self.video_player_pane.set_time_update_callback(self._on_time_update)
+        
+        self.edit_mode_controller.set_on_edit_mode_changed(self._on_edit_mode_changed)
+        self.edit_mode_controller.set_on_segment_updated(self._on_segment_updated)
     
     def _setup_keyboard_shortcuts(self) -> None:
         """Setup keyboard shortcuts."""
@@ -733,6 +821,71 @@ class PreviewEditorApp:
         
         # Track playback coverage for auto-review
         self._track_playback_coverage(current_time)
+    
+    def _on_auto_review_toggle(self, enabled: bool) -> None:
+        """Handle auto-review toggle."""
+        logger.info("Auto-review %s", "enabled" if enabled else "disabled")
+    
+    def _on_edit_mode_changed(self, is_editing: bool) -> None:
+        """Handle edit mode state changes."""
+        logger.info(f"Edit mode changed: is_editing={is_editing}")
+        
+        if hasattr(self.segment_details_pane, 'set_edit_mode'):
+            self.segment_details_pane.set_edit_mode(is_editing)
+        
+        if hasattr(self.video_player_pane, 'set_edit_mode'):
+            self.video_player_pane.set_edit_mode(is_editing, self.edit_mode_controller)
+    
+    def _on_segment_updated(self, segment_id: str) -> None:
+        """Handle segment update after edit mode apply."""
+        segment = self.segment_manager.get_segment_by_id(segment_id)
+        if segment:
+            self.segment_details_pane.display_segment(segment)
+            
+            # Refresh segment list while preserving filters and page position
+            segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.refresh_segments_with_filters(segments)
+            self.video_player_pane.update_timeline_segments(segments)
+            
+            # Exit edit mode UI (model already exited in EditModeController.apply())
+            self._on_edit_mode_changed(False)
+    
+    def _on_edit_segment(self, segment: "Segment") -> None:
+        """Handle edit segment request."""
+        from video_censor_personal.ui.segment_manager import Segment
+        self.edit_mode_controller.enter_edit_mode(segment)
+    
+    def _on_duplicate_segment(self, segment_id: str) -> None:
+        """Handle duplicate segment request."""
+        try:
+            new_segment = self.segment_manager.duplicate_segment(segment_id)
+            
+            segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.load_segments(segments)
+            self.video_player_pane.update_timeline_segments(segments)
+            
+            self._on_segment_selected(new_segment.id)
+            self.edit_mode_controller.enter_edit_mode(new_segment)
+            
+        except ValueError as e:
+            logger.error(f"Failed to duplicate segment: {e}")
+    
+    def _on_delete_segment(self, segment_id: str) -> None:
+        """Handle delete segment request."""
+        try:
+            next_id = self.segment_manager.delete_segment(segment_id)
+            
+            segments = self.segment_manager.get_all_segments()
+            self.segment_list_pane.load_segments(segments)
+            self.video_player_pane.update_timeline_segments(segments)
+            
+            if next_id:
+                self._on_segment_selected(next_id)
+            else:
+                self.segment_details_pane.clear()
+                
+        except ValueError as e:
+            logger.error(f"Failed to delete segment: {e}")
     
     def _on_keyboard_play_pause(self) -> None:
         """Handle play/pause keyboard shortcut."""

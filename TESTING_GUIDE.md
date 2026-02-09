@@ -300,6 +300,85 @@ Look for log lines like:
 
 See `PERFORMANCE_TUNING.md` for detailed performance guidance.
 
+## Segment Editing Mode
+
+The preview editor supports editing segment boundaries, labels, and allows duplicating/deleting segments.
+
+### Edit Mode Test Cases
+
+- [ ] **Enter Edit Mode**
+  - Select a segment and click "Edit" button
+  - Timeline zooms to show segment ± 30 seconds
+  - Start/end scrubbers appear on timeline (orange triangular markers)
+  - "Edit Segment" header appears in details pane
+  - Start/end time text inputs appear (MM:SS.mmm format)
+  - "Cancel" and "Apply" buttons replace Edit/Duplicate/Delete buttons
+
+- [ ] **Adjust Times via Scrubbers**
+  - Drag start scrubber → start time input updates in real-time
+  - Drag end scrubber → end time input updates in real-time
+  - Times snap to 100ms increments
+  - Scrubbers cannot cross (minimum 100ms segment duration enforced)
+  - Shaded region between scrubbers updates as you drag
+
+- [ ] **Adjust Times via Text Input**
+  - Type new start time → scrubber position updates
+  - Type new end time → scrubber position updates
+  - Invalid times show red border and validation message
+  - Formats accepted: MM:SS.mmm, MM:SS, SS.mmm, SS
+
+- [ ] **Timeline Edge Expansion**
+  - Drag scrubber to edge of visible range
+  - On release, timeline expands by 30s in that direction
+  - Expansion is clamped to video bounds
+
+- [ ] **Play Segment Button**
+  - "Play Segment" button (orange) appears in edit mode
+  - Click → seeks to start time and plays
+  - Playback stops when reaching end time
+
+- [ ] **Label Editing**
+  - Labels appear as removable chips with "×" button
+  - Click "×" on chip → label removed
+  - Click "Add Label" → dropdown shows known labels from all segments
+  - Select label from dropdown → chip added
+  - "New label..." option allows entering custom label
+
+- [ ] **Apply Changes**
+  - Click "Apply" → segment updated with new times/labels
+  - Edit mode exits, normal buttons return
+  - Changes are persisted to JSON file
+
+- [ ] **Cancel Changes**
+  - Modify times/labels, then click "Cancel"
+  - Segment reverts to original values
+  - Edit mode exits without saving
+
+- [ ] **Duplicate Segment**
+  - Click "Duplicate Segment" button
+  - New segment appears after original in list
+  - Edit mode opens for the new segment
+  - New segment has same properties but unique ID
+  - Original segment remains unchanged
+
+- [ ] **Delete Segment**
+  - Click "Delete Segment" button
+  - Confirmation dialog appears: "Delete this segment? This cannot be undone."
+  - Click "Cancel" → no deletion
+  - Click "Delete" → segment removed, next segment auto-selected
+
+### Integration Test Commands
+
+Run the edit segment integration tests:
+```bash
+python -m pytest tests/ui/test_edit_segments_integration.py -v
+```
+
+Run all edit mode related tests:
+```bash
+python -m pytest tests/ui/test_edit_mode_controller.py tests/ui/test_segment_details_pane.py tests/ui/test_video_player_pane.py tests/ui/test_edit_segments_integration.py -v
+```
+
 ## Success Indicators
 
 ✓ **All tests pass** (`test_video_playback.py`)
@@ -309,6 +388,7 @@ See `PERFORMANCE_TUNING.md` for detailed performance guidance.
 ✓ **Errors are handled gracefully** (no crashes)
 ✓ **No "audio-only mode" message** (macOS now supports full video!)
 ✓ **Large videos load without UI freeze** (200+ segments)
+✓ **Edit mode works correctly** (scrubbers, time inputs, labels)
 
 ## Next Steps After Testing
 

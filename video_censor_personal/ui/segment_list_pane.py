@@ -193,6 +193,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.label_filter.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.label_filter)
         
         self.allow_filter_var = ctk.StringVar(value="All Segments")
         self.allow_filter = ctk.CTkComboBox(
@@ -203,6 +204,7 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.allow_filter.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.allow_filter)
         
         self.review_filter_var = ctk.StringVar(value="All Review Status")
         self.review_filter = ctk.CTkComboBox(
@@ -213,12 +215,14 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             state="readonly"
         )
         self.review_filter.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 5))
+        self._make_combobox_text_clickable(self.review_filter)
         
         # Bulk action buttons
         bulk_action_frame = ctk.CTkFrame(self.filter_frame, fg_color="transparent")
         bulk_action_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=(5, 5))
         bulk_action_frame.grid_columnconfigure(0, weight=1)
         bulk_action_frame.grid_columnconfigure(1, weight=1)
+        bulk_action_frame.grid_columnconfigure(2, weight=1)
         
         self.mark_reviewed_btn = ctk.CTkButton(
             bulk_action_frame,
@@ -236,9 +240,20 @@ class SegmentListPaneImpl(ctk.CTkFrame):
             height=28,
             font=("Arial", 10)
         )
-        self.mark_unreviewed_btn.grid(row=0, column=1, sticky="ew", padx=(2, 0))
+        self.mark_unreviewed_btn.grid(row=0, column=1, sticky="ew", padx=(2, 2))
+        
+        self.auto_review_enabled = True
+        self.toggle_auto_review_btn = ctk.CTkButton(
+            bulk_action_frame,
+            text="Disable Auto Mark Reviewed",
+            command=self._on_toggle_auto_review,
+            height=28,
+            font=("Arial", 10)
+        )
+        self.toggle_auto_review_btn.grid(row=0, column=2, sticky="ew", padx=(2, 0))
         
         self.bulk_action_callback: Optional[Callable[[List[str], bool], None]] = None
+        self.auto_review_toggle_callback: Optional[Callable[[bool], None]] = None
         
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
@@ -376,15 +391,45 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         for seg in self.filtered_segments:
             seg.reviewed = False
     
+    def _on_toggle_auto_review(self) -> None:
+        """Handle toggle auto-review button click."""
+        self.auto_review_enabled = not self.auto_review_enabled
+        if self.auto_review_enabled:
+            self.toggle_auto_review_btn.configure(text="Disable Auto Mark Reviewed")
+        else:
+            self.toggle_auto_review_btn.configure(text="Enable Auto Mark Reviewed")
+        
+        if self.auto_review_toggle_callback:
+            self.auto_review_toggle_callback(self.auto_review_enabled)
+    
+    def set_auto_review_toggle_callback(self, callback: Callable[[bool], None]) -> None:
+        """Set callback for auto-review toggle.
+        
+        Args:
+            callback: Function called with (enabled: bool)
+        """
+        self.auto_review_toggle_callback = callback
+    
+    def is_auto_review_enabled(self) -> bool:
+        """Check if auto-review is enabled."""
+        return self.auto_review_enabled
+    
     def load_segments(self, segments: List[Segment]) -> None:
         """Load and display segments."""
         start_time = time.time()
         num_segments = len(segments)
         logger.debug(f"[PROFILE] Segment list: load_segments started with {num_segments} segments")
         
+        # Preserve selected segment ID if it still exists
+        previous_selected_id = self.selected_segment_id
+        
         self.all_segments = segments
         self.filtered_segments = segments
-        self.current_page = 0
+        
+        # Keep current page if valid, otherwise reset to 0
+        max_page = max(0, (len(self.filtered_segments) - 1) // self.page_size)
+        if self.current_page > max_page:
+            self.current_page = 0
         
         parse_start = time.time()
         unique_labels = set()
@@ -398,8 +443,93 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         
         self._render_current_page()
         
+        # Re-select the previous segment if it still exists and is on current page
+        if previous_selected_id:
+            segment_still_exists = any(s.id == previous_selected_id for s in self.filtered_segments)
+            if segment_still_exists and previous_selected_id in self.segment_items:
+                self._on_segment_clicked(previous_selected_id)
+        
         elapsed = time.time() - start_time
         logger.debug(f"[PROFILE] Segment list: load_segments completed in {elapsed:.2f}s")
+    
+    def refresh_segments_with_filters(self, segments: List[Segment]) -> None:
+        """Refresh segment data while preserving current filters and page position.
+        
+        This is used after editing a segment to update the list without resetting
+        filter selections and pagination state.
+        
+        Args:
+            segments: New segment data
+        """
+        start_time = time.time()
+        num_segments = len(segments)
+        logger.debug(f"[PROFILE] Segment list: refresh_segments_with_filters started with {num_segments} segments")
+        
+        # Preserve selected segment ID and current page
+        previous_selected_id = self.selected_segment_id
+        previous_page = self.current_page
+        
+        # Update all segments and reapply current filters
+        self.all_segments = segments
+        
+        # Parse new labels
+        parse_start = time.time()
+        unique_labels = set()
+        for seg in segments:
+            unique_labels.update(seg.labels)
+        parse_time = time.time() - parse_start
+        logger.log(5, f"[PROFILE] Segment list: parsed labels from {num_segments} segments in {parse_time:.3f}s")
+        
+        label_values = ["All Labels"] + sorted(list(unique_labels))
+        self.label_filter.configure(values=label_values)
+        
+        # Re-apply current filters to new data
+        self._apply_filters_without_page_reset()
+        
+        # Restore page position if still valid
+        max_page = max(0, (len(self.filtered_segments) - 1) // self.page_size)
+        if previous_page > max_page:
+            self.current_page = 0
+        else:
+            self.current_page = previous_page
+        
+        self._render_current_page()
+        
+        # Re-select the previous segment if it still exists and is on current page
+        if previous_selected_id:
+            segment_still_exists = any(s.id == previous_selected_id for s in self.filtered_segments)
+            if segment_still_exists and previous_selected_id in self.segment_items:
+                self._on_segment_clicked(previous_selected_id)
+        
+        elapsed = time.time() - start_time
+        logger.debug(f"[PROFILE] Segment list: refresh_segments_with_filters completed in {elapsed:.2f}s")
+    
+    def _apply_filters_without_page_reset(self) -> None:
+        """Apply current filter selections to all_segments, preserving page position.
+        
+        This is like _on_filter_changed but doesn't reset current_page to 0.
+        """
+        label_filter = self.label_filter_var.get()
+        allow_filter = self.allow_filter_var.get()
+        review_filter = self.review_filter_var.get()
+        
+        self.filtered_segments = self.all_segments
+        
+        if label_filter != "All Labels":
+            self.filtered_segments = [
+                seg for seg in self.filtered_segments
+                if label_filter in seg.labels
+            ]
+        
+        if allow_filter == "Allowed Only":
+            self.filtered_segments = [seg for seg in self.filtered_segments if seg.allow]
+        elif allow_filter == "Not Allowed Only":
+            self.filtered_segments = [seg for seg in self.filtered_segments if not seg.allow]
+        
+        if review_filter == "Reviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if seg.reviewed]
+        elif review_filter == "Unreviewed":
+            self.filtered_segments = [seg for seg in self.filtered_segments if not seg.reviewed]
     
     def _render_current_page(self) -> None:
         """Render only the current page of segments."""
@@ -463,6 +593,39 @@ class SegmentListPaneImpl(ctk.CTkFrame):
         
         if self.segment_click_callback:
             self.segment_click_callback(segment_id)
+    
+    def _make_combobox_text_clickable(self, combo: ctk.CTkComboBox) -> None:
+        """Make CTkComboBox open dropdown when clicking its text/entry area.
+        
+        CTkComboBox is a composite widget with an internal Entry field. This method
+        binds the click event to that entry so the dropdown opens regardless of where
+        the user clicks (text or arrow), and prevents the edit cursor from appearing.
+        """
+        def on_entry_click(event, cb=combo):
+            # Open dropdown exactly like the arrow button does
+            if hasattr(cb, "_open_dropdown_menu"):
+                cb._open_dropdown_menu()
+            elif hasattr(cb, "_dropdown_menu") and cb._dropdown_menu is not None:
+                cb._dropdown_menu.post(cb.winfo_rootx(), cb.winfo_rooty() + cb.winfo_height())
+            
+            # Prevent the Entry from taking focus and showing caret
+            return "break"
+        
+        # CTkComboBox has an internal _entry widget that receives the click
+        entry = getattr(combo, "_entry", None)
+        if entry is not None:
+            entry.bind("<Button-1>", on_entry_click, add="+")
+            # Show button-like cursor to indicate clickability
+            try:
+                entry.configure(cursor="", takefocus=0)
+            except Exception:
+                pass
+        
+        # Also show button-like cursor on the combobox itself for visual consistency
+        try:
+            combo.configure(cursor="")
+        except Exception:
+            pass
     
     def _on_filter_changed(self, value=None) -> None:
         """Handle filter change."""

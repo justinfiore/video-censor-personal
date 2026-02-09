@@ -526,3 +526,175 @@ def test_async_write_queue_status_callback():
     assert False in status_changes
     
     queue.cleanup()
+
+
+def test_segment_manager_update_segment_times(temp_json_file):
+    """Test updating segment start and end times."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    original_start = manager.segments[0].start_time
+    original_end = manager.segments[0].end_time
+    
+    manager.update_segment("0", new_start_time=5.0, new_end_time=10.0)
+    manager.flush_sync()
+    
+    segment = manager.get_segment_by_id("0")
+    assert segment.start_time == 5.0
+    assert segment.end_time == 10.0
+    assert segment.duration_seconds == 5.0
+
+
+def test_segment_manager_update_segment_labels(temp_json_file):
+    """Test updating segment labels."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    new_labels = ["NewLabel1", "NewLabel2"]
+    manager.update_segment("0", new_labels=new_labels)
+    manager.flush_sync()
+    
+    segment = manager.get_segment_by_id("0")
+    assert segment.labels == new_labels
+
+
+def test_segment_manager_update_segment_invalid_times(temp_json_file):
+    """Test update_segment rejects invalid times (start >= end)."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    with pytest.raises(ValueError, match="Start time .* must be less than end time"):
+        manager.update_segment("0", new_start_time=20.0, new_end_time=10.0)
+    
+    with pytest.raises(ValueError, match="Start time .* must be less than end time"):
+        manager.update_segment("0", new_start_time=10.0, new_end_time=10.0)
+
+
+def test_segment_manager_update_segment_negative_start(temp_json_file):
+    """Test update_segment rejects negative start time."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    with pytest.raises(ValueError, match="cannot be negative"):
+        manager.update_segment("0", new_start_time=-5.0)
+
+
+def test_segment_manager_update_segment_not_found(temp_json_file):
+    """Test update_segment raises error for nonexistent segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    with pytest.raises(ValueError, match="Segment not found"):
+        manager.update_segment("nonexistent", new_start_time=5.0)
+
+
+def test_segment_manager_duplicate_segment(temp_json_file):
+    """Test duplicating a segment creates independent copy."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    original_count = len(manager.segments)
+    original_segment = manager.get_segment_by_id("0")
+    
+    new_segment = manager.duplicate_segment("0")
+    manager.flush_sync()
+    
+    assert len(manager.segments) == original_count + 1
+    assert new_segment.id != original_segment.id
+    assert new_segment.start_time == original_segment.start_time
+    assert new_segment.end_time == original_segment.end_time
+    assert new_segment.labels == original_segment.labels
+    assert new_segment.reviewed is False
+    
+    original_index = manager.segments.index(original_segment)
+    new_index = manager.segments.index(new_segment)
+    assert new_index == original_index + 1
+
+
+def test_segment_manager_duplicate_segment_independent_copy(temp_json_file):
+    """Test that duplicated segment is independent (modifying one doesn't affect other)."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    new_segment = manager.duplicate_segment("0")
+    original_segment = manager.get_segment_by_id("0")
+    
+    new_segment.labels.append("ModifiedLabel")
+    assert "ModifiedLabel" not in original_segment.labels
+
+
+def test_segment_manager_duplicate_segment_not_found(temp_json_file):
+    """Test duplicate_segment raises error for nonexistent segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    with pytest.raises(ValueError, match="Segment not found"):
+        manager.duplicate_segment("nonexistent")
+
+
+def test_segment_manager_delete_segment(temp_json_file):
+    """Test deleting a segment removes it and returns next segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    original_count = len(manager.segments)
+    
+    next_id = manager.delete_segment("0")
+    manager.flush_sync()
+    
+    assert len(manager.segments) == original_count - 1
+    assert manager.get_segment_by_id("0") is None
+    assert next_id == "1"
+
+
+def test_segment_manager_delete_last_segment(temp_json_file):
+    """Test deleting the last segment returns previous segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    next_id = manager.delete_segment("1")
+    manager.flush_sync()
+    
+    assert next_id == "0"
+
+
+def test_segment_manager_delete_only_segment():
+    """Test deleting the only segment returns None."""
+    data = {
+        "file": "/path/to/video.mp4",
+        "segments": [
+            {
+                "start_time": 10.0,
+                "end_time": 20.0,
+                "duration_seconds": 10.0,
+                "labels": ["Test"],
+                "description": "Only segment",
+                "confidence": 0.9,
+                "detections": []
+            }
+        ]
+    }
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+        json.dump(data, f)
+        temp_path = f.name
+    
+    try:
+        manager = SegmentManager()
+        manager.load_from_json(temp_path)
+        
+        next_id = manager.delete_segment("0")
+        
+        assert len(manager.segments) == 0
+        assert next_id is None
+    finally:
+        os.remove(temp_path)
+
+
+def test_segment_manager_delete_segment_not_found(temp_json_file):
+    """Test delete_segment raises error for nonexistent segment."""
+    manager = SegmentManager()
+    manager.load_from_json(temp_json_file)
+    
+    with pytest.raises(ValueError, match="Segment not found"):
+        manager.delete_segment("nonexistent")

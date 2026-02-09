@@ -51,6 +51,12 @@ def test_timeline_canvas_seek_callback():
         canvas.segments = []
         canvas.duration = 100.0
         canvas.current_time = 0.0
+        canvas._visible_start = 0.0
+        canvas._visible_end = 100.0
+        canvas._is_zoomed = False
+        canvas._is_edit_mode = False
+        canvas._edit_start_time = 0.0
+        canvas._edit_end_time = 0.0
         canvas.winfo_width = Mock(return_value=1000)
         canvas.seek_callback = Mock()
         
@@ -232,3 +238,227 @@ def test_video_player_pane_cleanup():
                             
                             pane.after_cancel.assert_called_with(123)
                             mock_player.cleanup.assert_called_once()
+
+
+class TestTimelineCanvasZoom:
+    """Tests for timeline canvas zoom functionality."""
+    
+    @pytest.fixture
+    def timeline_canvas(self):
+        """Create a timeline canvas with mocked Tk."""
+        with patch('tkinter.Canvas.__init__', return_value=None):
+            from video_censor_personal.ui.video_player_pane import TimelineCanvas
+            
+            canvas = TimelineCanvas.__new__(TimelineCanvas)
+            canvas.segments = []
+            canvas.duration = 100.0
+            canvas.current_time = 0.0
+            canvas._visible_start = 0.0
+            canvas._visible_end = 100.0
+            canvas._is_zoomed = False
+            canvas._is_edit_mode = False
+            canvas._edit_start_time = 0.0
+            canvas._edit_end_time = 0.0
+            canvas._dragging_scrubber = None
+            canvas._on_start_time_changed = None
+            canvas._on_end_time_changed = None
+            canvas.winfo_width = Mock(return_value=1000)
+            canvas.winfo_height = Mock(return_value=40)
+            canvas.delete = Mock()
+            canvas.create_rectangle = Mock()
+            canvas.create_line = Mock()
+            canvas.create_polygon = Mock()
+            canvas.seek_callback = None
+            yield canvas
+    
+    def test_set_zoom_range(self, timeline_canvas):
+        """Test setting zoom range."""
+        timeline_canvas.set_zoom_range(20.0, 60.0)
+        
+        assert timeline_canvas._is_zoomed is True
+        assert timeline_canvas._visible_start == 20.0
+        assert timeline_canvas._visible_end == 60.0
+    
+    def test_set_zoom_range_clamps_to_bounds(self, timeline_canvas):
+        """Test zoom range is clamped to video bounds."""
+        timeline_canvas.set_zoom_range(-10.0, 150.0)
+        
+        assert timeline_canvas._visible_start == 0.0
+        assert timeline_canvas._visible_end == 100.0
+    
+    def test_clear_zoom(self, timeline_canvas):
+        """Test clearing zoom."""
+        timeline_canvas._is_zoomed = True
+        timeline_canvas._visible_start = 20.0
+        timeline_canvas._visible_end = 60.0
+        
+        timeline_canvas.clear_zoom()
+        
+        assert timeline_canvas._is_zoomed is False
+        assert timeline_canvas._visible_start == 0.0
+        assert timeline_canvas._visible_end == 100.0
+    
+    def test_visible_start_time_property(self, timeline_canvas):
+        """Test visible_start_time property."""
+        assert timeline_canvas.visible_start_time == 0.0
+        
+        timeline_canvas._is_zoomed = True
+        timeline_canvas._visible_start = 25.0
+        assert timeline_canvas.visible_start_time == 25.0
+    
+    def test_visible_end_time_property(self, timeline_canvas):
+        """Test visible_end_time property."""
+        assert timeline_canvas.visible_end_time == 100.0
+        
+        timeline_canvas._is_zoomed = True
+        timeline_canvas._visible_end = 75.0
+        assert timeline_canvas.visible_end_time == 75.0
+
+
+class TestTimelineCanvasScrubbers:
+    """Tests for timeline canvas scrubber functionality."""
+    
+    @pytest.fixture
+    def edit_mode_canvas(self):
+        """Create a timeline canvas in edit mode."""
+        with patch('tkinter.Canvas.__init__', return_value=None):
+            from video_censor_personal.ui.video_player_pane import TimelineCanvas
+            
+            canvas = TimelineCanvas.__new__(TimelineCanvas)
+            canvas.segments = []
+            canvas.duration = 100.0
+            canvas.current_time = 50.0
+            canvas._visible_start = 20.0
+            canvas._visible_end = 80.0
+            canvas._is_zoomed = True
+            canvas._is_edit_mode = True
+            canvas._edit_start_time = 40.0
+            canvas._edit_end_time = 60.0
+            canvas._dragging_scrubber = None
+            canvas._on_start_time_changed = Mock()
+            canvas._on_end_time_changed = Mock()
+            canvas.winfo_width = Mock(return_value=1000)
+            canvas.winfo_height = Mock(return_value=40)
+            canvas.delete = Mock()
+            canvas.create_rectangle = Mock()
+            canvas.create_line = Mock()
+            canvas.create_polygon = Mock()
+            canvas.seek_callback = Mock()
+            yield canvas
+    
+    def test_time_to_x_conversion(self, edit_mode_canvas):
+        """Test time to x coordinate conversion."""
+        x = edit_mode_canvas._time_to_x(50.0)
+        assert x == 500.0
+        
+        x = edit_mode_canvas._time_to_x(20.0)
+        assert x == 0.0
+        
+        x = edit_mode_canvas._time_to_x(80.0)
+        assert x == 1000.0
+    
+    def test_x_to_time_conversion(self, edit_mode_canvas):
+        """Test x coordinate to time conversion."""
+        time = edit_mode_canvas._x_to_time(500)
+        assert time == 50.0
+        
+        time = edit_mode_canvas._x_to_time(0)
+        assert time == 20.0
+        
+        time = edit_mode_canvas._x_to_time(1000)
+        assert time == 80.0
+    
+    def test_click_on_start_scrubber_initiates_drag(self, edit_mode_canvas):
+        """Test clicking on start scrubber starts dragging."""
+        start_x = edit_mode_canvas._time_to_x(40.0)
+        event = Mock()
+        event.x = start_x + 5
+        
+        edit_mode_canvas._on_click(event)
+        
+        assert edit_mode_canvas._dragging_scrubber == "start"
+        edit_mode_canvas.seek_callback.assert_not_called()
+    
+    def test_click_on_end_scrubber_initiates_drag(self, edit_mode_canvas):
+        """Test clicking on end scrubber starts dragging."""
+        end_x = edit_mode_canvas._time_to_x(60.0)
+        event = Mock()
+        event.x = end_x - 5
+        
+        edit_mode_canvas._on_click(event)
+        
+        assert edit_mode_canvas._dragging_scrubber == "end"
+    
+    def test_drag_start_scrubber(self, edit_mode_canvas):
+        """Test dragging start scrubber updates time."""
+        edit_mode_canvas._dragging_scrubber = "start"
+        
+        event = Mock()
+        event.x = edit_mode_canvas._time_to_x(35.0)
+        
+        edit_mode_canvas._on_drag(event)
+        
+        assert edit_mode_canvas._edit_start_time == 35.0
+        edit_mode_canvas._on_start_time_changed.assert_called()
+    
+    def test_drag_end_scrubber(self, edit_mode_canvas):
+        """Test dragging end scrubber updates time."""
+        edit_mode_canvas._dragging_scrubber = "end"
+        
+        event = Mock()
+        event.x = edit_mode_canvas._time_to_x(65.0)
+        
+        edit_mode_canvas._on_drag(event)
+        
+        assert edit_mode_canvas._edit_end_time == 65.0
+        edit_mode_canvas._on_end_time_changed.assert_called()
+    
+    def test_scrubbers_cannot_cross(self, edit_mode_canvas):
+        """Test scrubbers cannot cross each other."""
+        edit_mode_canvas._dragging_scrubber = "start"
+        
+        event = Mock()
+        event.x = edit_mode_canvas._time_to_x(65.0)
+        
+        edit_mode_canvas._on_drag(event)
+        
+        assert edit_mode_canvas._edit_start_time == 40.0
+        edit_mode_canvas._on_start_time_changed.assert_not_called()
+    
+    def test_drag_snaps_to_100ms(self, edit_mode_canvas):
+        """Test drag snaps to 100ms increments."""
+        edit_mode_canvas._dragging_scrubber = "start"
+        
+        event = Mock()
+        event.x = edit_mode_canvas._time_to_x(35.05)
+        
+        edit_mode_canvas._on_drag(event)
+        
+        assert edit_mode_canvas._edit_start_time == 35.0
+    
+    def test_release_clears_dragging_state(self, edit_mode_canvas):
+        """Test releasing scrubber clears dragging state."""
+        edit_mode_canvas._dragging_scrubber = "start"
+        
+        event = Mock()
+        event.x = 500
+        
+        edit_mode_canvas._on_release(event)
+        
+        assert edit_mode_canvas._dragging_scrubber is None
+    
+    def test_set_edit_mode(self, edit_mode_canvas):
+        """Test setting edit mode."""
+        edit_mode_canvas.set_edit_mode(True, 30.0, 50.0)
+        
+        assert edit_mode_canvas._is_edit_mode is True
+        assert edit_mode_canvas._edit_start_time == 30.0
+        assert edit_mode_canvas._edit_end_time == 50.0
+    
+    def test_update_edit_times(self, edit_mode_canvas):
+        """Test updating edit times."""
+        edit_mode_canvas.update_edit_start_time(25.0)
+        assert edit_mode_canvas._edit_start_time == 25.0
+        
+        edit_mode_canvas.update_edit_end_time(75.0)
+        assert edit_mode_canvas._edit_end_time == 75.0

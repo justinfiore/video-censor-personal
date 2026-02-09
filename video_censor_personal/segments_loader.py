@@ -141,26 +141,30 @@ def _validate_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return validated
 
 
-def _parse_time_string(time_str: str, field_name: str) -> float:
-    """Parse HH:MM:SS or HH:MM:SS.mmm time string to seconds.
+def _parse_time_string(time_value: str | int | float, field_name: str) -> float:
+    """Parse time value to seconds.
 
-    Accepts both formats with and without milliseconds:
+    Accepts multiple formats:
     - HH:MM:SS.mmm (with milliseconds, e.g., "00:01:23.456")
     - HH:MM:SS (without milliseconds, e.g., "00:01:23")
     - MM:SS (minutes and seconds)
+    - Numeric values (int or float) - treated as seconds
 
     Args:
-        time_str: Time string in HH:MM:SS[.mmm] or MM:SS format.
+        time_value: Time as string in HH:MM:SS[.mmm] or MM:SS format, or numeric seconds.
         field_name: Name of field for error messages.
 
     Returns:
         Time in seconds (float).
 
     Raises:
-        SegmentsLoadError: If time string is invalid.
+        SegmentsLoadError: If time value is invalid.
     """
+    if isinstance(time_value, (int, float)):
+        return float(time_value)
+    
     try:
-        parts = time_str.split(":")
+        parts = time_value.split(":")
         milliseconds = 0
         
         if len(parts) == 3:

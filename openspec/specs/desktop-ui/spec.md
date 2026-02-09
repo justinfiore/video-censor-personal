@@ -44,3 +44,103 @@ The system SHALL depend on the CustomTkinter library for modern, cross-platform 
 - **THEN** CustomTkinter is installed with the specified version
 - **AND** subsequent imports of CustomTkinter succeed without errors
 
+### Requirement: Preview Editor Initialization
+
+The preview editor SHALL initialize and display the UI responsively regardless of video length or segment count.
+
+#### Scenario: Small video (15 segments) loads quickly
+- **WHEN** user launches the preview editor with a 5-minute video containing 15 segments
+- **THEN** the UI displays within 500ms and is immediately responsive to user interaction
+
+#### Scenario: Large video (200+ segments) loads responsively
+- **WHEN** user launches the preview editor with a 1.5-hour video containing 206 segments
+- **THEN** the UI displays within 3 seconds, segment list populates within 10 seconds total, and the UI remains responsive throughout (no freezing or hangs)
+
+#### Scenario: Very large video (500+ segments) is supported
+- **WHEN** user launches the preview editor with a video containing 500+ segments
+- **THEN** the preview editor handles the load gracefully, displaying UI quickly and populating the segment list without blocking the main thread
+
+### Requirement: Segment List Paging
+
+The segment list SHALL use a paging-based approach to efficiently display large numbers of segments without performance degradation.
+
+#### Scenario: Segment list displays one page at a time
+- **WHEN** user views a segment list with 200+ segments
+- **THEN** only a configurable number of segments per page (e.g., 20-50) are rendered at once, with paging controls to navigate between pages
+
+#### Scenario: Paging controls are easy to use
+- **WHEN** user wants to navigate between pages of segments
+- **THEN** intuitive paging controls are available (Previous/Next buttons, page number display, optional direct page jump), and navigation is instant with no lag
+
+#### Scenario: Current page auto-updates during playback
+- **WHEN** video is playing and the current timecode moves to a segment on a different page
+- **THEN** the segment list automatically navigates to the page containing the currently playing segment, keeping the active segment visible
+
+#### Scenario: Segment selection works across pages
+- **WHEN** user selects a segment on any page
+- **THEN** the segment is selected, highlighted, and the video player seeks to the correct timestamp without delay
+
+#### Scenario: Filters apply across all pages
+- **WHEN** user applies filters (e.g., show only "disallowed" segments)
+- **THEN** only segments matching the filter criteria are shown, pagination is recalculated based on filtered results, and page navigation works correctly within filtered set
+
+#### Scenario: Memory usage remains reasonable with large videos
+- **WHEN** preview editor is open with a 1.5-hour video (200+ segments)
+- **THEN** memory usage remains under 2GB (only current page widgets are rendered, not all 200+ segments)
+
+### Requirement: Audio Loading and Playback
+
+The audio SHALL be loaded efficiently and cached appropriately to avoid redundant operations.
+
+#### Scenario: Audio is loaded once and reused
+- **WHEN** preview editor initializes with a large video
+- **THEN** audio is extracted and cached once, and subsequent playback operations reuse the cached audio without re-extracting or re-decoding
+
+#### Scenario: Audio loading does not block segment list rendering
+- **WHEN** preview editor is initializing with a large video
+- **THEN** the segment list can begin rendering while audio is still being loaded in the background, and the UI remains responsive
+
+### Requirement: Performance Monitoring
+
+The system SHALL provide performance monitoring and profiling capabilities to track UI initialization and identify bottlenecks.
+
+#### Scenario: Detailed timing logs are available for debugging
+- **WHEN** preview editor initializes, all phases (JSON load, segment list creation, video initialization, audio load) are logged with timestamps
+- **THEN** developers can review the logs to identify slow operations and optimize accordingly
+
+#### Scenario: Performance metrics can be collected for regression testing
+- **WHEN** integration tests run the preview editor with large videos
+- **THEN** timing metrics (initial UI display, full load time, segment list population time) are collected and can be compared against baseline thresholds to detect regressions
+
+### Requirement: Large-Scale Testing
+
+The system SHALL be tested with large video datasets to ensure scaling correctness and prevent performance regressions.
+
+#### Scenario: Integration tests validate performance with 200+ segment videos
+- **WHEN** integration test suite runs
+- **THEN** tests include scenarios with 50, 100, and 206+ segment videos, and all tests pass with timing assertions (initial display < 3s, full load < 10s)
+
+#### Scenario: Tests prevent regressions when UI code is modified
+- **WHEN** a developer modifies segment list or video player code
+- **THEN** integration tests run in CI and fail if performance degrades below baseline thresholds, alerting the developer before merge
+
+### Requirement: Optimized Logging with Debug/Trace Levels
+
+The system SHALL minimize logging overhead during normal operation while preserving diagnostic detail for troubleshooting.
+
+#### Scenario: Dense/chatty logs are at TRACE level only
+- **WHEN** the preview editor processes a large video with default log level (INFO or DEBUG)
+- **THEN** dense repetitive logs (e.g., audio frame extraction details) are NOT logged, reducing overhead and log file size by 50%+
+
+#### Scenario: Important diagnostics remain at DEBUG level
+- **WHEN** the preview editor runs at DEBUG log level
+- **THEN** meaningful phase transitions are logged (JSON load complete, segment list started, audio extraction started, etc.) but frame-by-frame details are not logged
+
+#### Scenario: TRACE level provides full diagnostic detail when needed
+- **WHEN** a developer enables TRACE logging (e.g., via environment variable `VIDEO_CENSOR_TRACE=1` or logger config)
+- **THEN** all dense logs (audio frames, layout calculations, widget creation details) are available for deep troubleshooting
+
+#### Scenario: Log level can be controlled without code changes
+- **WHEN** user or developer wants to change log verbosity
+- **THEN** logging level can be set via environment variable or config file without requiring code modification or recompilation
+
