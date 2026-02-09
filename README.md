@@ -275,6 +275,10 @@ For more details on testing, see the Testing Instructions in [openspec/AGENTS.md
 - **System Details**: See [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) for architecture and design
 - **Testing**: See instructions above or [openspec/AGENTS.md](openspec/AGENTS.md)
 
+### Error Detection and Remediation
+
+The system includes intelligent error handling during video processing. When ffmpeg encounters issues (corrupt frames, container errors, codec mismatches), the system automatically diagnoses the problem, attempts recovery when possible, and provides clear guidance when human intervention is needed. See [VIDEO_PROCESSING_ERROR_DETECTION_AND_REMEDIATION.md](VIDEO_PROCESSING_ERROR_DETECTION_AND_REMEDIATION.md) for details.
+
 ## Support
 
 - Check [QUICK_START.md](QUICK_START.md) for common setup issues
