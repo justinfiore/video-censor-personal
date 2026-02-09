@@ -163,6 +163,10 @@ def main() -> int:
                             "Continuing despite chapter writing failure"
                         )
                 
+                warnings_summary = output_dict.get("_warnings_summary")
+                if warnings_summary:
+                    print(warnings_summary)
+
                 elapsed_time = time.perf_counter() - start_time
                 minutes, seconds = divmod(elapsed_time, 60)
                 if minutes >= 1:
@@ -224,6 +228,10 @@ def main() -> int:
                         "Continuing with JSON output despite chapter writing failure"
                     )
             
+            warnings_summary = output_dict.get("_warnings_summary")
+            if warnings_summary:
+                print(warnings_summary)
+
             elapsed_time = time.perf_counter() - start_time
             minutes, seconds = divmod(elapsed_time, 60)
             if minutes >= 1:

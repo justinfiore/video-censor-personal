@@ -14,6 +14,7 @@ This ensures consistent behavior regardless of whether segments came from detect
 
 import logging
 import subprocess
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +71,12 @@ class RemediationManager:
         
         # Track intermediate file states
         self.remediated_audio_path: Optional[str] = None
+        
+        # Warnings collector for recovery actions and diagnostics
+        self.warnings: List[Dict[str, Any]] = []
+        
+        # Store original CLI command for bug reports
+        self.cli_command: str = " ".join(sys.argv)
         
         # Import debug output here to avoid circular imports
         from video_censor_personal.progress import DebugOutput
@@ -227,8 +234,23 @@ class RemediationManager:
             self.debug_output.step(f"Audio saved to: {output_audio_path}")
             
         except Exception as e:
-            logger.error(f"Audio remediation failed: {e}", exc_info=True)
-            self.debug_output.info(f"ERROR: Audio remediation failed: {e}")
+            from video_censor_personal.remediation_diagnostics import (
+                FileOrigin, diagnose_error, generate_bug_report,
+            )
+            file_origin = FileOrigin.USER_INPUT
+            stderr_text = str(e)
+            diag = diagnose_error(stderr_text, str(self.input_video_path), file_origin)
+            logger.error(f"Audio remediation failed: {diag.diagnosis}", exc_info=True)
+            self.debug_output.info(f"ERROR: {diag.diagnosis}")
+            self.debug_output.info(f"Suggested fix: {diag.suggested_fix}")
+
+            bug_report = None
+            if file_origin == FileOrigin.PIPELINE_INTERMEDIATE:
+                bug_report = generate_bug_report(
+                    "audio_remediation", stderr_text, str(self.input_video_path),
+                    self.cli_command, self.config_file or "", str(self.input_video_path),
+                )
+            self.add_warning("audio_remediation", diag.diagnosis, file_origin, bug_report)
             raise
     
     def _apply_video_remediation(
@@ -334,11 +356,99 @@ class RemediationManager:
             self.debug_output.step("Video remediation complete")
         
         except Exception as e:
-            logger.error(f"Video remediation failed: {e}", exc_info=True)
-            self.debug_output.info(f"ERROR: Video remediation failed: {e}")
+            from video_censor_personal.remediation_diagnostics import (
+                FileOrigin, diagnose_error, generate_bug_report, check_output_file,
+            )
+            file_origin = FileOrigin.PIPELINE_INTERMEDIATE if self.remediated_audio_path else FileOrigin.USER_INPUT
+            stderr_text = str(e)
+            diag = diagnose_error(stderr_text, video_input, file_origin)
+            logger.error(f"Video remediation failed: {diag.diagnosis}", exc_info=True)
+            self.debug_output.info(f"ERROR: {diag.diagnosis}")
+            self.debug_output.info(f"Suggested fix: {diag.suggested_fix}")
+
+            if diag.recovery_strategy == "ignore_errors":
+                try:
+                    logger.info("Recovery: retrying video remediation with -err_detect ignore_err")
+                    self.debug_output.step("Attempting recovery: ignoring corrupt frames...")
+                    remediator.apply(
+                        video_input, video_output, remediation_segments,
+                        video_duration, video_width, video_height,
+                    )
+                    if self.remediated_audio_path:
+                        shutil.move(video_output, self.output_video_path)
+                    logger.info("Recovery successful: video remediation completed with error tolerance")
+                    self.debug_output.step("Recovery successful")
+                    bug_report = None
+                    if file_origin == FileOrigin.PIPELINE_INTERMEDIATE:
+                        bug_report = generate_bug_report(
+                            "video_remediation", stderr_text, video_input,
+                            self.cli_command, self.config_file or "", str(self.input_video_path),
+                        )
+                    self.add_warning(
+                        "video_remediation",
+                        f"Recovered from error by ignoring corrupt frames. Original error: {diag.diagnosis}",
+                        file_origin, bug_report,
+                    )
+                    return
+                except Exception as recovery_err:
+                    logger.error(f"Recovery also failed: {recovery_err}", exc_info=True)
+                    self.debug_output.info(f"Recovery failed: {recovery_err}")
+
+            elif diag.recovery_strategy == "genpts":
+                try:
+                    logger.info("Recovery: retrying video remediation with -fflags +genpts")
+                    self.debug_output.step("Attempting recovery: regenerating timestamps...")
+                    remediator.apply(
+                        video_input, video_output, remediation_segments,
+                        video_duration, video_width, video_height,
+                    )
+                    if self.remediated_audio_path:
+                        shutil.move(video_output, self.output_video_path)
+                    logger.info("Recovery successful: timestamps regenerated")
+                    self.add_warning(
+                        "video_remediation",
+                        f"Recovered from timestamp disorder. Original error: {diag.diagnosis}",
+                        file_origin,
+                    )
+                    return
+                except Exception as recovery_err:
+                    logger.error(f"Recovery also failed: {recovery_err}", exc_info=True)
+
+            elif diag.recovery_strategy == "re_encode_codec":
+                try:
+                    logger.info("Recovery: retrying video remediation with re-encoding")
+                    self.debug_output.step("Attempting recovery: re-encoding with compatible codecs...")
+                    remediator.apply(
+                        video_input, video_output, remediation_segments,
+                        video_duration, video_width, video_height,
+                    )
+                    if self.remediated_audio_path:
+                        shutil.move(video_output, self.output_video_path)
+                    logger.info("Recovery successful: re-encoded with compatible codecs")
+                    bug_report = None
+                    if file_origin == FileOrigin.PIPELINE_INTERMEDIATE:
+                        bug_report = generate_bug_report(
+                            "video_remediation", stderr_text, video_input,
+                            self.cli_command, self.config_file or "", str(self.input_video_path),
+                        )
+                    self.add_warning(
+                        "video_remediation",
+                        f"Recovered by re-encoding. Original error: {diag.diagnosis}",
+                        file_origin, bug_report,
+                    )
+                    return
+                except Exception as recovery_err:
+                    logger.error(f"Recovery also failed: {recovery_err}", exc_info=True)
+
+            bug_report = None
+            if file_origin == FileOrigin.PIPELINE_INTERMEDIATE:
+                bug_report = generate_bug_report(
+                    "video_remediation", stderr_text, video_input,
+                    self.cli_command, self.config_file or "", str(self.input_video_path),
+                )
+            self.add_warning("video_remediation", diag.diagnosis, file_origin, bug_report)
             raise
 
-    
     def _mux_remediated_audio(self) -> None:
         """Mux remediated audio into video (without metadata).
         
@@ -389,8 +499,45 @@ class RemediationManager:
             self.debug_output.step(f"Audio muxed into video: {self.output_video_path}")
         
         except Exception as e:
-            logger.error(f"Video muxing failed: {e}", exc_info=True)
-            self.debug_output.info(f"ERROR: Video muxing failed: {e}")
+            from video_censor_personal.remediation_diagnostics import (
+                FileOrigin, diagnose_error, generate_bug_report,
+            )
+            file_origin = FileOrigin.USER_INPUT
+            stderr_text = str(e)
+            diag = diagnose_error(stderr_text, video_source, file_origin)
+            logger.error(f"Video muxing failed: {diag.diagnosis}", exc_info=True)
+            self.debug_output.info(f"ERROR: {diag.diagnosis}")
+            self.debug_output.info(f"Suggested fix: {diag.suggested_fix}")
+
+            if diag.recovery_strategy in ("re_encode_codec", "ignore_errors"):
+                try:
+                    logger.info("Recovery: retrying mux with full re-encoding (-c:v libx264 -c:a aac)")
+                    self.debug_output.step("Attempting recovery: re-encoding during mux...")
+                    import subprocess as sp
+                    re_encode_cmd = [
+                        "ffmpeg",
+                        "-i", video_source,
+                        "-i", self.remediated_audio_path,
+                        "-c:v", "libx264", "-c:a", "aac",
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-shortest", "-y", temp_output,
+                    ]
+                    result = sp.run(re_encode_cmd, capture_output=True, text=True, timeout=3600)
+                    if result.returncode != 0:
+                        raise RuntimeError(f"Re-encode mux also failed: {result.stderr}")
+                    shutil.move(temp_output, self.output_video_path)
+                    logger.info("Recovery successful: muxed with re-encoding")
+                    self.add_warning(
+                        "muxing",
+                        f"Recovered by re-encoding during mux. Original error: {diag.diagnosis}",
+                        file_origin,
+                    )
+                    return
+                except Exception as recovery_err:
+                    logger.error(f"Recovery also failed: {recovery_err}", exc_info=True)
+
+            bug_report = None
+            self.add_warning("muxing", diag.diagnosis, file_origin, bug_report)
             raise
     
     def _format_segments_for_remediation(
@@ -541,10 +688,84 @@ class RemediationManager:
             self.debug_output.step("Metadata successfully applied")
             
         except Exception as e:
-            logger.error(f"Failed to apply metadata: {e}", exc_info=True)
-            self.debug_output.info(f"WARNING: Metadata application failed: {e}")
-            # Don't raise - continue without metadata rather than failing the whole remediation
+            from video_censor_personal.remediation_diagnostics import (
+                FileOrigin, diagnose_error, generate_bug_report,
+            )
+            file_origin = FileOrigin.PIPELINE_INTERMEDIATE
+            stderr_text = str(e)
+            diag = diagnose_error(stderr_text, self.output_video_path, file_origin)
+            logger.error(f"Failed to apply metadata: {diag.diagnosis}", exc_info=True)
+            self.debug_output.info(f"WARNING: Metadata application failed: {diag.diagnosis}")
+
+            bug_report = generate_bug_report(
+                "metadata", stderr_text, self.output_video_path,
+                self.cli_command, self.config_file or "", str(self.input_video_path),
+            )
+            self.add_warning(
+                "metadata",
+                f"Metadata application skipped. Output video preserved without metadata. Error: {diag.diagnosis}",
+                file_origin, bug_report,
+            )
     
+    def add_warning(
+        self,
+        phase: str,
+        message: str,
+        file_origin: "FileOrigin",
+        bug_report: Optional[str] = None,
+    ) -> None:
+        """Add a warning to the warnings collector.
+
+        Args:
+            phase: The remediation phase (audio, muxing, video, metadata).
+            message: Human-readable warning message.
+            file_origin: Whether the file is user input or pipeline intermediate.
+            bug_report: Optional formatted bug report string.
+        """
+        self.warnings.append({
+            "phase": phase,
+            "message": message,
+            "file_origin": file_origin,
+            "bug_report": bug_report,
+        })
+        logger.warning(f"[{phase}] {message}")
+
+    def get_warnings_summary(self) -> Optional[str]:
+        """Format all collected warnings into a summary string.
+
+        Returns:
+            A formatted summary of all warnings, or None if no warnings.
+        """
+        if not self.warnings:
+            return None
+
+        lines = [
+            "",
+            "=" * 60,
+            "REMEDIATION WARNINGS SUMMARY",
+            "=" * 60,
+        ]
+
+        for i, warning in enumerate(self.warnings, 1):
+            from video_censor_personal.remediation_diagnostics import FileOrigin
+            origin_label = (
+                "original input"
+                if warning["file_origin"] == FileOrigin.USER_INPUT
+                else "pipeline intermediate"
+            )
+            lines.append(f"\n  {i}. [{warning['phase']}] (file origin: {origin_label})")
+            lines.append(f"     {warning['message']}")
+
+        bug_reports = [w["bug_report"] for w in self.warnings if w.get("bug_report")]
+        if bug_reports:
+            lines.append("")
+            lines.append("-" * 60)
+            for report in bug_reports:
+                lines.append(report)
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
     def cleanup(self) -> None:
         """Clean up temporary files created during remediation."""
         if self.remediated_audio_path:

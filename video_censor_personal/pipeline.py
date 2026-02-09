@@ -513,6 +513,7 @@ class AnalysisPipeline:
         # Post-processing happens AFTER models are unloaded
         # Order is important: audio first (original timings), then video (may shift timings)
         # This includes audio remediation, video remediation and video muxing (I/O operations that don't need models)
+        warnings_summary = None
         try:
             # Merge detection segments for video remediation
             merge_threshold = self.config.get("processing", {}).get(
@@ -546,6 +547,8 @@ class AnalysisPipeline:
                 )
             finally:
                 remediation_manager.cleanup()
+
+            warnings_summary = remediation_manager.get_warnings_summary()
         except Exception as e:
             logger.error(f"Post-processing failed: {e}", exc_info=True)
             self.debug_output.info(f"ERROR: Post-processing failed: {e}")
@@ -560,6 +563,7 @@ class AnalysisPipeline:
                     logger.error(f"Error closing extractor: {e}")
                 self.extractor = None
 
+        self._warnings_summary = warnings_summary
         return all_results
 
     def cleanup(self) -> None:
@@ -701,6 +705,9 @@ class AnalysisRunner:
             # Store raw merged segments for skip chapter writing
             # (before they get formatted as strings in JSON output)
             output_dict["_raw_merged_segments"] = merged_segments
+
+            # Pass through warnings summary from remediation
+            output_dict["_warnings_summary"] = getattr(pipeline, "_warnings_summary", None)
 
             # Write output (excluding internal fields like _raw_merged_segments)
             from video_censor_personal.output import write_output
@@ -854,4 +861,5 @@ class RemediationRunner:
             "segments": segments,
             "metadata": metadata,
             "_raw_merged_segments": segments,
+            "_warnings_summary": remediation_manager.get_warnings_summary(),
         }
