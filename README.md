@@ -1,5 +1,6 @@
 # Video Censor Personal
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/justinfiore/video-censor-personal)
 [![Tests](https://github.com/justinfiore/video-censor-personal/actions/workflows/test.yml/badge.svg)](https://github.com/justinfiore/video-censor-personal/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/justinfiore/video-censor-personal/branch/main/graph/badge.svg)](https://codecov.io/gh/justinfiore/video-censor-personal)
 
